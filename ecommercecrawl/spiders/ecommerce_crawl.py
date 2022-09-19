@@ -1,30 +1,44 @@
 from unicodedata import category
 import scrapy
 from datetime import date
-
+import re
 
 class EcomSpider(scrapy.Spider):
     name = "farfetch"
-    custom_settings = {'CLOSESPIDER_PAGECOUNT': 10}
-    user_agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.36"
+    custom_settings = {'CLOSESPIDER_PAGECOUNT': 100}
+    # user_agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.36"
 
     def start_requests(self):
         urls = [
             'https://www.farfetch.com/ae/shopping/women/clothing-1/items.aspx',
         ]
-        # "totalPages\\":1060
-        # re.compile(r'"totalPages\\\\":([0-9]+),\\\\', re.IGNORECASE).findall(str(response.body))[-1]
         for url in urls:
             yield scrapy.Request(url=url, callback=self.parse)
 
+    def get_no_pages(self, response):
+        """
+        get number of pages in given category page and return urls of all pages
+        """
+        search = re.compile(r'"totalPages\\\\":([0-9]+),\\\\', re.IGNORECASE)\
+            .findall(str(response.body))[-1]
+        pages = [x + 1 for x in range(int(search))][1:]
+        urls = [response.url + f'?page={str(page)}' for page in pages]
+        return urls
+
     def parse(self, response):
+        # check if ending with items.aspx > plp
         if response.url.split('/')[-1].split('?')[0] == 'items.aspx':
-            plps = response.xpath('//a[@data-component="ProductCardLink"]/@href').getall()
-            for plp in plps:
-                yield scrapy.Request(response.urljoin(plp), callback=self.parse)
-
-
-        # check if plp or pdp with plps ending with items.aspx
+            # check if first page, if first get all pages
+            if len(response.url.split('?')) > 1:
+                pass
+            else:
+                urls = self.get_no_pages(response)
+                for url in urls:
+                    yield scrapy.Request(url=url, callback=self.parse)
+            # get all pdps from plp               
+            pdps = response.xpath('//a[@data-component="ProductCardLink"]/@href').getall()
+            for pdp in pdps:
+                yield scrapy.Request(response.urljoin(pdp), callback=self.parse)
         else: 
             response.url.split('/')[-1].split('?')[0] != 'items.aspx'
             price = response.css('div.ltr-10c5n0l.eev02n90>p.ltr-o8ptjq-Heading.ex663c10::text').get()
