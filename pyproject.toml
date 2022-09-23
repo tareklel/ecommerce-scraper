@@ -7,6 +7,8 @@ authors = ["Tarik El Lel <tareklel@gmail.com>"]
 [tool.poetry.dependencies]
 python = "^3.9"
 Scrapy = "^2.6.2"
+Faker = "^14.2.0"
+numpy = "^1.23.3"
 
 [tool.poetry.dev-dependencies]
 

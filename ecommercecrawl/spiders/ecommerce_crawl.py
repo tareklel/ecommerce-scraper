@@ -2,15 +2,30 @@ from unicodedata import category
 import scrapy
 from datetime import date
 import re
+from faker import Faker
+import numpy
+import logging
+from scrapy.utils.log import configure_logging
+
 
 class EcomSpider(scrapy.Spider):
     name = "farfetch"
-    custom_settings = {'CLOSESPIDER_PAGECOUNT': 100}
+    # custom_settings = {'CLOSESPIDER_PAGECOUNT': 10}
+    # choose useragent at random
+    #faker = Faker()
+    #ualist = [faker.firefox, faker.chrome, faker.safari]
+    #user_agent = numpy.random.choice(ualist)()
     # user_agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.36"
+    configure_logging(install_root_handler=False)
+    logging.basicConfig(
+        filename=f'farfetch-log-{date.today()}.txt',
+        format='%(levelname)s: %(message)s',
+        level=logging.INFO
+    )
 
     def start_requests(self):
         urls = [
-            'https://www.farfetch.com/ae/shopping/women/clothing-1/items.aspx',
+            'https://www.farfetch.com/ae/shopping/men/shorts-2/items.aspx'
         ]
         for url in urls:
             yield scrapy.Request(url=url, callback=self.parse)
@@ -41,27 +56,26 @@ class EcomSpider(scrapy.Spider):
                 yield scrapy.Request(response.urljoin(pdp), callback=self.parse)
         else: 
             response.url.split('/')[-1].split('?')[0] != 'items.aspx'
-            price = response.css('div.ltr-10c5n0l.eev02n90>p.ltr-o8ptjq-Heading.ex663c10::text').get()
-            breadcrumbs = response.css('a.ltr-4egbt7-Footnote.e1w8i7z30::text').getall()
+            price = response.xpath('//p[@data-component="PriceLarge"]/text()|//p[@data-component="PriceFinalLarge"]/text()').get()
+            breadcrumbs = response.xpath('//li[@data-component="BreadcrumbWrapper"]/a/text()').getall()
+            product_name = response.xpath('//p[@data-component="LabelPrimary"]/../p/text()').getall()
             yield {
             'site':'Farfetch',
             'crawl_date':date.today(),
-            'url':response.url.split('?'),
-            'subfolder':('' if response.url is None else response.url).split("/")[3],
-            'portal_itemid':('' if response.url is None else response.url).split('?')[0].split('/')[-1].split('.')[0].split('-')[-1],
-            'product_name':response.css('p.ltr-13ze6d5-Body.e1hhaa0c0::text').get(),
-            'gender':('' if response.url is None else response.url).split('/')[5],
+            'url':response.url,
+            'subfolder':(None if response.url is None else response.url.split("/")[3]),
+            'portal_itemid':(None if response.url is None else response.url.split('?')[0].split('/')[-1].split('.')[0].split('-')[-1]),
+            'product_name':(None if not product_name else product_name[-1]),
+            'gender':(None if response.url is None else response.url.split('/')[5]),
             'brand':response.xpath('//a[@data-ffref="pp_infobrd"]/text()').get(),
-            'category': ('' if not breadcrumbs else breadcrumbs[2]),
-            'subcategory':('' if not breadcrumbs else breadcrumbs[3]),
-            'price':('' if price is None else price).split(' ')[-1],
-            'currency':('' if price is None else price).split(' ')[0],
-            'price_discount':response.css('div.ltr-zi04li.e12td3gj0>p.es58y7t0.ltr-1oyjj5-Footnote.e1ektl920::text').get(),
-            'sold_out':response.css('p._2d473a._05a6bd::text').get(),
-            'new':response.css('p.ltr-8h1fa5-Body.e3gfwc50::text').get(),
-            'image_url':response.css('button.ltr-18eg0sl.e1g6ondk0>img::attr(src)').get(),
+            'category': (None if not breadcrumbs else breadcrumbs[2]),
+            'subcategory':(None if not breadcrumbs else breadcrumbs[3]),
+            'price':(None if price is None else price.split(' ')[-1]),
+            'currency':(None if price is None else price.split(' ')[0]),
+            'price_discount':response.xpath('//p[@data-component="PriceDiscount"]/text()').get(),
+            'sold_out':(True if response.xpath('//p[@data-tstid="soldOut"]/text()').get() else False),
+            'primary_label':response.xpath('//p[@data-component="LabelPrimary"]/text()').get(),
+            'image_url':response.xpath('//button[@data-is-loaded]/img/@src').get(),
+            'text':response.xpath('//div[@data-component="TabPanelContainer"]/div/div/div/div/p/text()').getall()
             }
-        
-        
-
 
