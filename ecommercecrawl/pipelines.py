@@ -17,8 +17,11 @@ class EcommercecrawlPipeline:
     def process_item(self, item, spider):
         # check for duplicates
         adapter = ItemAdapter(item)
-        if adapter['portal_itemid'] in self.ids_seen:
-            raise DropItem(f"Duplicate item found: {item!r}")
+        if spider.name == 'farfetch':
+            if adapter['portal_itemid'] in self.ids_seen:
+                raise DropItem(f"Duplicate item found: {item!r}")
+            else:
+                self.ids_seen.add(adapter['portal_itemid'])
+                return item
         else:
-            self.ids_seen.add(adapter['portal_itemid'])
             return item

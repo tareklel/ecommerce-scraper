@@ -9,6 +9,7 @@ python = "^3.9"
 Scrapy = "^2.6.2"
 Faker = "^14.2.0"
 numpy = "^1.23.3"
+scrapy-user-agents = "^0.1.1"
 
 [tool.poetry.dev-dependencies]
 

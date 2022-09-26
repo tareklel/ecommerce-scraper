@@ -8,7 +8,7 @@ import logging
 from scrapy.utils.log import configure_logging
 
 
-class EcomSpider(scrapy.Spider):
+class FFSpider(scrapy.Spider):
     name = "farfetch"
     # custom_settings = {'CLOSESPIDER_PAGECOUNT': 10}
     # choose useragent at random
@@ -16,14 +16,15 @@ class EcomSpider(scrapy.Spider):
     #ualist = [faker.firefox, faker.chrome, faker.safari]
     #user_agent = numpy.random.choice(ualist)()
     # user_agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.36"
-    configure_logging(install_root_handler=False)
-    logging.basicConfig(
-        filename=f'farfetch-log-{date.today()}.txt',
-        format='%(levelname)s: %(message)s',
-        level=logging.INFO
-    )
 
     def start_requests(self):
+        configure_logging(install_root_handler=False)
+        logging.basicConfig(
+            filename=f'farfetch-log-{date.today()}.log',
+            format='%(asctime)s %(levelname)s: %(message)s',
+            level=logging.INFO
+        )
+
         urls = [
             'https://www.farfetch.com/ae/shopping/men/shorts-2/items.aspx'
         ]
@@ -62,6 +63,7 @@ class EcomSpider(scrapy.Spider):
             yield {
             'site':'Farfetch',
             'crawl_date':date.today(),
+            'country':response.url.split('/')[3],
             'url':response.url,
             'subfolder':(None if response.url is None else response.url.split("/")[3]),
             'portal_itemid':(None if response.url is None else response.url.split('?')[0].split('/')[-1].split('.')[0].split('-')[-1]),

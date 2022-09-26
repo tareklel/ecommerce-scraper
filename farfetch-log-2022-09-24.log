@@ -1,0 +1,589 @@
+2022-09-24 12:10:41,234 INFO: Scrapy 2.6.2 started (bot: ecommercecrawl)
+2022-09-24 12:10:41,248 INFO: Versions: lxml 4.9.1.0, libxml2 2.9.14, cssselect 1.1.0, parsel 1.6.0, w3lib 2.0.1, Twisted 22.8.0, Python 3.9.13 (main, Aug  7 2022, 01:33:23) - [Clang 13.1.6 (clang-1316.0.21.2.5)], pyOpenSSL 22.0.0 (OpenSSL 3.0.5 5 Jul 2022), cryptography 38.0.1, Platform macOS-12.4-x86_64-i386-64bit
+2022-09-24 12:10:41,254 INFO: Overridden settings:
+{'BOT_NAME': 'ecommercecrawl',
+ 'CLOSESPIDER_PAGECOUNT': 20,
+ 'COOKIES_ENABLED': False,
+ 'NEWSPIDER_MODULE': 'ecommercecrawl.spiders',
+ 'ROBOTSTXT_OBEY': True,
+ 'SPIDER_MODULES': ['ecommercecrawl.spiders']}
+2022-09-24 12:10:41,260 DEBUG: Using reactor: twisted.internet.selectreactor.SelectReactor
+2022-09-24 12:10:41,281 INFO: Telnet Password: 4a9fba004f9f4e0a
+2022-09-24 12:10:41,300 INFO: Enabled extensions:
+['scrapy.extensions.corestats.CoreStats',
+ 'scrapy.extensions.telnet.TelnetConsole',
+ 'scrapy.extensions.memusage.MemoryUsage',
+ 'scrapy.extensions.closespider.CloseSpider',
+ 'scrapy.extensions.feedexport.FeedExporter',
+ 'scrapy.extensions.logstats.LogStats']
+2022-09-24 12:10:41,653 WARNING: [UnsupportedBrowserType] Family: Android
+2022-09-24 12:10:41,718 WARNING: [UnsupportedDeviceType] Family: Other, Brand: None, Model: None
+2022-09-24 12:10:41,770 WARNING: [UnsupportedDeviceType] Family: Other, Brand: None, Model: None
+2022-09-24 12:10:41,857 WARNING: [UnsupportedDeviceType] Family: Other, Brand: None, Model: None
+2022-09-24 12:10:41,964 WARNING: [UnsupportedDeviceType] Family: Sony BDV13, Brand: Sony, Model: BDV13
+2022-09-24 12:10:41,968 WARNING: [UnsupportedDeviceType] Family: Nintendo DSi, Brand: Nintendo, Model: DSi
+2022-09-24 12:10:41,982 WARNING: [UnsupportedDeviceType] Family: Other, Brand: None, Model: None
+2022-09-24 12:10:42,015 WARNING: [UnsupportedBrowserType] Family: Other
+2022-09-24 12:10:42,037 WARNING: [UnsupportedDeviceType] Family: LYF F90M, Brand: LYF, Model: F90M
+2022-09-24 12:10:42,060 WARNING: [UnsupportedDeviceType] Family: Sony BDV14, Brand: Sony, Model: BDV14
+2022-09-24 12:10:42,156 WARNING: [UnsupportedDeviceType] Family: LG Web0S SmartTV, Brand: LG, Model: Web0S SmartTV
+2022-09-24 12:10:42,196 WARNING: [UnsupportedDeviceType] Family: Other, Brand: None, Model: None
+2022-09-24 12:10:42,300 WARNING: [UnsupportedDeviceType] Family: Other, Brand: None, Model: None
+2022-09-24 12:10:42,314 WARNING: [UnsupportedDeviceType] Family: Other, Brand: None, Model: None
+2022-09-24 12:10:42,318 WARNING: [UnsupportedDeviceType] Family: Other, Brand: None, Model: None
+2022-09-24 12:10:42,391 WARNING: [UnsupportedDeviceType] Family: Other, Brand: None, Model: None
+2022-09-24 12:10:42,395 WARNING: [UnsupportedDeviceType] Family: Other, Brand: None, Model: None
+2022-09-24 12:10:42,453 WARNING: [UnsupportedDeviceType] Family: Other, Brand: None, Model: None
+2022-09-24 12:10:42,459 WARNING: [UnsupportedDeviceType] Family: Sony BDV11, Brand: Sony, Model: BDV11
+2022-09-24 12:10:42,467 WARNING: [UnsupportedDeviceType] Family: Other, Brand: None, Model: None
+2022-09-24 12:10:42,478 WARNING: [UnsupportedDeviceType] Family: Other, Brand: None, Model: None
+2022-09-24 12:10:42,486 WARNING: [UnsupportedDeviceType] Family: Other, Brand: None, Model: None
+2022-09-24 12:10:42,506 WARNING: [UnsupportedDeviceType] Family: Other, Brand: None, Model: None
+2022-09-24 12:10:42,537 WARNING: [UnsupportedDeviceType] Family: Nintendo DSi, Brand: Nintendo, Model: DSi
+2022-09-24 12:10:42,609 WARNING: [UnsupportedDeviceType] Family: LYF LF-2403N, Brand: LYF, Model: LF-2403N
+2022-09-24 12:10:42,615 WARNING: [UnsupportedDeviceType] Family: LYF F90M, Brand: LYF, Model: F90M
+2022-09-24 12:10:42,739 WARNING: [UnsupportedDeviceType] Family: Other, Brand: None, Model: None
+2022-09-24 12:10:42,750 WARNING: [UnsupportedDeviceType] Family: Other, Brand: None, Model: None
+2022-09-24 12:10:42,867 WARNING: [UnsupportedBrowserType] Family: Applebot
+2022-09-24 12:10:42,902 WARNING: [UnsupportedDeviceType] Family: Other, Brand: None, Model: None
+2022-09-24 12:10:43,002 WARNING: [UnsupportedBrowserType] Family: Applebot
+2022-09-24 12:10:43,071 WARNING: [UnsupportedBrowserType] Family: Other
+2022-09-24 12:10:43,183 WARNING: [UnsupportedBrowserType] Family: Other
+2022-09-24 12:10:43,221 WARNING: [UnsupportedBrowserType] Family: PhantomJS
+2022-09-24 12:10:43,225 WARNING: [UnsupportedBrowserType] Family: SMTBot
+2022-09-24 12:10:43,302 WARNING: [UnsupportedBrowserType] Family: PhantomJS
+2022-09-24 12:10:43,321 WARNING: [UnsupportedBrowserType] Family: PhantomJS
+2022-09-24 12:10:43,358 WARNING: [UnsupportedBrowserType] Family: WebKit Nightly
+2022-09-24 12:10:43,429 WARNING: [UnsupportedBrowserType] Family: PhantomJS
+2022-09-24 12:10:43,434 WARNING: [UnsupportedDeviceType] Family: Other, Brand: None, Model: None
+2022-09-24 12:10:43,563 WARNING: [UnsupportedBrowserType] Family: PhantomJS
+2022-09-24 12:10:43,566 WARNING: [UnsupportedBrowserType] Family: PhantomJS
+2022-09-24 12:10:43,568 WARNING: [UnsupportedBrowserType] Family: Robot
+2022-09-24 12:10:43,580 WARNING: [UnsupportedDeviceType] Family: Other, Brand: None, Model: None
+2022-09-24 12:10:43,677 WARNING: [UnsupportedBrowserType] Family: Zune
+2022-09-24 12:10:43,787 INFO: Enabled downloader middlewares:
+['scrapy.downloadermiddlewares.robotstxt.RobotsTxtMiddleware',
+ 'scrapy.downloadermiddlewares.httpauth.HttpAuthMiddleware',
+ 'scrapy.downloadermiddlewares.downloadtimeout.DownloadTimeoutMiddleware',
+ 'scrapy.downloadermiddlewares.defaultheaders.DefaultHeadersMiddleware',
+ 'scrapy_user_agents.middlewares.RandomUserAgentMiddleware',
+ 'scrapy.downloadermiddlewares.retry.RetryMiddleware',
+ 'scrapy.downloadermiddlewares.redirect.MetaRefreshMiddleware',
+ 'scrapy.downloadermiddlewares.httpcompression.HttpCompressionMiddleware',
+ 'scrapy.downloadermiddlewares.redirect.RedirectMiddleware',
+ 'scrapy.downloadermiddlewares.httpproxy.HttpProxyMiddleware',
+ 'scrapy.downloadermiddlewares.stats.DownloaderStats']
+2022-09-24 12:10:43,793 INFO: Enabled spider middlewares:
+['scrapy.spidermiddlewares.httperror.HttpErrorMiddleware',
+ 'scrapy.spidermiddlewares.offsite.OffsiteMiddleware',
+ 'scrapy.spidermiddlewares.referer.RefererMiddleware',
+ 'scrapy.spidermiddlewares.urllength.UrlLengthMiddleware',
+ 'scrapy.spidermiddlewares.depth.DepthMiddleware']
+2022-09-24 12:10:43,795 INFO: Enabled item pipelines:
+['ecommercecrawl.pipelines.EcommercecrawlPipeline']
+2022-09-24 12:10:43,795 INFO: Spider opened
+2022-09-24 12:10:43,923 INFO: Crawled 0 pages (at 0 pages/min), scraped 0 items (at 0 items/min)
+2022-09-24 12:10:43,924 INFO: Telnet console listening on 127.0.0.1:6023
+2022-09-24 12:10:43,926 DEBUG: Assigned User-Agent Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/53.0.2785.101 Safari/537.36
+2022-09-24 12:10:44,068 DEBUG: Crawled (200) <GET https://www.ounass.ae/robots.txt> (referer: None)
+2022-09-24 12:10:44,069 DEBUG: Assigned User-Agent Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/45.0.2454.93 Safari/537.36
+2022-09-24 12:10:45,201 DEBUG: Crawled (200) <GET https://www.ounass.ae/api/women/clothing> (referer: None)
+2022-09-24 12:10:45,327 DEBUG: Assigned User-Agent Mozilla/5.0 (Windows NT 6.3; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/54.0.2840.99 Safari/537.36
+2022-09-24 12:10:45,331 DEBUG: Assigned User-Agent Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/49.0.2623.87 Safari/537.36
+2022-09-24 12:10:46,022 DEBUG: Crawled (200) <GET https://www.ounass.ae/api/women/clothing?sortBy=popularity-asc&p=0&facets=0> (referer: https://www.ounass.ae/api/women/clothing)
+2022-09-24 12:10:46,108 DEBUG: Crawled (200) <GET https://www.ounass.ae/api/women/clothing?sortBy=popularity-asc&p=1&facets=0> (referer: https://www.ounass.ae/api/women/clothing)
+2022-09-24 12:10:46,140 DEBUG: Assigned User-Agent Mozilla/5.0 (Windows NT 6.3; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/66.0.3359.139 Safari/537.36
+2022-09-24 12:10:46,143 DEBUG: Assigned User-Agent Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/47.0.2526.106 Safari/537.36
+2022-09-24 12:10:46,146 DEBUG: Assigned User-Agent Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.109 Safari/537.36
+2022-09-24 12:10:46,179 DEBUG: Assigned User-Agent Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/62.0.3202.94 Safari/537.36
+2022-09-24 12:10:46,181 DEBUG: Assigned User-Agent Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/52.0.2743.82 Safari/537.36
+2022-09-24 12:10:46,183 DEBUG: Assigned User-Agent Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.113 Safari/537.36
+2022-09-24 12:10:46,184 DEBUG: Assigned User-Agent Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/49.0.2623.112 Safari/537.36
+2022-09-24 12:10:46,186 DEBUG: Assigned User-Agent Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/47.0.2526.111 Safari/537.36
+2022-09-24 12:10:46,187 DEBUG: Assigned User-Agent Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/44.0.2403.157 Safari/537.36
+2022-09-24 12:10:46,188 DEBUG: Assigned User-Agent Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/53.0.2785.101 Safari/537.36
+2022-09-24 12:10:46,188 DEBUG: Assigned User-Agent Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/65.0.3325.181 Safari/537.36
+2022-09-24 12:10:46,194 DEBUG: Assigned User-Agent Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/62.0.3202.75 Safari/537.36
+2022-09-24 12:10:46,195 DEBUG: Assigned User-Agent Mozilla/5.0 (Windows NT 6.3; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.113 Safari/537.36
+2022-09-24 12:10:46,195 DEBUG: Assigned User-Agent Mozilla/5.0 (Windows NT 6.2; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.109 Safari/537.36
+2022-09-24 12:10:46,196 DEBUG: Assigned User-Agent Mozilla/5.0 (Windows NT 6.3; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/43.0.2357.65 Safari/537.36
+2022-09-24 12:10:46,196 DEBUG: Assigned User-Agent Mozilla/5.0 (Windows NT 6.3; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/49.0.2623.110 Safari/537.36
+2022-09-24 12:10:46,272 DEBUG: Crawled (200) <GET https://www.ounass.ae/shop-maje-printed-shirt-dress-in-satin-for-women-215635938_15.html> (referer: https://www.ounass.ae/api/women/clothing?sortBy=popularity-asc&p=0&facets=0)
+2022-09-24 12:10:46,280 DEBUG: Assigned User-Agent Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/65.0.3325.146 Safari/537.36
+2022-09-24 12:10:46,305 DEBUG: Crawled (200) <GET https://www.ounass.ae/shop-pronovias-kufra-wedding-dress-in-eco-crepe-for-women-215509861_191.html> (referer: https://www.ounass.ae/api/women/clothing?sortBy=popularity-asc&p=0&facets=0)
+2022-09-24 12:10:46,308 DEBUG: Assigned User-Agent Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/62.0.3202.94 Safari/537.36
+2022-09-24 12:10:46,313 DEBUG: Crawled (200) <GET https://www.ounass.ae/shop-michael-kors-collection-hand-embroidered-gown-in-sequinned-double-crepe-sable-for-women-215151056_13.html> (referer: https://www.ounass.ae/api/women/clothing?sortBy=popularity-asc&p=0&facets=0)
+2022-09-24 12:10:46,314 DEBUG: Assigned User-Agent Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/67.0.3396.87 Safari/537.36
+2022-09-24 12:10:46,341 DEBUG: Crawled (200) <GET https://www.ounass.ae/shop-norma-kamali-high-low-boyfriend-shirt-in-cotton-for-women-215731395_26.html> (referer: https://www.ounass.ae/api/women/clothing?sortBy=popularity-asc&p=0&facets=0)
+2022-09-24 12:10:46,342 DEBUG: Assigned User-Agent Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/47.0.2526.80 Safari/537.36
+2022-09-24 12:10:46,356 DEBUG: Crawled (200) <GET https://www.ounass.ae/shop-house-of-thl-emma-classic-maxi-dress-for-women-215730566_179.html> (referer: https://www.ounass.ae/api/women/clothing?sortBy=popularity-asc&p=0&facets=0)
+2022-09-24 12:10:46,356 DEBUG: Assigned User-Agent Mozilla/5.0 (Windows NT 5.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.90 Safari/537.36
+2022-09-24 12:10:46,362 DEBUG: Crawled (200) <GET https://www.ounass.ae/shop-sandro-tweed-trompe-l-oeil-dress-for-women-215607245_195.html> (referer: https://www.ounass.ae/api/women/clothing?sortBy=popularity-asc&p=0&facets=0)
+2022-09-24 12:10:46,363 DEBUG: Assigned User-Agent Mozilla/5.0 (Windows NT 6.3; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/62.0.3202.94 Safari/537.36
+2022-09-24 12:10:46,367 DEBUG: Crawled (200) <GET https://www.ounass.ae/shop-maje-printed-linen-dress-for-women-215607249_195.html> (referer: https://www.ounass.ae/api/women/clothing?sortBy=popularity-asc&p=0&facets=0)
+2022-09-24 12:10:46,372 DEBUG: Crawled (200) <GET https://www.ounass.ae/shop-house-of-thl-sophie-drawstring-sleeve-tunic-for-women-215730568_179.html> (referer: https://www.ounass.ae/api/women/clothing?sortBy=popularity-asc&p=0&facets=0)
+2022-09-24 12:10:46,373 DEBUG: Assigned User-Agent Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/54.0.2840.99 Safari/537.36
+2022-09-24 12:10:46,374 DEBUG: Assigned User-Agent Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/62.0.3202.94 Safari/537.36
+2022-09-24 12:10:46,391 ERROR: Error processing {'bread': ['Women', 'Clothing', 'Dresses', 'Sleeved']}
+Traceback (most recent call last):
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/twisted/internet/defer.py", line 891, in _runCallbacks
+    current.result = callback(  # type: ignore[misc]
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/scrapy/utils/defer.py", line 162, in f
+    return deferred_from_coro(coro_f(*coro_args, **coro_kwargs))
+  File "/Users/tareklel/Desktop/projects/ecommercecrawl/ecommercecrawl/pipelines.py", line 20, in process_item
+    if adapter['portal_itemid'] in self.ids_seen:
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/itemadapter/adapter.py", line 338, in __getitem__
+    return self.adapter.__getitem__(field_name)
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/itemadapter/adapter.py", line 226, in __getitem__
+    return self.item[field_name]
+KeyError: 'portal_itemid'
+2022-09-24 12:10:46,400 DEBUG: Crawled (200) <GET https://www.ounass.ae/shop-never-fully-dressed-star-sasha-lace-midi-dress-in-cotton-poplin-for-women-215719172_13.html> (referer: https://www.ounass.ae/api/women/clothing?sortBy=popularity-asc&p=0&facets=0)
+2022-09-24 12:10:46,401 DEBUG: Assigned User-Agent Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/59.0.3071.109 Safari/537.36
+2022-09-24 12:10:46,406 DEBUG: Crawled (200) <GET https://www.ounass.ae/shop-never-fully-dressed-plunge-neck-draped-midi-dress-for-women-215719183_13.html> (referer: https://www.ounass.ae/api/women/clothing?sortBy=popularity-asc&p=0&facets=0)
+2022-09-24 12:10:46,411 DEBUG: Crawled (200) <GET https://www.ounass.ae/shop-rajdeep-ranawat-printed-jalabiya-in-voile-for-women-215736349_179.html> (referer: https://www.ounass.ae/api/women/clothing?sortBy=popularity-asc&p=0&facets=0)
+2022-09-24 12:10:46,412 DEBUG: Assigned User-Agent Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/63.0.3239.84 Safari/537.36
+2022-09-24 12:10:46,413 DEBUG: Assigned User-Agent Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/54.0.2840.71 Safari/537.36
+2022-09-24 12:10:46,419 DEBUG: Crawled (200) <GET https://www.ounass.ae/shop-attico-draped-mini-dress-in-light-jersey-for-women-215437899_245.html> (referer: https://www.ounass.ae/api/women/clothing?sortBy=popularity-asc&p=0&facets=0)
+2022-09-24 12:10:46,423 ERROR: Error processing {'bread': ['Women', 'Clothing', 'Dresses', 'One Shoulder']}
+Traceback (most recent call last):
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/twisted/internet/defer.py", line 891, in _runCallbacks
+    current.result = callback(  # type: ignore[misc]
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/scrapy/utils/defer.py", line 162, in f
+    return deferred_from_coro(coro_f(*coro_args, **coro_kwargs))
+  File "/Users/tareklel/Desktop/projects/ecommercecrawl/ecommercecrawl/pipelines.py", line 20, in process_item
+    if adapter['portal_itemid'] in self.ids_seen:
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/itemadapter/adapter.py", line 338, in __getitem__
+    return self.adapter.__getitem__(field_name)
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/itemadapter/adapter.py", line 226, in __getitem__
+    return self.item[field_name]
+KeyError: 'portal_itemid'
+2022-09-24 12:10:46,426 DEBUG: Assigned User-Agent Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/65.0.3325.181 Safari/537.36
+2022-09-24 12:10:46,431 DEBUG: Crawled (200) <GET https://www.ounass.ae/shop-magali-pascal-caroll-mini-dress-in-cotton-poplin-for-women-215724909_245.html> (referer: https://www.ounass.ae/api/women/clothing?sortBy=popularity-asc&p=0&facets=0)
+2022-09-24 12:10:46,435 DEBUG: Crawled (200) <GET https://www.ounass.ae/shop-fred-perry-bowling-shirt-dress-in-viscose-for-women-215722460_13.html> (referer: https://www.ounass.ae/api/women/clothing?sortBy=popularity-asc&p=0&facets=0)
+2022-09-24 12:10:46,440 ERROR: Error processing {'bread': ['Women', 'Clothing', 'Dresses', 'Sleeveless']}
+Traceback (most recent call last):
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/twisted/internet/defer.py", line 891, in _runCallbacks
+    current.result = callback(  # type: ignore[misc]
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/scrapy/utils/defer.py", line 162, in f
+    return deferred_from_coro(coro_f(*coro_args, **coro_kwargs))
+  File "/Users/tareklel/Desktop/projects/ecommercecrawl/ecommercecrawl/pipelines.py", line 20, in process_item
+    if adapter['portal_itemid'] in self.ids_seen:
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/itemadapter/adapter.py", line 338, in __getitem__
+    return self.adapter.__getitem__(field_name)
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/itemadapter/adapter.py", line 226, in __getitem__
+    return self.item[field_name]
+KeyError: 'portal_itemid'
+2022-09-24 12:10:46,441 DEBUG: Assigned User-Agent Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/64.0.3282.167 Safari/537.36
+2022-09-24 12:10:46,442 DEBUG: Assigned User-Agent Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.96 Safari/537.36
+2022-09-24 12:10:46,448 DEBUG: Crawled (200) <GET https://www.ounass.ae/shop-rajdeep-ranawat-printed-jalabiya-in-voile-for-women-215736350_179.html> (referer: https://www.ounass.ae/api/women/clothing?sortBy=popularity-asc&p=0&facets=0)
+2022-09-24 12:10:46,450 DEBUG: Assigned User-Agent Mozilla/5.0 (Windows NT 6.2; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/55.0.2883.87 Safari/537.36
+2022-09-24 12:10:46,457 ERROR: Error processing {'bread': ['Women', 'Clothing', 'Dresses', 'Sleeved']}
+Traceback (most recent call last):
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/twisted/internet/defer.py", line 891, in _runCallbacks
+    current.result = callback(  # type: ignore[misc]
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/scrapy/utils/defer.py", line 162, in f
+    return deferred_from_coro(coro_f(*coro_args, **coro_kwargs))
+  File "/Users/tareklel/Desktop/projects/ecommercecrawl/ecommercecrawl/pipelines.py", line 20, in process_item
+    if adapter['portal_itemid'] in self.ids_seen:
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/itemadapter/adapter.py", line 338, in __getitem__
+    return self.adapter.__getitem__(field_name)
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/itemadapter/adapter.py", line 226, in __getitem__
+    return self.item[field_name]
+KeyError: 'portal_itemid'
+2022-09-24 12:10:46,463 DEBUG: Crawled (200) <GET https://www.ounass.ae/shop-burberry-chevron-check-print-pants-in-silk-for-women-215419278_15.html> (referer: https://www.ounass.ae/api/women/clothing?sortBy=popularity-asc&p=1&facets=0)
+2022-09-24 12:10:46,463 INFO: Closing spider (closespider_pagecount)
+2022-09-24 12:10:46,468 DEBUG: Crawled (200) <GET https://www.ounass.ae/shop-poca-poca-ruffled-midi-dress-for-women-215420685_26.html> (referer: https://www.ounass.ae/api/women/clothing?sortBy=popularity-asc&p=0&facets=0)
+2022-09-24 12:10:46,472 DEBUG: Crawled (200) <GET https://www.ounass.ae/shop-polo-ralph-lauren-floral-maxi-skirt-for-women-215648936_15.html> (referer: https://www.ounass.ae/api/women/clothing?sortBy=popularity-asc&p=1&facets=0)
+2022-09-24 12:10:46,481 DEBUG: Crawled (200) <GET https://www.ounass.ae/shop-jacquemus-le-pino-t-shirt-in-jersey-for-women-215609808_15.html> (referer: https://www.ounass.ae/api/women/clothing?sortBy=popularity-asc&p=1&facets=0)
+2022-09-24 12:10:46,486 DEBUG: Crawled (200) <GET https://www.ounass.ae/shop-christopher-esber-open-tie-back-midi-dress-in-ribbed-knit-for-women-215575965_15.html> (referer: https://www.ounass.ae/api/women/clothing?sortBy=popularity-asc&p=1&facets=0)
+2022-09-24 12:10:46,493 ERROR: Error processing {'bread': ['Women', 'Clothing', 'Dresses', 'Sleeved']}
+Traceback (most recent call last):
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/twisted/internet/defer.py", line 891, in _runCallbacks
+    current.result = callback(  # type: ignore[misc]
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/scrapy/utils/defer.py", line 162, in f
+    return deferred_from_coro(coro_f(*coro_args, **coro_kwargs))
+  File "/Users/tareklel/Desktop/projects/ecommercecrawl/ecommercecrawl/pipelines.py", line 20, in process_item
+    if adapter['portal_itemid'] in self.ids_seen:
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/itemadapter/adapter.py", line 338, in __getitem__
+    return self.adapter.__getitem__(field_name)
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/itemadapter/adapter.py", line 226, in __getitem__
+    return self.item[field_name]
+KeyError: 'portal_itemid'
+2022-09-24 12:10:46,500 ERROR: Error processing {'bread': ['Women', 'Clothing', 'Dresses', 'Mini']}
+Traceback (most recent call last):
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/twisted/internet/defer.py", line 891, in _runCallbacks
+    current.result = callback(  # type: ignore[misc]
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/scrapy/utils/defer.py", line 162, in f
+    return deferred_from_coro(coro_f(*coro_args, **coro_kwargs))
+  File "/Users/tareklel/Desktop/projects/ecommercecrawl/ecommercecrawl/pipelines.py", line 20, in process_item
+    if adapter['portal_itemid'] in self.ids_seen:
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/itemadapter/adapter.py", line 338, in __getitem__
+    return self.adapter.__getitem__(field_name)
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/itemadapter/adapter.py", line 226, in __getitem__
+    return self.item[field_name]
+KeyError: 'portal_itemid'
+2022-09-24 12:10:46,505 ERROR: Error processing {'bread': ['Women', 'Clothing', 'Dresses', 'Mini']}
+Traceback (most recent call last):
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/twisted/internet/defer.py", line 891, in _runCallbacks
+    current.result = callback(  # type: ignore[misc]
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/scrapy/utils/defer.py", line 162, in f
+    return deferred_from_coro(coro_f(*coro_args, **coro_kwargs))
+  File "/Users/tareklel/Desktop/projects/ecommercecrawl/ecommercecrawl/pipelines.py", line 20, in process_item
+    if adapter['portal_itemid'] in self.ids_seen:
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/itemadapter/adapter.py", line 338, in __getitem__
+    return self.adapter.__getitem__(field_name)
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/itemadapter/adapter.py", line 226, in __getitem__
+    return self.item[field_name]
+KeyError: 'portal_itemid'
+2022-09-24 12:10:46,511 DEBUG: Crawled (200) <GET https://www.ounass.ae/shop-palm-angels-logo-high-waist-stirrup-leggings-in-stretch-nylon-for-women-215679083_15.html> (referer: https://www.ounass.ae/api/women/clothing?sortBy=popularity-asc&p=1&facets=0)
+2022-09-24 12:10:46,516 DEBUG: Crawled (200) <GET https://www.ounass.ae/shop-max-co-cargo-pants-in-garbadine-for-women-215684263_508.html> (referer: https://www.ounass.ae/api/women/clothing?sortBy=popularity-asc&p=1&facets=0)
+2022-09-24 12:10:46,523 DEBUG: Crawled (200) <GET https://www.ounass.ae/shop-pinko-clea-balloon-sleeve-shirt-in-cotton-poplin-for-women-215697354_23.html> (referer: https://www.ounass.ae/api/women/clothing?sortBy=popularity-asc&p=1&facets=0)
+2022-09-24 12:10:46,529 ERROR: Error processing {'bread': ['Women', 'Clothing', 'Dresses', 'Sleeved']}
+Traceback (most recent call last):
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/twisted/internet/defer.py", line 891, in _runCallbacks
+    current.result = callback(  # type: ignore[misc]
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/scrapy/utils/defer.py", line 162, in f
+    return deferred_from_coro(coro_f(*coro_args, **coro_kwargs))
+  File "/Users/tareklel/Desktop/projects/ecommercecrawl/ecommercecrawl/pipelines.py", line 20, in process_item
+    if adapter['portal_itemid'] in self.ids_seen:
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/itemadapter/adapter.py", line 338, in __getitem__
+    return self.adapter.__getitem__(field_name)
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/itemadapter/adapter.py", line 226, in __getitem__
+    return self.item[field_name]
+KeyError: 'portal_itemid'
+2022-09-24 12:10:46,537 DEBUG: Crawled (200) <GET https://www.ounass.ae/shop-versace-jeans-couture-baroque-logo-shirt-in-jacquard-for-women-215573361_23.html> (referer: https://www.ounass.ae/api/women/clothing?sortBy=popularity-asc&p=1&facets=0)
+2022-09-24 12:10:46,541 DEBUG: Crawled (200) <GET https://www.ounass.ae/shop-magali-pascal-cassia-top-in-ecovero-crepe-for-women-215633555_171.html> (referer: https://www.ounass.ae/api/women/clothing?sortBy=popularity-asc&p=1&facets=0)
+2022-09-24 12:10:46,546 DEBUG: Crawled (200) <GET https://www.ounass.ae/shop-alexander-wang-t-essential-t-shirt-in-jersey-for-women-215656080_23.html> (referer: https://www.ounass.ae/api/women/clothing?sortBy=popularity-asc&p=1&facets=0)
+2022-09-24 12:10:46,551 ERROR: Error processing {'bread': ['Women', 'Clothing', 'Dresses', 'Sleeveless']}
+Traceback (most recent call last):
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/twisted/internet/defer.py", line 891, in _runCallbacks
+    current.result = callback(  # type: ignore[misc]
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/scrapy/utils/defer.py", line 162, in f
+    return deferred_from_coro(coro_f(*coro_args, **coro_kwargs))
+  File "/Users/tareklel/Desktop/projects/ecommercecrawl/ecommercecrawl/pipelines.py", line 20, in process_item
+    if adapter['portal_itemid'] in self.ids_seen:
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/itemadapter/adapter.py", line 338, in __getitem__
+    return self.adapter.__getitem__(field_name)
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/itemadapter/adapter.py", line 226, in __getitem__
+    return self.item[field_name]
+KeyError: 'portal_itemid'
+2022-09-24 12:10:46,557 ERROR: Error processing {'bread': ['Women', 'Clothing', 'Dresses', 'Sleeved']}
+Traceback (most recent call last):
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/twisted/internet/defer.py", line 891, in _runCallbacks
+    current.result = callback(  # type: ignore[misc]
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/scrapy/utils/defer.py", line 162, in f
+    return deferred_from_coro(coro_f(*coro_args, **coro_kwargs))
+  File "/Users/tareklel/Desktop/projects/ecommercecrawl/ecommercecrawl/pipelines.py", line 20, in process_item
+    if adapter['portal_itemid'] in self.ids_seen:
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/itemadapter/adapter.py", line 338, in __getitem__
+    return self.adapter.__getitem__(field_name)
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/itemadapter/adapter.py", line 226, in __getitem__
+    return self.item[field_name]
+KeyError: 'portal_itemid'
+2022-09-24 12:10:46,565 ERROR: Error processing {'bread': ['Women', 'Clothing', 'Dresses', 'Kaftans']}
+Traceback (most recent call last):
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/twisted/internet/defer.py", line 891, in _runCallbacks
+    current.result = callback(  # type: ignore[misc]
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/scrapy/utils/defer.py", line 162, in f
+    return deferred_from_coro(coro_f(*coro_args, **coro_kwargs))
+  File "/Users/tareklel/Desktop/projects/ecommercecrawl/ecommercecrawl/pipelines.py", line 20, in process_item
+    if adapter['portal_itemid'] in self.ids_seen:
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/itemadapter/adapter.py", line 338, in __getitem__
+    return self.adapter.__getitem__(field_name)
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/itemadapter/adapter.py", line 226, in __getitem__
+    return self.item[field_name]
+KeyError: 'portal_itemid'
+2022-09-24 12:10:46,570 ERROR: Error processing {'bread': ['Women', 'Clothing', 'Dresses', 'Sleeved']}
+Traceback (most recent call last):
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/twisted/internet/defer.py", line 891, in _runCallbacks
+    current.result = callback(  # type: ignore[misc]
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/scrapy/utils/defer.py", line 162, in f
+    return deferred_from_coro(coro_f(*coro_args, **coro_kwargs))
+  File "/Users/tareklel/Desktop/projects/ecommercecrawl/ecommercecrawl/pipelines.py", line 20, in process_item
+    if adapter['portal_itemid'] in self.ids_seen:
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/itemadapter/adapter.py", line 338, in __getitem__
+    return self.adapter.__getitem__(field_name)
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/itemadapter/adapter.py", line 226, in __getitem__
+    return self.item[field_name]
+KeyError: 'portal_itemid'
+2022-09-24 12:10:46,576 DEBUG: Crawled (200) <GET https://www.ounass.ae/shop-mach-mach-crystal-bow-sweatshirt-in-cotton-blend-fleece-for-women-215652065_23.html> (referer: https://www.ounass.ae/api/women/clothing?sortBy=popularity-asc&p=1&facets=0)
+2022-09-24 12:10:46,583 DEBUG: Crawled (200) <GET https://www.ounass.ae/shop-alexander-wang-oversized-button-down-striped-shirt-in-cotton-shirting-for-women-215659881_23.html> (referer: https://www.ounass.ae/api/women/clothing?sortBy=popularity-asc&p=1&facets=0)
+2022-09-24 12:10:46,589 ERROR: Error processing {'bread': ['Women', 'Clothing', 'Dresses', 'Sleeved']}
+Traceback (most recent call last):
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/twisted/internet/defer.py", line 891, in _runCallbacks
+    current.result = callback(  # type: ignore[misc]
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/scrapy/utils/defer.py", line 162, in f
+    return deferred_from_coro(coro_f(*coro_args, **coro_kwargs))
+  File "/Users/tareklel/Desktop/projects/ecommercecrawl/ecommercecrawl/pipelines.py", line 20, in process_item
+    if adapter['portal_itemid'] in self.ids_seen:
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/itemadapter/adapter.py", line 338, in __getitem__
+    return self.adapter.__getitem__(field_name)
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/itemadapter/adapter.py", line 226, in __getitem__
+    return self.item[field_name]
+KeyError: 'portal_itemid'
+2022-09-24 12:10:46,597 ERROR: Error processing {'bread': ['Women', 'Clothing', 'Dresses', 'Sleeved']}
+Traceback (most recent call last):
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/twisted/internet/defer.py", line 891, in _runCallbacks
+    current.result = callback(  # type: ignore[misc]
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/scrapy/utils/defer.py", line 162, in f
+    return deferred_from_coro(coro_f(*coro_args, **coro_kwargs))
+  File "/Users/tareklel/Desktop/projects/ecommercecrawl/ecommercecrawl/pipelines.py", line 20, in process_item
+    if adapter['portal_itemid'] in self.ids_seen:
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/itemadapter/adapter.py", line 338, in __getitem__
+    return self.adapter.__getitem__(field_name)
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/itemadapter/adapter.py", line 226, in __getitem__
+    return self.item[field_name]
+KeyError: 'portal_itemid'
+2022-09-24 12:10:46,603 DEBUG: Crawled (200) <GET https://www.ounass.ae/shop-celiab-tahoe-printed-mini-dress-in-courderoy-for-women-215579579_14.html> (referer: https://www.ounass.ae/api/women/clothing?sortBy=popularity-asc&p=1&facets=0)
+2022-09-24 12:10:46,606 DEBUG: Crawled (200) <GET https://www.ounass.ae/shop-jovani-mother-of-the-bride-cape-sleeve-dress-in-lace-for-women-215609151_4067.html> (referer: https://www.ounass.ae/api/women/clothing?sortBy=popularity-asc&p=1&facets=0)
+2022-09-24 12:10:46,610 DEBUG: Crawled (200) <GET https://www.ounass.ae/shop-celiab-tai-printed-maxi-dress-in-satin-for-women-215579574_14.html> (referer: https://www.ounass.ae/api/women/clothing?sortBy=popularity-asc&p=1&facets=0)
+2022-09-24 12:10:46,615 ERROR: Error processing {'bread': ['Women', 'Clothing', 'Dresses', 'Kaftans']}
+Traceback (most recent call last):
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/twisted/internet/defer.py", line 891, in _runCallbacks
+    current.result = callback(  # type: ignore[misc]
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/scrapy/utils/defer.py", line 162, in f
+    return deferred_from_coro(coro_f(*coro_args, **coro_kwargs))
+  File "/Users/tareklel/Desktop/projects/ecommercecrawl/ecommercecrawl/pipelines.py", line 20, in process_item
+    if adapter['portal_itemid'] in self.ids_seen:
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/itemadapter/adapter.py", line 338, in __getitem__
+    return self.adapter.__getitem__(field_name)
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/itemadapter/adapter.py", line 226, in __getitem__
+    return self.item[field_name]
+KeyError: 'portal_itemid'
+2022-09-24 12:10:46,620 ERROR: Error processing {'bread': ['Women', 'Clothing', 'Pants', 'Straight Leg']}
+Traceback (most recent call last):
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/twisted/internet/defer.py", line 891, in _runCallbacks
+    current.result = callback(  # type: ignore[misc]
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/scrapy/utils/defer.py", line 162, in f
+    return deferred_from_coro(coro_f(*coro_args, **coro_kwargs))
+  File "/Users/tareklel/Desktop/projects/ecommercecrawl/ecommercecrawl/pipelines.py", line 20, in process_item
+    if adapter['portal_itemid'] in self.ids_seen:
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/itemadapter/adapter.py", line 338, in __getitem__
+    return self.adapter.__getitem__(field_name)
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/itemadapter/adapter.py", line 226, in __getitem__
+    return self.item[field_name]
+KeyError: 'portal_itemid'
+2022-09-24 12:10:46,627 ERROR: Error processing {'bread': ['Women', 'Clothing', 'Dresses', 'Sleeved']}
+Traceback (most recent call last):
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/twisted/internet/defer.py", line 891, in _runCallbacks
+    current.result = callback(  # type: ignore[misc]
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/scrapy/utils/defer.py", line 162, in f
+    return deferred_from_coro(coro_f(*coro_args, **coro_kwargs))
+  File "/Users/tareklel/Desktop/projects/ecommercecrawl/ecommercecrawl/pipelines.py", line 20, in process_item
+    if adapter['portal_itemid'] in self.ids_seen:
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/itemadapter/adapter.py", line 338, in __getitem__
+    return self.adapter.__getitem__(field_name)
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/itemadapter/adapter.py", line 226, in __getitem__
+    return self.item[field_name]
+KeyError: 'portal_itemid'
+2022-09-24 12:10:46,632 ERROR: Error processing {'bread': ['Women', 'Clothing', 'Skirts', 'Maxi']}
+Traceback (most recent call last):
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/twisted/internet/defer.py", line 891, in _runCallbacks
+    current.result = callback(  # type: ignore[misc]
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/scrapy/utils/defer.py", line 162, in f
+    return deferred_from_coro(coro_f(*coro_args, **coro_kwargs))
+  File "/Users/tareklel/Desktop/projects/ecommercecrawl/ecommercecrawl/pipelines.py", line 20, in process_item
+    if adapter['portal_itemid'] in self.ids_seen:
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/itemadapter/adapter.py", line 338, in __getitem__
+    return self.adapter.__getitem__(field_name)
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/itemadapter/adapter.py", line 226, in __getitem__
+    return self.item[field_name]
+KeyError: 'portal_itemid'
+2022-09-24 12:10:46,638 ERROR: Error processing {'bread': ['Women', 'Clothing', 'Tops', 'T-Shirts']}
+Traceback (most recent call last):
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/twisted/internet/defer.py", line 891, in _runCallbacks
+    current.result = callback(  # type: ignore[misc]
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/scrapy/utils/defer.py", line 162, in f
+    return deferred_from_coro(coro_f(*coro_args, **coro_kwargs))
+  File "/Users/tareklel/Desktop/projects/ecommercecrawl/ecommercecrawl/pipelines.py", line 20, in process_item
+    if adapter['portal_itemid'] in self.ids_seen:
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/itemadapter/adapter.py", line 338, in __getitem__
+    return self.adapter.__getitem__(field_name)
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/itemadapter/adapter.py", line 226, in __getitem__
+    return self.item[field_name]
+KeyError: 'portal_itemid'
+2022-09-24 12:10:46,644 ERROR: Error processing {'bread': ['Women', 'Clothing', 'Dresses', 'Sleeved']}
+Traceback (most recent call last):
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/twisted/internet/defer.py", line 891, in _runCallbacks
+    current.result = callback(  # type: ignore[misc]
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/scrapy/utils/defer.py", line 162, in f
+    return deferred_from_coro(coro_f(*coro_args, **coro_kwargs))
+  File "/Users/tareklel/Desktop/projects/ecommercecrawl/ecommercecrawl/pipelines.py", line 20, in process_item
+    if adapter['portal_itemid'] in self.ids_seen:
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/itemadapter/adapter.py", line 338, in __getitem__
+    return self.adapter.__getitem__(field_name)
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/itemadapter/adapter.py", line 226, in __getitem__
+    return self.item[field_name]
+KeyError: 'portal_itemid'
+2022-09-24 12:10:46,652 ERROR: Error processing {'bread': ['Women', 'Clothing', 'Activewear']}
+Traceback (most recent call last):
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/twisted/internet/defer.py", line 891, in _runCallbacks
+    current.result = callback(  # type: ignore[misc]
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/scrapy/utils/defer.py", line 162, in f
+    return deferred_from_coro(coro_f(*coro_args, **coro_kwargs))
+  File "/Users/tareklel/Desktop/projects/ecommercecrawl/ecommercecrawl/pipelines.py", line 20, in process_item
+    if adapter['portal_itemid'] in self.ids_seen:
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/itemadapter/adapter.py", line 338, in __getitem__
+    return self.adapter.__getitem__(field_name)
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/itemadapter/adapter.py", line 226, in __getitem__
+    return self.item[field_name]
+KeyError: 'portal_itemid'
+2022-09-24 12:10:46,659 ERROR: Error processing {'bread': ['Women', 'Clothing', 'Pants', 'Cargo']}
+Traceback (most recent call last):
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/twisted/internet/defer.py", line 891, in _runCallbacks
+    current.result = callback(  # type: ignore[misc]
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/scrapy/utils/defer.py", line 162, in f
+    return deferred_from_coro(coro_f(*coro_args, **coro_kwargs))
+  File "/Users/tareklel/Desktop/projects/ecommercecrawl/ecommercecrawl/pipelines.py", line 20, in process_item
+    if adapter['portal_itemid'] in self.ids_seen:
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/itemadapter/adapter.py", line 338, in __getitem__
+    return self.adapter.__getitem__(field_name)
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/itemadapter/adapter.py", line 226, in __getitem__
+    return self.item[field_name]
+KeyError: 'portal_itemid'
+2022-09-24 12:10:46,664 ERROR: Error processing {'bread': ['Women', 'Clothing', 'Tops', 'Shirts']}
+Traceback (most recent call last):
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/twisted/internet/defer.py", line 891, in _runCallbacks
+    current.result = callback(  # type: ignore[misc]
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/scrapy/utils/defer.py", line 162, in f
+    return deferred_from_coro(coro_f(*coro_args, **coro_kwargs))
+  File "/Users/tareklel/Desktop/projects/ecommercecrawl/ecommercecrawl/pipelines.py", line 20, in process_item
+    if adapter['portal_itemid'] in self.ids_seen:
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/itemadapter/adapter.py", line 338, in __getitem__
+    return self.adapter.__getitem__(field_name)
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/itemadapter/adapter.py", line 226, in __getitem__
+    return self.item[field_name]
+KeyError: 'portal_itemid'
+2022-09-24 12:10:46,670 ERROR: Error processing {'bread': ['Women', 'Clothing', 'Tops', 'Shirts']}
+Traceback (most recent call last):
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/twisted/internet/defer.py", line 891, in _runCallbacks
+    current.result = callback(  # type: ignore[misc]
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/scrapy/utils/defer.py", line 162, in f
+    return deferred_from_coro(coro_f(*coro_args, **coro_kwargs))
+  File "/Users/tareklel/Desktop/projects/ecommercecrawl/ecommercecrawl/pipelines.py", line 20, in process_item
+    if adapter['portal_itemid'] in self.ids_seen:
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/itemadapter/adapter.py", line 338, in __getitem__
+    return self.adapter.__getitem__(field_name)
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/itemadapter/adapter.py", line 226, in __getitem__
+    return self.item[field_name]
+KeyError: 'portal_itemid'
+2022-09-24 12:10:46,675 ERROR: Error processing {'bread': ['Women', 'Clothing', 'Tops', 'Short Sleeve']}
+Traceback (most recent call last):
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/twisted/internet/defer.py", line 891, in _runCallbacks
+    current.result = callback(  # type: ignore[misc]
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/scrapy/utils/defer.py", line 162, in f
+    return deferred_from_coro(coro_f(*coro_args, **coro_kwargs))
+  File "/Users/tareklel/Desktop/projects/ecommercecrawl/ecommercecrawl/pipelines.py", line 20, in process_item
+    if adapter['portal_itemid'] in self.ids_seen:
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/itemadapter/adapter.py", line 338, in __getitem__
+    return self.adapter.__getitem__(field_name)
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/itemadapter/adapter.py", line 226, in __getitem__
+    return self.item[field_name]
+KeyError: 'portal_itemid'
+2022-09-24 12:10:46,681 ERROR: Error processing {'bread': ['Women', 'Clothing', 'Tops', 'T-Shirts']}
+Traceback (most recent call last):
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/twisted/internet/defer.py", line 891, in _runCallbacks
+    current.result = callback(  # type: ignore[misc]
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/scrapy/utils/defer.py", line 162, in f
+    return deferred_from_coro(coro_f(*coro_args, **coro_kwargs))
+  File "/Users/tareklel/Desktop/projects/ecommercecrawl/ecommercecrawl/pipelines.py", line 20, in process_item
+    if adapter['portal_itemid'] in self.ids_seen:
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/itemadapter/adapter.py", line 338, in __getitem__
+    return self.adapter.__getitem__(field_name)
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/itemadapter/adapter.py", line 226, in __getitem__
+    return self.item[field_name]
+KeyError: 'portal_itemid'
+2022-09-24 12:10:46,687 ERROR: Error processing {'bread': ['Women', 'Clothing', 'Tops', 'Sweatshirts & Hoodies']}
+Traceback (most recent call last):
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/twisted/internet/defer.py", line 891, in _runCallbacks
+    current.result = callback(  # type: ignore[misc]
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/scrapy/utils/defer.py", line 162, in f
+    return deferred_from_coro(coro_f(*coro_args, **coro_kwargs))
+  File "/Users/tareklel/Desktop/projects/ecommercecrawl/ecommercecrawl/pipelines.py", line 20, in process_item
+    if adapter['portal_itemid'] in self.ids_seen:
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/itemadapter/adapter.py", line 338, in __getitem__
+    return self.adapter.__getitem__(field_name)
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/itemadapter/adapter.py", line 226, in __getitem__
+    return self.item[field_name]
+KeyError: 'portal_itemid'
+2022-09-24 12:10:46,693 ERROR: Error processing {'bread': ['Women', 'Clothing', 'Tops', 'Shirts']}
+Traceback (most recent call last):
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/twisted/internet/defer.py", line 891, in _runCallbacks
+    current.result = callback(  # type: ignore[misc]
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/scrapy/utils/defer.py", line 162, in f
+    return deferred_from_coro(coro_f(*coro_args, **coro_kwargs))
+  File "/Users/tareklel/Desktop/projects/ecommercecrawl/ecommercecrawl/pipelines.py", line 20, in process_item
+    if adapter['portal_itemid'] in self.ids_seen:
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/itemadapter/adapter.py", line 338, in __getitem__
+    return self.adapter.__getitem__(field_name)
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/itemadapter/adapter.py", line 226, in __getitem__
+    return self.item[field_name]
+KeyError: 'portal_itemid'
+2022-09-24 12:10:46,710 ERROR: Error processing {'bread': ['Women', 'Clothing', 'Dresses', 'Sleeved']}
+Traceback (most recent call last):
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/twisted/internet/defer.py", line 891, in _runCallbacks
+    current.result = callback(  # type: ignore[misc]
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/scrapy/utils/defer.py", line 162, in f
+    return deferred_from_coro(coro_f(*coro_args, **coro_kwargs))
+  File "/Users/tareklel/Desktop/projects/ecommercecrawl/ecommercecrawl/pipelines.py", line 20, in process_item
+    if adapter['portal_itemid'] in self.ids_seen:
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/itemadapter/adapter.py", line 338, in __getitem__
+    return self.adapter.__getitem__(field_name)
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/itemadapter/adapter.py", line 226, in __getitem__
+    return self.item[field_name]
+KeyError: 'portal_itemid'
+2022-09-24 12:10:46,717 ERROR: Error processing {'bread': ['Women', 'Clothing', 'Dresses', 'Sleeved']}
+Traceback (most recent call last):
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/twisted/internet/defer.py", line 891, in _runCallbacks
+    current.result = callback(  # type: ignore[misc]
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/scrapy/utils/defer.py", line 162, in f
+    return deferred_from_coro(coro_f(*coro_args, **coro_kwargs))
+  File "/Users/tareklel/Desktop/projects/ecommercecrawl/ecommercecrawl/pipelines.py", line 20, in process_item
+    if adapter['portal_itemid'] in self.ids_seen:
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/itemadapter/adapter.py", line 338, in __getitem__
+    return self.adapter.__getitem__(field_name)
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/itemadapter/adapter.py", line 226, in __getitem__
+    return self.item[field_name]
+KeyError: 'portal_itemid'
+2022-09-24 12:10:46,723 ERROR: Error processing {'bread': ['Women', 'Clothing', 'Dresses', 'Sleeved']}
+Traceback (most recent call last):
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/twisted/internet/defer.py", line 891, in _runCallbacks
+    current.result = callback(  # type: ignore[misc]
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/scrapy/utils/defer.py", line 162, in f
+    return deferred_from_coro(coro_f(*coro_args, **coro_kwargs))
+  File "/Users/tareklel/Desktop/projects/ecommercecrawl/ecommercecrawl/pipelines.py", line 20, in process_item
+    if adapter['portal_itemid'] in self.ids_seen:
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/itemadapter/adapter.py", line 338, in __getitem__
+    return self.adapter.__getitem__(field_name)
+  File "/Users/tareklel/Library/Caches/pypoetry/virtualenvs/ecommercecrawl-PSqc6cgM-py3.9/lib/python3.9/site-packages/itemadapter/adapter.py", line 226, in __getitem__
+    return self.item[field_name]
+KeyError: 'portal_itemid'
+2022-09-24 12:10:46,726 INFO: Dumping Scrapy stats:
+{'downloader/request_bytes': 15418,
+ 'downloader/request_count': 35,
+ 'downloader/request_method_count/GET': 35,
+ 'downloader/response_bytes': 1628402,
+ 'downloader/response_count': 35,
+ 'downloader/response_status_count/200': 35,
+ 'elapsed_time_seconds': 2.802811,
+ 'finish_reason': 'closespider_pagecount',
+ 'finish_time': datetime.datetime(2022, 9, 24, 8, 10, 46, 725814),
+ 'httpcompression/response_bytes': 6441666,
+ 'httpcompression/response_count': 35,
+ 'log_count/DEBUG': 71,
+ 'log_count/ERROR': 31,
+ 'log_count/INFO': 10,
+ 'log_count/WARNING': 45,
+ 'memusage/max': 76521472,
+ 'memusage/startup': 76521472,
+ 'request_depth_max': 2,
+ 'response_received_count': 35,
+ 'robotstxt/request_count': 1,
+ 'robotstxt/response_count': 1,
+ 'robotstxt/response_status_count/200': 1,
+ 'scheduler/dequeued': 34,
+ 'scheduler/dequeued/memory': 34,
+ 'scheduler/enqueued': 51,
+ 'scheduler/enqueued/memory': 51,
+ 'start_time': datetime.datetime(2022, 9, 24, 8, 10, 43, 923003)}
+2022-09-24 12:10:46,726 INFO: Spider closed (closespider_pagecount)
