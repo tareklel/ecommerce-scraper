@@ -16,16 +16,17 @@ class OunassSpider(scrapy.Spider):
         'FAKER_RANDOM_UA_TYPE':"firefox"
     }
 
-    def start_requests(self):
-        configure_logging(install_root_handler=False)
-        logging.basicConfig(
-        filename=f'ounass-log-{date.today()}.log',
+    configure_logging(install_root_handler=False)
+    logging.basicConfig(
+        filename=f'log/ounass-log-{date.today()}.log',
         format='%(asctime)s %(levelname)s: %(message)s',
         level=logging.INFO
-    )
+        )
 
+    def start_requests(self):
+        # pass subcategory plps to get category and subcategory in crawl
         self.urls = [
-            'https://www.ounass.ae/api/women/clothing'
+            'https://www.ounass.ae/api/women/clothing/abayas'
         ]
         for url in self.urls:
             yield scrapy.Request(url=url, callback=self.parse)
@@ -39,12 +40,19 @@ class OunassSpider(scrapy.Spider):
             for url in urls:
                 yield scrapy.Request(url=url, callback=self.parse)
         elif response.url.split('?')[-1].split('=')[0] == 'sortBy':
+            # get category and subcategory
+            folders = response.url.split('?')[0].split('/')
+            cat_dict = {
+                'category':folders[-2], 
+                'subcategory':folders[-1]
+                }
+
             # get products from plp
             slugs = [x['slug'] for x in response.json()['hits']]
             # get products
             products = [ 'https://' + response.url.split('/')[2] + f'/{slug}.html' for slug in slugs]
             for product in products:
-                yield scrapy.Request(url=product, callback=self.parse)
+                yield scrapy.Request(url=product, callback=self.parse, meta=cat_dict)
         elif response.url.split('.')[-1] == 'html':
             # check country
             if response.url[8:16] == 'en-saudi':
@@ -56,6 +64,7 @@ class OunassSpider(scrapy.Spider):
             bread = response.xpath('//ol[@class="BreadcrumbList"]/li/\
                 a[@class="BreadcrumbList-breadcrumbLink "]/span/text()').getall()
             sold_out = ('OUT OF STOCK' in response.xpath('//span[@class="Badge"]/text()').getall())
+            discount = response.xpath('//span[@class="PriceContainer-discountPercent"]/text()').get()
                 
             yield {
                 'site':'Ounass',
@@ -67,36 +76,11 @@ class OunassSpider(scrapy.Spider):
                 'product_name':response.xpath('//h1[@class="PDPDesktop-name"]/span/text()').get(),
                 'gender':bread[0],
                 'brand':response.xpath('//h2[@class="PDPDesktop-designerCategoryName"]/a/text()').get(),
-                'category':bread[1],
-                'subcategory':bread[2],
-                'subsubcategory':bread[3],
+                'category':response.meta['category'],
+                'subcategory':response.meta['subcategory'],
                 'price':response.xpath('//span[@class="PriceContainer-price"]/text()').get().split(' ')[0],
                 'currency':response.xpath('//span[@class="PriceContainer-price"]/text()').get().split(' ')[-1],
-                'price_discount':response.xpath('//span[@class="PriceContainer-discountPercent"]/text()').get().split(" ")[0],
+                'price_discount':(None if discount is None else discount.split(" ")[0]),
                 'sold_out':sold_out,
-                'primary_label':response.xpath('//span[@class="Badge"]/text()').geta(),
-                
+                'primary_label':response.xpath('//span[@class="Badge"]/text()').get()
                 }
-
-            {
-            'site':'Farfetch',
-            'crawl_date':date.today(),
-            'country':response.url.split('/')[3],
-            'url':response.url,
-            'portal_itemid':response.xpath('div[@class="PDPMobile-selectedSku"]/text()').split(': ')[-1],
-            'product_name':(None if not product_name else product_name[-1]),
-            'gender':(None if response.url is None else response.url.split('/')[5]),
-            'brand':response.xpath('//a[@data-ffref="pp_infobrd"]/text()').get(),
-            'category': (None if not breadcrumbs else breadcrumbs[2]),
-            'subcategory':(None if not breadcrumbs else breadcrumbs[3]),
-            'price':(None if price is None else price.split(' ')[-1]),
-            'currency':(None if price is None else price.split(' ')[0]),
-            'price_discount':response.xpath('//p[@data-component="PriceDiscount"]/text()').get(),
-            'sold_out':(True if response.xpath('//p[@data-tstid="soldOut"]/text()').get() else False),
-            'primary_label':response.xpath('//p[@data-component="LabelPrimary"]/text()').get(),
-            'image_url':response.xpath('//button[@data-is-loaded]/img/@src').get(),
-            'text':response.xpath('//div[@data-component="TabPanelContainer"]/div/div/div/div/p/text()').getall()
-            }
-
-
-
