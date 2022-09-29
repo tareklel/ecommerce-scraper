@@ -1,3 +1,4 @@
+from ast import Raise
 from unicodedata import category
 import scrapy
 from datetime import date
@@ -11,7 +12,7 @@ from scrapy.utils.log import configure_logging
 class OunassSpider(scrapy.Spider):
     name = "ounass"
     custom_settings = {
-        'CLOSESPIDER_PAGECOUNT': 20,
+        'CLOSESPIDER_PAGECOUNT': 100,
         'FAKEUSERAGENT_PROVIDERS':['scrapy_fake_useragent.providers.FakerProvider'],
         'FAKER_RANDOM_UA_TYPE':"firefox"
     }
@@ -25,9 +26,15 @@ class OunassSpider(scrapy.Spider):
 
     def start_requests(self):
         # pass subcategory plps to get category and subcategory in crawl
+        # only pass apis
         self.urls = [
-            'https://www.ounass.ae/api/women/clothing/abayas'
+            'https://www.ounass.ae/api/women/clothing',
+            'https://www.ounass.ae/api/women/shoes/mules',
+            'https://www.ounass.ae/api/men/clothing/jeans'
         ]
+        for url in self.urls:
+            if '/api/' not in url:
+                raise Exception('please pass URLs from api subfolder')
         for url in self.urls:
             yield scrapy.Request(url=url, callback=self.parse)
 
@@ -65,6 +72,7 @@ class OunassSpider(scrapy.Spider):
                 a[@class="BreadcrumbList-breadcrumbLink "]/span/text()').getall()
             sold_out = ('OUT OF STOCK' in response.xpath('//span[@class="Badge"]/text()').getall())
             discount = response.xpath('//span[@class="PriceContainer-discountPercent"]/text()').get()
+            image_url = response.xpath('//picture/source/@srcset').getall()
                 
             yield {
                 'site':'Ounass',
@@ -82,5 +90,7 @@ class OunassSpider(scrapy.Spider):
                 'currency':response.xpath('//span[@class="PriceContainer-price"]/text()').get().split(' ')[-1],
                 'price_discount':(None if discount is None else discount.split(" ")[0]),
                 'sold_out':sold_out,
-                'primary_label':response.xpath('//span[@class="Badge"]/text()').get()
+                'primary_label':response.xpath('//span[@class="Badge"]/text()').get(),
+                'image_url':[x for x in image_url if '//ounass-prod2.' in x][0],
+                'text':response.xpath('//div[@id="content-tab-panel-0"]/p/text()').get()
                 }
