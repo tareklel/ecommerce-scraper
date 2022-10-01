@@ -1,10 +1,6 @@
-from ast import Raise
-from unicodedata import category
+import csv
 import scrapy
 from datetime import date
-import re
-from faker import Faker
-import numpy
 import logging
 from scrapy.utils.log import configure_logging
 
@@ -25,13 +21,14 @@ class OunassSpider(scrapy.Spider):
         )
 
     def start_requests(self):
+        # get urls 
+        urls = []
+        with open('resources/ounass_urls.csv', newline='') as inputfile:
+            for row in csv.reader(inputfile):
+                urls.append(row[0])
         # pass subcategory plps to get category and subcategory in crawl
         # only pass apis
-        self.urls = [
-            'https://www.ounass.ae/api/women/clothing',
-            'https://www.ounass.ae/api/women/shoes/mules',
-            'https://www.ounass.ae/api/men/clothing/jeans'
-        ]
+        self.urls = urls
         for url in self.urls:
             if '/api/' not in url:
                 raise Exception('please pass URLs from api subfolder')
