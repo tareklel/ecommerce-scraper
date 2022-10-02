@@ -26,7 +26,7 @@ RETRY_TIMES = 10
 # Retry on most error codes since proxies fail for different reasons
 RETRY_HTTP_CODES = [500, 503, 504, 400, 403, 404, 408]
 
-PROXY_LIST = 'resources/Free_Proxy_list.txt'
+PROXY_LIST = 'resources/Free_Proxy_List.txt'
 
 # Proxy mode
 # 0 = Every requests have different proxy
