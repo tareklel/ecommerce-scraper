@@ -15,7 +15,7 @@ class OunassSpider(scrapy.Spider):
 
     configure_logging(install_root_handler=False)
     logging.basicConfig(
-        filename=f'log/ounass-log-{date.today()}.log',
+        filename=f'log/log-{date.today()}.log',
         format='%(asctime)s %(levelname)s: %(message)s',
         level=logging.INFO
         )

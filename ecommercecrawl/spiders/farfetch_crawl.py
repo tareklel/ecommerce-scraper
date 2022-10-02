@@ -1,8 +1,7 @@
-from unicodedata import category
+import csv
 import scrapy
 from datetime import date
 import re
-from faker import Faker
 import numpy
 import logging
 from scrapy.utils.log import configure_logging
@@ -16,18 +15,19 @@ class FFSpider(scrapy.Spider):
     #ualist = [faker.firefox, faker.chrome, faker.safari]
     #user_agent = numpy.random.choice(ualist)()
     # user_agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.36"
+    configure_logging(install_root_handler=False)
+    logging.basicConfig(
+    filename=f'log/log-{date.today()}.log',
+    format='%(asctime)s %(levelname)s: %(message)s',
+    level=logging.INFO
+    )
 
     def start_requests(self):
-        configure_logging(install_root_handler=False)
-        logging.basicConfig(
-            filename=f'farfetch-log-{date.today()}.log',
-            format='%(asctime)s %(levelname)s: %(message)s',
-            level=logging.INFO
-        )
-
-        urls = [
-            'https://www.farfetch.com/ae/shopping/men/shorts-2/items.aspx'
-        ]
+        # get urls
+        urls = []
+        with open('resources/farfetch_urls.csv', newline='') as inputfile:
+            for row in csv.reader(inputfile):
+                urls.append(row[0])
         for url in urls:
             yield scrapy.Request(url=url, callback=self.parse)
 
