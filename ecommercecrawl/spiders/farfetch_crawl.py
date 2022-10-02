@@ -9,7 +9,6 @@ from scrapy.utils.log import configure_logging
 
 class FFSpider(scrapy.Spider):
     name = "farfetch"
-    custom_settings = {'CLOSESPIDER_PAGECOUNT': 100}
     # choose useragent at random
     #faker = Faker()
     #ualist = [faker.firefox, faker.chrome, faker.safari]
