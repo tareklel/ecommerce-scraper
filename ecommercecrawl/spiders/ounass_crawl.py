@@ -40,7 +40,7 @@ class OunassSpider(scrapy.Spider):
             # get total number of pages from plp
             total_pages = response.json()['pagination']['totalPages']
             # scrape all urls
-            urls = [response.url + f"?sortBy=popularity-asc&p={p}&facets=0" for p in range(2)]
+            urls = [response.url + f"?sortBy=popularity-asc&p={p}&facets=0" for p in range(total_pages)]
             for url in urls:
                 yield scrapy.Request(url=url, callback=self.parse)
         elif response.url.split('?')[-1].split('=')[0] == 'sortBy':
