@@ -21,7 +21,7 @@ class OunassSpider(scrapy.Spider):
         )
 
     def start_requests(self):
-        # get urls 
+        # get urls
         urls = []
         with open('resources/ounass_urls.csv', newline='') as inputfile:
             for row in csv.reader(inputfile):
@@ -63,8 +63,10 @@ class OunassSpider(scrapy.Spider):
                 country = 'sa'
             elif response.url.split('/')[2].split('.')[2] == 'ae':
                 country = 'ae'
-            else:
-                country = None
+            elif 'https://kuwait.ounass.com/' in  response.url:
+                country = 'kw'
+            elif 'https://www.ounass.qa/' in response.url:
+                country = 'qa'
             bread = response.xpath('//ol[@class="BreadcrumbList"]/li/\
                 a[@class="BreadcrumbList-breadcrumbLink "]/span/text()').getall()
             sold_out = ('OUT OF STOCK' in response.xpath('//span[@class="Badge"]/text()').getall())
@@ -88,6 +90,6 @@ class OunassSpider(scrapy.Spider):
                 'price_discount':(None if discount is None else discount.split(" ")[0]),
                 'sold_out':sold_out,
                 'primary_label':response.xpath('//span[@class="Badge"]/text()').get(),
-                'image_url':[x for x in image_url if '//ounass-prod2.' in x][0],
+                'image_url':[x for x in image_url if '//ounass-prod' in x][0],
                 'text':response.xpath('//div[@id="content-tab-panel-0"]/p/text()').get()
                 }
