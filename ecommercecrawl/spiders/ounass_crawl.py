@@ -8,7 +8,7 @@ from scrapy.utils.log import configure_logging
 class OunassSpider(scrapy.Spider):
     name = "ounass"
     custom_settings = {
-        'CLOSESPIDER_PAGECOUNT': 100,
+    #    'CLOSESPIDER_PAGECOUNT': 100,
         'FAKEUSERAGENT_PROVIDERS':['scrapy_fake_useragent.providers.FakerProvider'],
         'FAKER_RANDOM_UA_TYPE':"firefox"
     }
