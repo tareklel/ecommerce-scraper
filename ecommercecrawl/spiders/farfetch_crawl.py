@@ -29,8 +29,11 @@ class FFSpider(scrapy.Spider):
         with open('resources/farfetch_urls.csv', newline='') as inputfile:
             for row in csv.reader(inputfile):
                 urls.append(row[0])
-        if os.path.isfile('farfetch.jl'):
+        # check if there is a record of previously scraped files:
+        if os.path.isfile('farfetch.jl') and not pd.read_json('farfetch.jl', lines=True).empty:
             self.scraped_urls = pd.read_json('farfetch.jl', lines=True)['url']
+        else:
+            self.scraped_urls = []
         for url in urls:
             yield scrapy.Request(url=url, callback=self.parse)
 
@@ -45,7 +48,6 @@ class FFSpider(scrapy.Spider):
         return urls
 
     def parse(self, response):
-        # https://www.farfetch.com/ae/shopping/men/shoes-2/items.aspx
         # check if ending with items.aspx > plp
         if response.url.split('/')[-1].split('?')[0] == 'items.aspx':
             # check if first page, if first get all pages
@@ -59,8 +61,7 @@ class FFSpider(scrapy.Spider):
             pdps = response.xpath('//a[@data-component="ProductCardLink"]/@href').getall()
             for pdp in pdps:
                 yield scrapy.Request(response.urljoin(pdp), callback=self.parse)
-        elif os.path.isfile('farfetch.jl'):
-            if response.url in self.scraped_urls:
+        elif response.url in self.scraped_urls:
                 pass
         else: 
             response.url.split('/')[-1].split('?')[0] != 'items.aspx'

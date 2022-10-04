@@ -12,16 +12,14 @@ from scrapy.exceptions import DropItem
 
 class EcommercecrawlPipeline:
     def __init__(self):
-        self.ids_seen = set()
+        self.urls = set()
 
     def process_item(self, item, spider):
         # check for duplicates
         adapter = ItemAdapter(item)
-        if spider.name == 'farfetch':
-            if adapter['portal_itemid'] in self.ids_seen:
-                raise DropItem(f"Duplicate item found: {item!r}")
-            else:
-                self.ids_seen.add(adapter['portal_itemid'])
-                return item
+        if adapter['url'].split('?')[0] in self.urls:
+            raise DropItem(f"Duplicate item found: {item!r}")
         else:
+            url = adapter['url'].split('?')[0]
+            self.urls.add(url)
             return item
