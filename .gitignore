@@ -2,3 +2,6 @@ __pycache__
 *.json
 *.jl
 log/*
+.DS_Store
+images/*
+*.csv

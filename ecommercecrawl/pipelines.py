@@ -7,6 +7,9 @@
 # useful for handling different item types with a single interface
 from itemadapter import ItemAdapter
 from scrapy.exceptions import DropItem
+from urllib.parse import urlparse
+
+from scrapy.pipelines.images import ImagesPipeline
 
 
 

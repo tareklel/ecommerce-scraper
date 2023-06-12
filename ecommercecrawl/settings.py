@@ -17,7 +17,7 @@ DOWNLOADER_MIDDLEWARES = {
     #'scrapy.downloadermiddlewares.useragent.UserAgentMiddleware': None,
     #'scrapy_user_agents.middlewares.RandomUserAgentMiddleware': 400,
     'scrapy.downloadermiddlewares.retry.RetryMiddleware': 90,
-    'scrapy_proxies.RandomProxy': 100,
+ #   'scrapy_proxies.RandomProxy': 100,
     'scrapy.downloadermiddlewares.httpproxy.HttpProxyMiddleware': 110
 }
 
@@ -84,8 +84,11 @@ COOKIES_ENABLED = False
 # Configure item pipelines
 # See https://docs.scrapy.org/en/latest/topics/item-pipeline.html
 ITEM_PIPELINES = {
-    'ecommercecrawl.pipelines.EcommercecrawlPipeline': 300,
+    'ecommercecrawl.pipelines.EcommercecrawlPipeline': 1,
 }
+
+FILES_STORE = '/Users/tareklel/Desktop/projects/ecommerce-crawl/images'
+
 
 # Enable and configure the AutoThrottle extension (disabled by default)
 # See https://docs.scrapy.org/en/latest/topics/autothrottle.html
