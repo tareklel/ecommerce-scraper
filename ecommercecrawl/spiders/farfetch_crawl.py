@@ -6,7 +6,6 @@ import logging
 from scrapy.utils.log import configure_logging
 import pandas as pd
 import os
-from ecommercecrawl.items import ImgData
 from ecommercecrawl.spiders.mastercrawl import Mastercrawl
 
 
