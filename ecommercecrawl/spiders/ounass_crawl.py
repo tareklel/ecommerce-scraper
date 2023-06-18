@@ -17,10 +17,18 @@ class OunassSpider(scrapy.Spider, Mastercrawl):
         level=logging.INFO
     )
 
+    def __init__(self, urlpath=None, *args, **kwargs):
+        super(OunassSpider, self).__init__(*args, **kwargs)
+        self.urlpath = urlpath
+
     def start_requests(self):
         # get urls
         urls = []
-        with open('resources/ounass_urls.csv', newline='') as inputfile:
+
+        # if category null pass resources ounass file
+        if self.urlpath is None:
+            self.urlpath = 'resources/ounass_urls.csv'
+        with open(self.urlpath, newline='') as inputfile:
             for row in csv.reader(inputfile):
                 urls.append(row[0])
         # pass subcategory plps to get category and subcategory in crawl
@@ -82,7 +90,7 @@ class OunassSpider(scrapy.Spider, Mastercrawl):
 
             today = date.today()
             date_string = today.strftime("%Y-%m-%d")
-            filename = f'ounass-{date_string}'
+            filename = f'output/ounass-{date_string}'
 
             image = response.xpath(
                 '//button[@id="stylecolor-media-gallery-image-button-0"]/picture/source/@srcset').getall()[0].split('?')[0]
@@ -109,11 +117,15 @@ class OunassSpider(scrapy.Spider, Mastercrawl):
                 'text': response.xpath('//div[@id="content-tab-panel-0"]/p/text()').get()
             }
 
+            if not os.path.exists('output'):
+                # If the directory doesn't exist, create it
+                os.makedirs('output')
+
             # save to CSV
             self.save_to_csv(filename, data)
 
             # Create a directory for images if it doesn't exist
-            image_dir = 'images/ounass/' + date_string + '/' + \
+            image_dir = 'output/images/ounass/' + date_string + '/' + \
                 response.url.split('/')[-1].split('.')[0]
             if not os.path.exists(image_dir):
                 os.makedirs(image_dir)

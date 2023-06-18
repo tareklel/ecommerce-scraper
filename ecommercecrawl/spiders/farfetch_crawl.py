@@ -23,10 +23,18 @@ class FFSpider(scrapy.Spider, Mastercrawl):
         level=logging.INFO
     )
 
+    def __init__(self, urlpath=None, *args, **kwargs):
+        super(FFSpider, self).__init__(*args, **kwargs)
+        self.urlpath = urlpath
+
     def start_requests(self):
         # get urls
         urls = []
-        with open('resources/farfetch_urls.csv', newline='') as inputfile:
+
+        # if category null pass resources farfetch file
+        if self.urlpath is None:
+            self.urlpath = 'resources/farfetch_urls.csv'
+        with open(self.urlpath, newline='') as inputfile:
             for row in csv.reader(inputfile):
                 urls.append(row[0])
         # check if there is a record of previously scraped files:
@@ -65,6 +73,7 @@ class FFSpider(scrapy.Spider, Mastercrawl):
         elif response.url in self.scraped_urls:
             pass
         else:
+            #extract product info
             response.url.split('/')[-1].split('?')[0] != 'items.aspx'
             price = response.xpath(
                 '//p[@data-component="PriceLarge"]/text()|//p[@data-component="PriceFinalLarge"]/text()').get()
@@ -75,7 +84,7 @@ class FFSpider(scrapy.Spider, Mastercrawl):
 
             today = date.today()
             date_string = today.strftime("%Y-%m-%d")
-            filename = f'farfetch-{date_string}'
+            filename = f'output/farfetch-{date_string}'
 
             data = {
                 'site': 'Farfetch',
@@ -98,11 +107,15 @@ class FFSpider(scrapy.Spider, Mastercrawl):
                 'text': response.xpath('//div[@data-component="TabPanelContainer"]/div/div/div/div/p/text()').getall(),
             }
 
+            if not os.path.exists('output'):
+                # If the directory doesn't exist, create it
+                os.makedirs('output')
+
             # save to JSON
             self.save_to_csv(filename, data)
 
             # Create a directory for images if it doesn't exist
-            image_dir = 'images/farfetch/' + date_string + '/' + \
+            image_dir = 'output/images/farfetch/' + date_string + '/' + \
                 response.url.split('/')[-1].split('.')[0]
             if not os.path.exists(image_dir):
                 os.makedirs(image_dir)
