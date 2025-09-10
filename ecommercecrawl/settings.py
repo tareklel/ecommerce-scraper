@@ -8,25 +8,16 @@
 #     https://docs.scrapy.org/en/latest/topics/spider-middleware.html
 
 BOT_NAME = 'ecommercecrawl'
+FARFETCH_URLS_PATH = "resources/farfetch_urls.csv"
+
 
 SPIDER_MODULES = ['ecommercecrawl.spiders']
 NEWSPIDER_MODULE = 'ecommercecrawl.spiders'
-
-# Randomize user agent
-DOWNLOADER_MIDDLEWARES = {
-    #'scrapy.downloadermiddlewares.useragent.UserAgentMiddleware': None,
-    #'scrapy_user_agents.middlewares.RandomUserAgentMiddleware': 400,
-    'scrapy.downloadermiddlewares.retry.RetryMiddleware': 90,
- #   'scrapy_proxies.RandomProxy': 100,
-    'scrapy.downloadermiddlewares.httpproxy.HttpProxyMiddleware': 110
-}
 
 # Retry many times since proxies often fail
 RETRY_TIMES = 10
 # Retry on most error codes since proxies fail for different reasons
 RETRY_HTTP_CODES = [500, 503, 504, 400, 403, 404, 408]
-
-PROXY_LIST = 'resources/Free_Proxy_List.txt'
 
 # Proxy mode
 # 0 = Every requests have different proxy
@@ -87,7 +78,7 @@ ITEM_PIPELINES = {
     'ecommercecrawl.pipelines.EcommercecrawlPipeline': 1,
 }
 
-FILES_STORE = '/Users/tareklel/Desktop/projects/ecommerce-crawl/images'
+FILES_STORE = 'images'
 
 
 # Enable and configure the AutoThrottle extension (disabled by default)

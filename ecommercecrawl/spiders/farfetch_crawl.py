@@ -7,41 +7,37 @@ from scrapy.utils.log import configure_logging
 import pandas as pd
 import os
 from ecommercecrawl.spiders.mastercrawl import Mastercrawl
+from ecommercecrawl import settings
 
 
 class FFSpider(scrapy.Spider, Mastercrawl):
     name = "farfetch"
-    # choose useragent at random
-    # faker = Faker()
-    # ualist = [faker.firefox, faker.chrome, faker.safari]
-    # user_agent = numpy.random.choice(ualist)()
-    # user_agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.36"
-    configure_logging(install_root_handler=False)
-    logging.basicConfig(
-        filename=f'log/farfetch-log-{date.today()}.log',
-        format='%(asctime)s %(levelname)s: %(message)s',
-        level=logging.INFO
-    )
 
     def __init__(self, urlpath=None, *args, **kwargs):
         super(FFSpider, self).__init__(*args, **kwargs)
         self.urlpath = urlpath
+        self.settings = settings
 
     def start_requests(self):
         # get urls
         urls = []
 
-        # if category null pass resources farfetch file
+        try:
+            # spider may have a scrapy.settings.Settings set by the crawler in tests or runtime
+            settings_get = self.settings.get if hasattr(self, "settings") else None
+        except Exception:
+            settings_get = None
+
         if self.urlpath is None:
-            self.urlpath = 'resources/farfetch_urls.csv'
+            if settings_get:
+                self.urlpath = settings_get('FARFETCH_URLS_PATH', 'resources/farfetch_urls.csv')
+            else:
+                self.urlpath = 'resources/farfetch_urls.csv'
+
         with open(self.urlpath, newline='') as inputfile:
             for row in csv.reader(inputfile):
-                urls.append(row[0])
-        # check if there is a record of previously scraped files:
-        if os.path.isfile('farfetch.jl') and not pd.read_json('farfetch.jl', lines=True).empty:
-            self.scraped_urls = pd.read_json('farfetch.jl', lines=True)['url']
-        else:
-            self.scraped_urls = []
+                if row:
+                    urls.append(row[0])
         for url in urls:
             yield scrapy.Request(url=url, callback=self.parse)
 
@@ -70,8 +66,6 @@ class FFSpider(scrapy.Spider, Mastercrawl):
                 '//a[@data-component="ProductCardLink"]/@href').getall()
             for pdp in pdps:
                 yield scrapy.Request(response.urljoin(pdp), callback=self.parse)
-        elif response.url in self.scraped_urls:
-            pass
         else:
             #extract product info
             response.url.split('/')[-1].split('?')[0] != 'items.aspx'
@@ -123,3 +117,12 @@ class FFSpider(scrapy.Spider, Mastercrawl):
             # Download images
             image_urls = data['image_url']
             yield scrapy.Request(image_urls, callback=self.save_image, meta={'image_dir': image_dir})
+
+
+if __name__ == "__main__":
+    configure_logging(install_root_handler=False)
+    logging.basicConfig(
+        filename=f'log/{FFSpider.name}-log-{date.today()}.log',
+        format='%(asctime)s %(levelname)s: %(message)s',
+        level=logging.INFO
+    )
