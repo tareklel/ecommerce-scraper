@@ -1,0 +1,1 @@
+PAGINATION_XPATH = '//span[@data-component="PaginationLabel"]/text()'

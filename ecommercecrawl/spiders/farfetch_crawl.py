@@ -8,6 +8,7 @@ import pandas as pd
 import os
 from ecommercecrawl.spiders.mastercrawl import Mastercrawl
 from ecommercecrawl import settings
+from ecommercecrawl.xpaths.farfetch_xpaths import PAGINATION_XPATH
 
 
 class FFSpider(scrapy.Spider, Mastercrawl):
@@ -41,15 +42,23 @@ class FFSpider(scrapy.Spider, Mastercrawl):
         for url in urls:
             yield scrapy.Request(url=url, callback=self.parse)
 
-    def get_no_pages(self, response):
+    def get_pages(self, response):
         """
-        get number of pages in given category page and return urls of all pages
+        Return urls of all pages in given page.
+        If no pagination, return only the current response.url.
         """
-        search = re.compile(r'"totalPages\\\\":([0-9]+),\\\\', re.IGNORECASE)\
-            .findall(str(response.body))[-1]
-        pages = [x + 1 for x in range(int(search))][1:]
+        pagination = response.xpath(PAGINATION_XPATH).get()
+        if not pagination:
+            return [response.url]
+        try:
+            total_pages = int(pagination.split(' ')[-1])
+        except (ValueError, AttributeError):
+            return [response.url]
+        if total_pages <= 1:
+            return [response.url]
+        pages = [x + 1 for x in range(total_pages)][1:]
         urls = [response.url + f'?page={str(page)}' for page in pages]
-        return urls
+        return [response.url] + urls
 
     def parse(self, response):
         # check if ending with items.aspx > plp

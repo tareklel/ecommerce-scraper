@@ -6,3 +6,4 @@ log/*
 images/*
 *.csv
 output/
+.pytest_cache

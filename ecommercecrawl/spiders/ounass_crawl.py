@@ -11,6 +11,8 @@ class OunassSpider(scrapy.Spider, Mastercrawl):
     name = "ounass"
 
     configure_logging(install_root_handler=False)
+    if not os.path.exists('log'):
+        os.makedirs('log')
     logging.basicConfig(
         filename=f'log/ounass-log-{date.today()}.log',
         format='%(asctime)s %(levelname)s: %(message)s',
