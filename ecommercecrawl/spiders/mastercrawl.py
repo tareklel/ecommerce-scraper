@@ -25,4 +25,11 @@ class Mastercrawl():
         filename = response.url.split('/')[-1]
         with open(os.path.join(image_dir, filename), 'wb') as f:
             f.write(response.body)
+    
+        # ---------- Utilities ----------
+    def build_output_basename(self, output_dir, name, date_string: str) -> str:
+        return f'{output_dir}/{name}-{date_string}'
 
+    def ensure_dir(self, path: str):
+        if not os.path.exists(path):
+            os.makedirs(path, exist_ok=True)

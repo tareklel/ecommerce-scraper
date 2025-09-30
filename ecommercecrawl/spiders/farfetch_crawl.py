@@ -1,18 +1,18 @@
 import csv
 import scrapy
 from datetime import date
-import re
 import logging
 from scrapy.utils.log import configure_logging
-import pandas as pd
 import os
 from ecommercecrawl.spiders.mastercrawl import Mastercrawl
 from ecommercecrawl import settings
-from ecommercecrawl.xpaths.farfetch_xpaths import PAGINATION_XPATH
+from ecommercecrawl.xpaths import farfetch_xpaths as xpaths
+from ecommercecrawl.rules import farfetch_rules as rules
+from ecommercecrawl.constants import farfetch_constants as constants
 
 
 class FFSpider(scrapy.Spider, Mastercrawl):
-    name = "farfetch"
+    name = constants.NAME
 
     def __init__(self, urlpath=None, *args, **kwargs):
         super(FFSpider, self).__init__(*args, **kwargs)
@@ -20,20 +20,17 @@ class FFSpider(scrapy.Spider, Mastercrawl):
         self.settings = settings
 
     def start_requests(self):
-        # get urls
         urls = []
-
         try:
-            # spider may have a scrapy.settings.Settings set by the crawler in tests or runtime
             settings_get = self.settings.get if hasattr(self, "settings") else None
         except Exception:
             settings_get = None
 
         if self.urlpath is None:
             if settings_get:
-                self.urlpath = settings_get('FARFETCH_URLS_PATH', 'resources/farfetch_urls.csv')
+                self.urlpath = settings_get('FARFETCH_URLS_PATH', constants.FARFETCH_URLS)
             else:
-                self.urlpath = 'resources/farfetch_urls.csv'
+                self.urlpath = constants.FARFETCH_URLS
 
         with open(self.urlpath, newline='') as inputfile:
             for row in csv.reader(inputfile):
@@ -42,94 +39,118 @@ class FFSpider(scrapy.Spider, Mastercrawl):
         for url in urls:
             yield scrapy.Request(url=url, callback=self.parse)
 
+    # ---------- Pagination helper (returns ONLY pages 2..N) ----------
     def get_pages(self, response):
         """
-        Return urls of all pages in given page.
-        If no pagination, return only the current response.url.
+        Return URLs for remaining pages (2..N) of the current PLP.
+        If no pagination or total_pages <= 1, return [].
         """
-        pagination = response.xpath(PAGINATION_XPATH).get()
+        pagination = response.xpath(xpaths.PAGINATION_XPATH).get()
         if not pagination:
-            return [response.url]
+            return []
         try:
-            total_pages = int(pagination.split(' ')[-1])
+            total_pages = rules.get_max_page(pagination)  # e.g., "1 of 51" -> 51
         except (ValueError, AttributeError):
-            return [response.url]
+            return []
         if total_pages <= 1:
-            return [response.url]
-        pages = [x + 1 for x in range(total_pages)][1:]
-        urls = [response.url + f'?page={str(page)}' for page in pages]
-        return [response.url] + urls
+            return []
 
+        # Prefer rules.get_list_page_urls to generate 2..N; if it returns all pages, filter below.
+        urls = rules.get_list_page_urls(response.url, total_pages)
+
+        return urls
+
+    # ---------- Router ----------
     def parse(self, response):
-        # check if ending with items.aspx > plp
-        if response.url.split('/')[-1].split('?')[0] == 'items.aspx':
-            # check if first page, if first get all pages
-            if len(response.url.split('?')) > 1:
-                pass
-            else:
-                urls = self.get_no_pages(response)
-                for url in urls:
-                    yield scrapy.Request(url=url, callback=self.parse)
-            # get all pdps from plp
-            pdps = response.xpath(
-                '//a[@data-component="ProductCardLink"]/@href').getall()
-            for pdp in pdps:
-                yield scrapy.Request(response.urljoin(pdp), callback=self.parse)
-        else:
-            #extract product info
-            response.url.split('/')[-1].split('?')[0] != 'items.aspx'
-            price = response.xpath(
-                '//p[@data-component="PriceLarge"]/text()|//p[@data-component="PriceFinalLarge"]/text()').get()
-            breadcrumbs = response.xpath(
-                '//li[@data-component="BreadcrumbWrapper"]/a/text()').getall()
-            product_name = response.xpath(
-                '//p[@data-component="LabelPrimary"]/../p/text()').getall()
+        if rules.is_items_page(response.url):      # PLP
+            yield from self.parse_plp(response)
+            return
 
-            today = date.today()
-            date_string = today.strftime("%Y-%m-%d")
-            filename = f'output/farfetch-{date_string}'
+        if rules.is_pdp_url(response.url):         # PDP
+            yield from self.parse_pdp(response)
+            return
+        # else: ignore non-product URLs
 
-            data = {
-                'site': 'Farfetch',
-                'crawl_date': date_string,
-                'country': response.url.split('/')[3],
-                'url': response.url,
-                'subfolder': (None if response.url is None else response.url.split("/")[3]),
-                'portal_itemid': (None if response.url is None else response.url.split('?')[0].split('/')[-1].split('.')[0].split('-')[-1]),
-                'product_name': (None if not product_name else product_name[-1]),
-                'gender': (None if response.url is None else response.url.split('/')[5]),
-                'brand': response.xpath('//a[@data-ffref="pp_infobrd"]/text()').get(),
-                'category': (None if not breadcrumbs else breadcrumbs[2]),
-                'subcategory': (None if not breadcrumbs else breadcrumbs[3]),
-                'price': (None if price is None else price.split(' ')[-1]),
-                'currency': (None if price is None else price.split(' ')[0]),
-                'price_discount': response.xpath('//p[@data-component="PriceDiscount"]/text()').get(),
-                'sold_out': (True if response.xpath('//p[@data-tstid="soldOut"]/text()').get() else False),
-                'primary_label': response.xpath('//p[@data-component="LabelPrimary"]/text()').get(),
-                'image_url': response.xpath('//button[@data-is-loaded]/img/@src').get(),
-                'text': response.xpath('//div[@data-component="TabPanelContainer"]/div/div/div/div/p/text()').getall(),
-            }
+    # ---------- PLP handler ----------
+    def parse_plp(self, response):
+        # 1) Always process the current PLP (including page 1)
+        pdps = response.xpath(xpaths.PDP_XPATH).getall() or []
+        for pdp in pdps:
+            yield response.follow(pdp, callback=self.parse)
 
-            if not os.path.exists('output'):
-                # If the directory doesn't exist, create it
-                os.makedirs('output')
+        # 2) Only the first page schedules the other pages 2..N
+        if rules.is_first_page(response.url):
+            for url in self.get_pages(response):
+                yield scrapy.Request(url=url, callback=self.parse)
 
-            # save to JSON
-            self.save_to_csv(filename, data)
+    # ---------- PDP handler ----------
+    def parse_pdp(self, response):
+        """
+        Orchestrates PDP data extraction, persistence, and image downloading.
+        """
+        data = self._populate_pdp_data(response)
+        date_string = data['crawl_date']
+        outfile_base = self.build_output_basename(constants.OUTPUT_DIR, constants.NAME, date_string)
 
-            # Create a directory for images if it doesn't exist
-            image_dir = 'output/images/farfetch/' + date_string + '/' + \
-                response.url.split('/')[-1].split('.')[0]
-            if not os.path.exists(image_dir):
-                os.makedirs(image_dir)
+        # Persist
+        self.ensure_dir(constants.OUTPUT_DIR)
+        self.save_to_csv(outfile_base, data)
 
-            # Download images
-            image_urls = data['image_url']
-            yield scrapy.Request(image_urls, callback=self.save_image, meta={'image_dir': image_dir})
+        # Images
+        yield from self.download_images(date_string, response.url, data.get('image_url'))
 
+    def _populate_pdp_data(self, response):
+        """
+        Extracts all data from a PDP response and returns it as a dictionary.
+        """
+        price_raw = response.xpath(xpaths.PRICE_XPATH).get()
+        breadcrumbs = response.xpath(xpaths.BREADCRUMBS_XPATH).getall()
+        today = date.today()
+        date_string = today.strftime("%Y-%m-%d")
+
+        price, currency = rules.get_price_and_currency(price_raw)
+
+        return {
+            'site': constants.NAME,
+            'crawl_date': date_string,
+            'country': rules.get_country(response.url),
+            'url': response.url,
+            'portal_itemid': rules.get_portal_itemid(response.url),
+            'product_name': rules.get_product_name(response),
+            'gender': rules.get_gender(response.url),
+            'brand': rules.get_brand(response),
+            'category': rules.get_category_from_breadcrumbs(breadcrumbs),
+            'subcategory': rules.get_subcategory_from_breadcrumbs(breadcrumbs),
+            'price': price,
+            'currency': currency,
+            'price_discount': rules.get_discount(response),
+            'sold_out': rules.is_sold_out(response),
+            'primary_label': rules.get_primary_label(response),
+            'image_url': rules.get_image_url(response),
+            'text': rules.get_text(response),
+        }
+
+    # ---------- Image downloader ----------
+    def download_images(self, date_string: str, pdp_url: str, image_field):
+            """
+            Create target image directory and schedule image downloads.
+            Accepts a single URL (str) or list of URLs.
+            """
+            image_dir = f'{constants.FARFETCH_IMAGE_BASE_DIR}/{date_string}/{rules.get_pdp_subfolder(pdp_url)}'
+            self.ensure_dir(image_dir)
+
+            # Normalize to iterable
+            if not image_field:
+                return
+            urls = image_field if isinstance(image_field, (list, tuple)) else [image_field]
+
+            for img_url in urls:
+                if img_url:
+                    yield scrapy.Request(img_url, callback=self.save_image, meta={'image_dir': image_dir})
 
 if __name__ == "__main__":
     configure_logging(install_root_handler=False)
+    os.makedirs('log', exist_ok=True)
     logging.basicConfig(
         filename=f'log/{FFSpider.name}-log-{date.today()}.log',
         format='%(asctime)s %(levelname)s: %(message)s',
