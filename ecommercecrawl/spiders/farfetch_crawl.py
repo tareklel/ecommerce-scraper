@@ -6,7 +6,6 @@ from scrapy.utils.log import configure_logging
 import os
 from ecommercecrawl.spiders.mastercrawl import Mastercrawl
 from ecommercecrawl import settings
-from ecommercecrawl.xpaths import farfetch_xpaths as xpaths
 from ecommercecrawl.rules import farfetch_rules as rules
 from ecommercecrawl.constants import farfetch_constants as constants
 
@@ -45,7 +44,7 @@ class FFSpider(scrapy.Spider, Mastercrawl):
         Return URLs for remaining pages (2..N) of the current PLP.
         If no pagination or total_pages <= 1, return [].
         """
-        pagination = response.xpath(xpaths.PAGINATION_XPATH).get()
+        pagination = rules.get_pagination(response)
         if not pagination:
             return []
         try:
@@ -74,7 +73,7 @@ class FFSpider(scrapy.Spider, Mastercrawl):
     # ---------- PLP handler ----------
     def parse_plp(self, response):
         # 1) Always process the current PLP (including page 1)
-        pdps = response.xpath(xpaths.PDP_XPATH).getall() or []
+        pdps = rules.get_pdp_urls(response)
         for pdp in pdps:
             yield response.follow(pdp, callback=self.parse)
 
@@ -103,8 +102,8 @@ class FFSpider(scrapy.Spider, Mastercrawl):
         """
         Extracts all data from a PDP response and returns it as a dictionary.
         """
-        price_raw = response.xpath(xpaths.PRICE_XPATH).get()
-        breadcrumbs = response.xpath(xpaths.BREADCRUMBS_XPATH).getall()
+        price_raw = rules.get_price(response)
+        breadcrumbs = rules.get_breadcrumbs(response)
         today = date.today()
         date_string = today.strftime("%Y-%m-%d")
 
@@ -114,7 +113,7 @@ class FFSpider(scrapy.Spider, Mastercrawl):
             'site': constants.NAME,
             'crawl_date': date_string,
             'country': rules.get_country(response.url),
-            'url': response.url,
+            'url': rules.get_url_drop_param(response.url),
             'portal_itemid': rules.get_portal_itemid(response.url),
             'product_name': rules.get_product_name(response),
             'gender': rules.get_gender(response.url),

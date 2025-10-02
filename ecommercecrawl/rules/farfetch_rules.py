@@ -42,6 +42,9 @@ def get_pdp_subfolder(url):
     else:
         return None
 
+def get_pagination(response):
+    return response.xpath(xpaths.PAGINATION_XPATH).get()
+
 def get_max_page(pagination):
     numbers = re.findall(r'\d+', pagination)
     total_pages = int(numbers[-1]) if numbers else 1
@@ -75,11 +78,48 @@ def get_price_and_currency(price_str):
     if len(parts) >= 2:
         currency = parts[0]
         price = ' '.join(parts[1:])
+        price = price.replace(',', '')
+        try:
+            price = float(price)
+        except ValueError:
+            return None, None
         return price, currency
     return None, None
 
 def get_product_name(response):
     product_name_all = response.xpath(xpaths.PRODUCT_NAME_XPATH).getall()[-1]
-    product_name = None if not product_name_all else product_name_all[-1]
+    product_name = None if not product_name_all else product_name_all
     return product_name
-    
+
+def get_pdp_urls(response):
+    return response.xpath(xpaths.PDP_XPATH).getall() or []
+
+def get_price(response):
+    return response.xpath(xpaths.PRICE_XPATH).get()
+
+def get_breadcrumbs(response):
+    return response.xpath(xpaths.BREADCRUMBS_XPATH).getall()
+
+def get_image_url(response):
+    return response.xpath(xpaths.IMAGE_URL_XPATH).get()
+
+def get_brand(response):
+    return response.xpath(xpaths.BRAND_XPATH).get()
+
+def get_discount(response):
+    return response.xpath(xpaths.DISCOUNT_XPATH).get()
+
+def is_sold_out(response):
+    return bool(response.xpath(xpaths.SOLD_OUT_XPATH).get())
+
+def get_primary_label(response):
+    return response.xpath(xpaths.PRIMARY_LABEL_XPATH).get()
+
+def get_text(response):
+    highlights = response.xpath(xpaths.HIGHLIGHTS_XPATH).getall()
+    composition = response.xpath(xpaths.COMPOSITION_XPATH).get()
+    print(', '.join([*map(str.strip, highlights), composition]) if composition else ', '.join(map(str.strip, highlights)))
+    return ', '.join([*map(str.strip, highlights), composition]) if composition else ', '.join(map(str.strip, highlights))
+
+def get_url_drop_param(url):
+    return url.split('?')[0]

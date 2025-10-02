@@ -7,3 +7,4 @@ images/*
 *.csv
 output/
 .pytest_cache
+farfetch_html_fixtures/
