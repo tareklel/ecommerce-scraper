@@ -17,3 +17,13 @@ pdp = {
     "image_url": "https://cdn-images.farfetch-contents.com/29/39/76/48/29397648_61374872_1000.jpg",
     "text": "light green, short sleeves, ruched skirt, maxi length, Viscose 97%, Spandex/Elastane 3%"  
 }
+
+sold_out_pdp = {
+    "country": "AE",
+    "url": "https://www.farfetch.com/ae/shopping/women/christopher-esber-fusion-ruched-tee-gown-maxi-dress-item-29397648.aspx",
+    "portal_itemid": 23848660,
+    "product_name": "graphic-print long-sleeve T-shirt",
+    "brand": "Off-White",
+    "sold_out": True,
+    "primary_label": "Sold Out"
+}

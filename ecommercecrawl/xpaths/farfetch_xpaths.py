@@ -6,7 +6,6 @@ PRODUCT_NAME_XPATH = 'normalize-space(string(//p[@data-testid="product-short-des
 IMAGE_XPATH = '//img[@data-component="Image"]/@src'
 BRAND_XPATH = '//a[@data-ffref="pp_infobrd"]/text()'
 DISCOUNT_XPATH = '//p[@data-component="PriceDiscount"]/text()'
-SOLD_OUT_XPATH = '//p[@data-tstid="soldOut"]/text()'
 PRIMARY_LABEL_XPATH = '//p[@data-component="LabelPrimary"]/text()'
 IMAGE_URL_XPATH = "string(//meta[@property='og:image']/@content)"
 #extracts Highlights and Composition text

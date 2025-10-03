@@ -8,3 +8,4 @@ images/*
 output/
 .pytest_cache
 farfetch_html_fixtures/
+/.venv

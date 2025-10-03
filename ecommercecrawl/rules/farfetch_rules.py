@@ -1,5 +1,6 @@
 import re
 from ecommercecrawl.xpaths import farfetch_xpaths as xpaths
+from ecommercecrawl.constants import farfetch_constants as constants
 
 
 def is_items_page(url):
@@ -109,16 +110,15 @@ def get_brand(response):
 def get_discount(response):
     return response.xpath(xpaths.DISCOUNT_XPATH).get()
 
-def is_sold_out(response):
-    return bool(response.xpath(xpaths.SOLD_OUT_XPATH).get())
-
 def get_primary_label(response):
     return response.xpath(xpaths.PRIMARY_LABEL_XPATH).get()
+
+def is_sold_out(primary_label):
+    return primary_label == constants.SOLD_OUT_LABEL
 
 def get_text(response):
     highlights = response.xpath(xpaths.HIGHLIGHTS_XPATH).getall()
     composition = response.xpath(xpaths.COMPOSITION_XPATH).get()
-    print(', '.join([*map(str.strip, highlights), composition]) if composition else ', '.join(map(str.strip, highlights)))
     return ', '.join([*map(str.strip, highlights), composition]) if composition else ', '.join(map(str.strip, highlights))
 
 def get_url_drop_param(url):

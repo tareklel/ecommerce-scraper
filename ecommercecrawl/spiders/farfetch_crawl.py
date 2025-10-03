@@ -102,12 +102,23 @@ class FFSpider(scrapy.Spider, Mastercrawl):
         """
         Extracts all data from a PDP response and returns it as a dictionary.
         """
-        price_raw = rules.get_price(response)
-        breadcrumbs = rules.get_breadcrumbs(response)
         today = date.today()
+        primary_label = rules.get_primary_label(response)
+        breadcrumbs = rules.get_breadcrumbs(response)
         date_string = today.strftime("%Y-%m-%d")
-
-        price, currency = rules.get_price_and_currency(price_raw)
+        sold_out = rules.is_sold_out(primary_label)
+        
+        if not sold_out:    
+            price_raw = rules.get_price(response)
+            price, currency = rules.get_price_and_currency(price_raw)
+            discount = rules.get_discount(response)
+            image_url = rules.get_image_url(response)
+        else:
+            price_raw = None
+            price = None
+            currency = None
+            discount = None
+            image_url = None
 
         return {
             'site': constants.NAME,
@@ -122,10 +133,10 @@ class FFSpider(scrapy.Spider, Mastercrawl):
             'subcategory': rules.get_subcategory_from_breadcrumbs(breadcrumbs),
             'price': price,
             'currency': currency,
-            'price_discount': rules.get_discount(response),
-            'sold_out': rules.is_sold_out(response),
-            'primary_label': rules.get_primary_label(response),
-            'image_url': rules.get_image_url(response),
+            'price_discount': discount,
+            'sold_out': sold_out,
+            'primary_label': primary_label,
+            'image_url': image_url,
             'text': rules.get_text(response),
         }
 

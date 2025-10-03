@@ -130,7 +130,7 @@ class TestFFSpider:
             mock_rules.get_brand.return_value = "CoolBrand"
             mock_rules.get_product_name.return_value = "Stylish T-Shirt"
             mock_rules.get_discount.return_value = "80"
-            mock_rules.is_sold_out.return_value = True
+            mock_rules.is_sold_out.return_value = False
             mock_rules.get_primary_label.return_value = "New Season"
             mock_rules.get_image_url.return_value = "https://example.com/image.jpg"
             mock_rules.get_text.return_value = ["Some descriptive text."]
@@ -146,9 +146,44 @@ class TestFFSpider:
             assert data['product_name'] == 'Stylish T-Shirt'
             assert data['price'] == '100.00'
             assert data['currency'] == 'USD'
-            assert data['sold_out'] is True
+            assert data['sold_out'] is False
             assert data['category'] == 'Clothing'
             assert data['image_url'] == 'https://example.com/image.jpg'
+
+    def test_populate_pdp_data_sold_out(self):
+        """
+        Tests the _populate_pdp_data method for a sold-out item.
+        """
+        spider = FFSpider()
+        test_url = "https://www.farfetch.com/uk/shopping/men/soldoutbrand/items.aspx"
+        mock_response = HtmlResponse(url=test_url, body=MOCK_PDP_HTML, encoding='utf-8')
+
+        with patch('ecommercecrawl.spiders.farfetch_crawl.rules') as mock_rules:
+            mock_rules.get_country.return_value = 'uk'
+            mock_rules.get_portal_itemid.return_value = '67890'
+            mock_rules.get_gender.return_value = 'men'
+            mock_rules.get_price_and_currency.return_value = (None, None)  # No price for sold out
+            mock_rules.get_category_from_breadcrumbs.return_value = 'Accessories'
+            mock_rules.get_subcategory_from_breadcrumbs.return_value = 'Hats'
+            mock_rules.get_brand.return_value = "SoldOutBrand"
+            mock_rules.get_product_name.return_value = "Rare Hat"
+            mock_rules.get_discount.return_value = None
+            mock_rules.is_sold_out.return_value = True
+            mock_rules.get_primary_label.return_value = "Sold Out"
+            mock_rules.get_image_url.return_value = "https://example.com/soldout.jpg"
+            mock_rules.get_text.return_value = ["This item is no longer available."]
+
+            data = spider._populate_pdp_data(mock_response)
+
+            assert data['site'] == 'farfetch'
+            assert data['country'] == 'uk'
+            assert data['brand'] == 'SoldOutBrand'
+            assert data['product_name'] == 'Rare Hat'
+            assert data['price'] is None
+            assert data['currency'] is None
+            assert data['sold_out'] is True
+            assert data['category'] == 'Accessories'
+            assert data['image_url'] == None
 
     @patch('ecommercecrawl.spiders.farfetch_crawl.FFSpider.download_images')
     @patch('ecommercecrawl.spiders.farfetch_crawl.FFSpider.save_to_csv')

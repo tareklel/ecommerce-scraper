@@ -2,7 +2,10 @@
 import pytest
 from ecommercecrawl.rules import farfetch_rules as rules
 from scrapy.http import HtmlResponse
-from farfetch_html_fixtures import pdp
+from farfetch_html_fixtures import pdp, sold_out_pdp
+from ecommercecrawl.constants import farfetch_constants as constants
+
+
 
 @pytest.fixture
 def pdp_response():
@@ -10,6 +13,7 @@ def pdp_response():
         html_content = f.read()
     return HtmlResponse(url="https://www.farfetch.com/ca/shopping/women/versace-medusa-plaque-platform-sandals-item-18533473.aspx", body=html_content, encoding='utf-8')
 
+# Test pdp 
 def test_is_items_pages():
     assert rules.is_items_page("https://www.farfetch.com/ca/shopping/women/") is False
     assert rules.is_items_page("https://www.farfetch.com/ca/shopping/women/versace-medusa-plaque-platform-sandals-item-18533473.aspx") is False
@@ -49,6 +53,10 @@ def test_get_price_and_currency():
     assert price is None
     assert currency is None
 
+def test_sold_out_label():
+    assert rules.is_sold_out(constants.SOLD_OUT_LABEL) is True
+    assert rules.is_sold_out("Other Label") is False
+
 def test_get_product_name(pdp_response):
     assert rules.get_product_name(pdp_response) == pdp['product_name']
 
@@ -61,9 +69,6 @@ def test_get_price(pdp_response):
 def test_get_discount(pdp_response):
     assert rules.get_discount(pdp_response) is None
 
-def test_is_sold_out(pdp_response):
-    assert rules.is_sold_out(pdp_response) is False
-
 def test_get_primary_label(pdp_response):
     assert rules.get_primary_label(pdp_response) == pdp['primary_label']
 
@@ -72,3 +77,23 @@ def test_get_image_url(pdp_response):
 
 def test_get_text(pdp_response):
     assert rules.get_text(pdp_response) == pdp['text']
+
+# Test sold out PDP
+@pytest.fixture
+def sold_out_pdp_response():
+    with open("tests/farfetch_html_fixtures/sold_out_pdp.html", "r") as f:
+        html_content = f.read()
+    return HtmlResponse(url=sold_out_pdp["url"], body=html_content, encoding='utf-8')
+
+def test_get_product_name_sold_out(sold_out_pdp_response):
+    assert rules.get_product_name(sold_out_pdp_response) == sold_out_pdp['product_name']
+
+def test_get_brand_sold_out(sold_out_pdp_response):
+    assert rules.get_brand(sold_out_pdp_response) == sold_out_pdp['brand']
+
+def test_get_primary_label_sold_out(sold_out_pdp_response):
+    assert rules.get_primary_label(sold_out_pdp_response) == sold_out_pdp['primary_label']
+
+def test_is_sold_out_sold_out(sold_out_pdp_response):
+    primary_label = rules.get_primary_label(sold_out_pdp_response)
+    assert rules.is_sold_out(primary_label) == sold_out_pdp['sold_out']
