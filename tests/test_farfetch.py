@@ -283,3 +283,113 @@ class TestFFSpider:
         mock_ensure_dir.assert_called_once()
         mock_rules.get_pdp_subfolder.assert_called_once_with(pdp_url)
         assert len(requests) == 0
+
+    @patch('ecommercecrawl.spiders.farfetch_crawl.rules')
+    def test_parse_plp_first_page(self, mock_rules):
+        """
+        Tests that the first page of a PLP yields requests for PDPs and other PLP pages.
+        """
+        spider = FFSpider()
+        mock_response = HtmlResponse(url='http://example.com/products?page=1', body=b'')
+
+        mock_rules.get_pdp_urls.return_value = ['http://example.com/product/1', 'http://example.com/product/2']
+        mock_rules.is_first_page.return_value = True
+        spider.get_pages = MagicMock(return_value=['http://example.com/products?page=2'])
+
+        requests = list(spider.parse_plp(mock_response))
+
+        assert len(requests) == 3
+        assert requests[0].url == 'http://example.com/product/1'
+        assert requests[1].url == 'http://example.com/product/2'
+        assert requests[2].url == 'http://example.com/products?page=2'
+
+    @patch('ecommercecrawl.spiders.farfetch_crawl.rules')
+    def test_parse_plp_not_first_page(self, mock_rules):
+        """
+        Tests that a non-first page of a PLP only yields requests for PDPs.
+        """
+        spider = FFSpider()
+        mock_response = HtmlResponse(url='http://example.com/products?page=2', body=b'')
+
+        mock_rules.get_pdp_urls.return_value = ['http://example.com/product/3']
+        mock_rules.is_first_page.return_value = False
+        spider.get_pages = MagicMock()
+
+        requests = list(spider.parse_plp(mock_response))
+
+        assert len(requests) == 1
+        assert requests[0].url == 'http://example.com/product/3'
+        spider.get_pages.assert_not_called()
+
+    def test_build_output_basename(self):
+        """
+        Tests the build_output_basename method.
+        """
+        spider = FFSpider()
+        result = spider.build_output_basename("output/dir", "farfetch", "2024-01-01")
+        assert result == "output/dir/farfetch-2024-01-01"
+
+    def test_ensure_dir(self, tmp_path):
+        """
+        Tests the ensure_dir method.
+        """
+        spider = FFSpider()
+        dir_path = tmp_path / "test_dir"
+        assert not dir_path.exists()
+
+        # Test directory creation
+        spider.ensure_dir(str(dir_path))
+        assert dir_path.exists()
+        assert dir_path.is_dir()
+
+        # Test again to ensure it doesn't fail if the directory already exists
+        spider.ensure_dir(str(dir_path))
+        assert dir_path.exists()
+
+    def test_save_to_csv(self, tmp_path):
+        """
+        Tests the save_to_csv method.
+        """
+        spider = FFSpider()
+        basename = tmp_path / "test_output"
+        data = {"col1": "val1", "col2": "val2"}
+
+        # Test creating a new file with headers
+        spider.save_to_csv(str(basename), data)
+        
+        csv_path = tmp_path / "test_output.csv"
+        assert csv_path.exists()
+        with open(csv_path, 'r') as f:
+            lines = f.readlines()
+            assert len(lines) == 2
+            assert lines[0].strip() == "col1,col2"
+            assert lines[1].strip() == "val1,val2"
+
+        # Test appending to an existing file
+        data2 = {"col1": "val3", "col2": "val4"}
+        spider.save_to_csv(str(basename), data2)
+
+        with open(csv_path, 'r') as f:
+            lines = f.readlines()
+            assert len(lines) == 3
+            assert lines[2].strip() == "val3,val4"
+
+    def test_save_image(self, tmp_path):
+        """
+        Tests the save_image method.
+        """
+        spider = FFSpider()
+        image_dir = tmp_path / "images"
+        image_dir.mkdir()
+
+        mock_response = MagicMock()
+        mock_response.url = "http://example.com/image.jpg"
+        mock_response.body = b"image_content"
+        mock_response.meta = {"image_dir": str(image_dir)}
+
+        spider.save_image(mock_response)
+
+        image_path = image_dir / "image.jpg"
+        assert image_path.exists()
+        with open(image_path, 'rb') as f:
+            assert f.read() == b"image_content"
