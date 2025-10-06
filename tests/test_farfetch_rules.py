@@ -1,4 +1,3 @@
-
 import pytest
 from ecommercecrawl.rules import farfetch_rules as rules
 from scrapy.http import HtmlResponse
@@ -15,9 +14,9 @@ def pdp_response():
 
 # Test pdp 
 def test_is_items_pages():
-    assert rules.is_items_page("https://www.farfetch.com/ca/shopping/women/") is False
-    assert rules.is_items_page("https://www.farfetch.com/ca/shopping/women/versace-medusa-plaque-platform-sandals-item-18533473.aspx") is False
-    assert rules.is_items_page("https://www.farfetch.com/ae/shopping/women/designer-a-roege-hove/items.aspx") is True
+    assert rules.is_plp("https://www.farfetch.com/ca/shopping/women/") is False
+    assert rules.is_plp("https://www.farfetch.com/ca/shopping/women/versace-medusa-plaque-platform-sandals-item-18533473.aspx") is False
+    assert rules.is_plp("https://www.farfetch.com/ae/shopping/women/designer-a-roege-hove/items.aspx") is True
 
 
 def test_get_country():
@@ -108,6 +107,64 @@ def plp_response():
                         
 def test_get_pdp_urls(plp_response):
     assert rules.get_pdp_urls(plp_response) == plp['list_page_urls']
+
+
+def test_is_first_page(plp_response):
+    """
+    Tests that is_first_page correctly identifies the first and subsequent pages of a PLP.
+    """
+    # Assumes the default plp_response fixture URL is for a first page.
+    assert rules.is_first_page(plp_response.url) is True
+
+    # Test a non-first page
+    non_first_page_url = plp['url'] + "?page=2"
+    assert rules.is_first_page(non_first_page_url) is False
+
+    # Test a first page with page=1 parameter should still be false as per implementation
+    first_page_url_with_param = plp['url'] + "?page=1"
+    assert rules.is_first_page(first_page_url_with_param) is False
+
+
+def test_get_pagination(plp_response):
+    """
+    Tests that get_pagination correctly extracts the pagination string from the PLP response.
+    """
+    assert rules.get_pagination(plp_response) == plp['pagination']
+
+
+def test_get_max_page():
+    """
+    Tests that get_max_page correctly extracts the maximum page number from the pagination string.
+    """
+    assert rules.get_max_page(plp['pagination']) == plp['max_page']
+
+
+def test_get_list_page_urls():
+    """
+    Tests that get_list_page_urls correctly generates a list of all page URLs.
+    """
+    base_url = plp['url']
+    max_page = plp['max_page']
+    expected_urls = [base_url] + [f"{base_url}?page={i}" for i in range(2, max_page + 1)]
+    assert rules.get_list_page_urls(base_url, max_page) == expected_urls
+
+
+def test_is_pdp_url():
+    """
+    Tests that is_pdp_url correctly identifies PDP URLs.
+    """
+    assert rules.is_pdp_url(pdp['url']) is True
+    assert rules.is_pdp_url(sold_out_pdp['url']) is True
+    assert rules.is_pdp_url(plp['url']) is False
+
+
+def test_get_pdp_subfolder():
+    """
+    Tests that get_pdp_subfolder correctly extracts the subfolder from a PDP URL.
+    """
+    assert rules.get_pdp_subfolder(pdp['url']) == pdp['expected_url']
+    assert rules.get_pdp_subfolder(plp['url']) is None
+
 
 # next steps set up test for these
 # plp: get_pdp_urls, is_first_page 

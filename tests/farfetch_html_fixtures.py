@@ -1,7 +1,10 @@
 # pdp_files
+
+# should be an available pdp page, not sold out, with all fields available and primary label
 pdp = {
     "country": "AE",
     "url": "https://www.farfetch.com/ae/shopping/women/christopher-esber-fusion-ruched-tee-gown-maxi-dress-item-29397648.aspx",
+    "expected_url": "christopher-esber-fusion-ruched-tee-gown-maxi-dress-item-29397648",
     "portal_itemid": 29397648,
     "product_name": "Fusion ruched tee gown maxi dress",
     "gender": "women",
@@ -18,9 +21,10 @@ pdp = {
     "text": "light green, short sleeves, ruched skirt, maxi length, Viscose 97%, Spandex/Elastane 3%"  
 }
 
+# should be a soldout pdp response page
 sold_out_pdp = {
     "country": "AE",
-    "url": "https://www.farfetch.com/ae/shopping/women/christopher-esber-fusion-ruched-tee-gown-maxi-dress-item-29397648.aspx",
+    "url": "https://www.farfetch.com/ae/shopping/men/off-white-graphic-print-long-sleeve-t-shirt-item-23848660.aspx",
     "portal_itemid": 23848660,
     "product_name": "graphic-print long-sleeve T-shirt",
     "brand": "Off-White",
@@ -28,6 +32,7 @@ sold_out_pdp = {
     "primary_label": "Sold Out"
 }
 
+# should be a first page response page
 plp = {
     "url": "https://www.farfetch.com/ae/shopping/women/boots-1/items.aspx",
     "first_page":True,

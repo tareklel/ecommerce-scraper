@@ -4,11 +4,11 @@ from ecommercecrawl.xpaths import farfetch_xpaths as xpaths
 from ecommercecrawl.constants import farfetch_constants as constants
 
 
-def is_items_page(url):
+def is_plp(url):
     return url.split('/')[-1].split('?')[0] == 'items.aspx'
 
 def is_first_page(url):
-    return (len(url.split('?')) == 1) & (is_items_page(url))
+    return (len(url.split('?')) == 1) & (is_plp(url))
 
 def is_pdp_url(url):
     lastdir = url.split('/')[-1].split('?')[0]
@@ -40,7 +40,7 @@ def get_gender(url):
 
 def get_pdp_subfolder(url):
     if is_pdp_url(url):
-        return url.url.split('/')[-1].split('.')[0]
+        return url.split('/')[-1].split('.')[0]
     else:
         return None
 

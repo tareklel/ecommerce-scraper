@@ -61,7 +61,7 @@ class FFSpider(scrapy.Spider, Mastercrawl):
 
     # ---------- Router ----------
     def parse(self, response):
-        if rules.is_items_page(response.url):      # PLP
+        if rules.is_plp(response.url):      # PLP
             yield from self.parse_plp(response)
             return
 
