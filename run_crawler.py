@@ -1,0 +1,29 @@
+import argparse
+import os
+from scrapy.crawler import CrawlerProcess
+from scrapy.utils.project import get_project_settings
+from ecommercecrawl.spiders.farfetch_crawl import FFSpider
+
+def main():
+    parser = argparse.ArgumentParser(description="E-commerce scraper CLI.")
+    parser.add_argument('spider', choices=['farfetch'], help='The spider to run.')
+    parser.add_argument('urls', help='URL to crawl or path to a CSV file with URLs.')
+    parser.add_argument('--limit', type=int, help='Limit the number of pages to crawl.')
+
+    args = parser.parse_args()
+
+    settings = get_project_settings()
+    process = CrawlerProcess(settings)
+
+    if args.spider == 'farfetch':
+        is_file = os.path.isfile(args.urls)
+        if is_file:
+            process.crawl(FFSpider, urlpath=args.urls, limit=args.limit)
+        else:
+            # Pass the single URL as a list to the spider
+            process.crawl(FFSpider, urls=[args.urls], limit=args.limit)
+
+    process.start()
+
+if __name__ == "__main__":
+    main()

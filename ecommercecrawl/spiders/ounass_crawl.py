@@ -10,15 +10,6 @@ import os
 class OunassSpider(scrapy.Spider, Mastercrawl):
     name = "ounass"
 
-    configure_logging(install_root_handler=False)
-    if not os.path.exists('log'):
-        os.makedirs('log')
-    logging.basicConfig(
-        filename=f'log/ounass-log-{date.today()}.log',
-        format='%(asctime)s %(levelname)s: %(message)s',
-        level=logging.INFO
-    )
-
     def __init__(self, urlpath=None, *args, **kwargs):
         super(OunassSpider, self).__init__(*args, **kwargs)
         self.urlpath = urlpath

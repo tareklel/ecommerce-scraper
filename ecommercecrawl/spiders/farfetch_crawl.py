@@ -12,29 +12,35 @@ from ecommercecrawl.constants import farfetch_constants as constants
 
 class FFSpider(scrapy.Spider, Mastercrawl):
     name = constants.NAME
-
-    def __init__(self, urlpath=None, *args, **kwargs):
+    def __init__(self, urlpath=None, urls=None, limit=None, *args, **kwargs):
         super(FFSpider, self).__init__(*args, **kwargs)
         self.urlpath = urlpath
+        self.start_urls = urls
+        self.limit = limit
         self.settings = settings
+        self.name = constants.NAME
 
     def start_requests(self):
         urls = []
-        try:
-            settings_get = self.settings.get if hasattr(self, "settings") else None
-        except Exception:
-            settings_get = None
+        if self.start_urls:
+            urls = self.start_urls
+        else:
+            try:
+                settings_get = self.settings.get if hasattr(self, "settings") else None
+            except Exception:
+                settings_get = None
 
-        if self.urlpath is None:
-            if settings_get:
-                self.urlpath = settings_get('FARFETCH_URLS_PATH', constants.FARFETCH_URLS)
-            else:
-                self.urlpath = constants.FARFETCH_URLS
+            if self.urlpath is None:
+                if settings_get:
+                    self.urlpath = settings_get('FARFETCH_URLS_PATH', constants.FARFETCH_URLS)
+                else:
+                    self.urlpath = constants.FARFETCH_URLS
 
-        with open(self.urlpath, newline='') as inputfile:
-            for row in csv.reader(inputfile):
-                if row:
-                    urls.append(row[0])
+            with open(self.urlpath, newline='') as inputfile:
+                for row in csv.reader(inputfile):
+                    if row:
+                        urls.append(row[0])
+
         for url in urls:
             yield scrapy.Request(url=url, callback=self.parse)
 
@@ -53,6 +59,9 @@ class FFSpider(scrapy.Spider, Mastercrawl):
             return []
         if total_pages <= 1:
             return []
+        
+        if self.limit:
+            total_pages = min(total_pages, self.limit)
 
         # Prefer rules.get_list_page_urls to generate 2..N; if it returns all pages, filter below.
         urls = rules.get_list_page_urls(response.url, total_pages)

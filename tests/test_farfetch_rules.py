@@ -164,10 +164,3 @@ def test_get_pdp_subfolder():
     """
     assert rules.get_pdp_subfolder(pdp['url']) == pdp['expected_url']
     assert rules.get_pdp_subfolder(plp['url']) is None
-
-
-# next steps set up test for these
-# plp: get_pdp_urls, is_first_page 
-# pages: get_pagination, get_max_page, get_list_page_urls
-# parse: rules.is_items_page, rules.is_pdp_url
-# image: rules.get_pdp_subfolder
