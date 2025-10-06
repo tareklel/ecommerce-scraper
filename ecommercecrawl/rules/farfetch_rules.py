@@ -1,4 +1,5 @@
 import re
+import json
 from ecommercecrawl.xpaths import farfetch_xpaths as xpaths
 from ecommercecrawl.constants import farfetch_constants as constants
 
@@ -93,7 +94,25 @@ def get_product_name(response):
     return product_name
 
 def get_pdp_urls(response):
-    return response.xpath(xpaths.PDP_XPATH).getall() or []
+    raw = response.xpath(xpaths.PLP_XPATH).get()
+    data = json.loads(raw) if raw else {}
+
+    # handle case where it's an array of JSON objects
+    if isinstance(data, list):
+        data = next((d for d in data if isinstance(d, dict) and d.get('@type') == 'ItemList'), {})
+
+    elements = data.get('itemListElement', []) if isinstance(data, dict) else []
+
+    urls = []
+    for el in elements:
+        offers = el.get('offers')
+        if isinstance(offers, dict):
+            urls.append(offers.get('url'))
+        elif isinstance(offers, list):
+            urls.extend(o.get('url') for o in offers if isinstance(o, dict))
+    # return site with constant
+    pdp_urls = [f'{constants.MAIN_SITE}{u}' for u in urls if u and u.startswith('/')]
+    return pdp_urls
 
 def get_price(response):
     return response.xpath(xpaths.PRICE_XPATH).get()

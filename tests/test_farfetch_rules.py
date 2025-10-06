@@ -2,7 +2,7 @@
 import pytest
 from ecommercecrawl.rules import farfetch_rules as rules
 from scrapy.http import HtmlResponse
-from farfetch_html_fixtures import pdp, sold_out_pdp
+from farfetch_html_fixtures import pdp, sold_out_pdp, plp
 from ecommercecrawl.constants import farfetch_constants as constants
 
 
@@ -11,7 +11,7 @@ from ecommercecrawl.constants import farfetch_constants as constants
 def pdp_response():
     with open("tests/farfetch_html_fixtures/pdp.html", "r") as f:
         html_content = f.read()
-    return HtmlResponse(url="https://www.farfetch.com/ca/shopping/women/versace-medusa-plaque-platform-sandals-item-18533473.aspx", body=html_content, encoding='utf-8')
+    return HtmlResponse(url=pdp['url'], body=html_content, encoding='utf-8')
 
 # Test pdp 
 def test_is_items_pages():
@@ -97,3 +97,20 @@ def test_get_primary_label_sold_out(sold_out_pdp_response):
 def test_is_sold_out_sold_out(sold_out_pdp_response):
     primary_label = rules.get_primary_label(sold_out_pdp_response)
     assert rules.is_sold_out(primary_label) == sold_out_pdp['sold_out']
+
+
+# Test PLP
+@pytest.fixture
+def plp_response():
+    with open("tests/farfetch_html_fixtures/plp.html", "r") as f:
+        html_content = f.read()
+    return HtmlResponse(url=plp['url'], body=html_content, encoding='utf-8')
+                        
+def test_get_pdp_urls(plp_response):
+    assert rules.get_pdp_urls(plp_response) == plp['list_page_urls']
+
+# next steps set up test for these
+# plp: get_pdp_urls, is_first_page 
+# pages: get_pagination, get_max_page, get_list_page_urls
+# parse: rules.is_items_page, rules.is_pdp_url
+# image: rules.get_pdp_subfolder
