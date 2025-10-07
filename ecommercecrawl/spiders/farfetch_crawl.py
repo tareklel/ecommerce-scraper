@@ -10,6 +10,12 @@ from ecommercecrawl.rules import farfetch_rules as rules
 from ecommercecrawl.constants import farfetch_constants as constants
 
 
+def _slot_delay(url):
+    if constants.IMAGE_CDN in url:
+        return 2.0
+    return 0.5
+
+
 class FFSpider(scrapy.Spider, Mastercrawl):
     name = constants.NAME
     def __init__(self, urlpath=None, urls=None, limit=None, *args, **kwargs):
@@ -20,29 +26,38 @@ class FFSpider(scrapy.Spider, Mastercrawl):
         self.settings = settings
         self.name = constants.NAME
 
+    def _schedule(self, url, **kw):
+        req = scrapy.Request(url, **kw)
+        req.meta['download_delay'] = _slot_delay(req.url)
+        return req
+
     def start_requests(self):
         urls = []
         if self.start_urls:
             urls = self.start_urls
+        elif self.urlpath:
+            with open(self.urlpath, newline='') as inputfile:
+                for row in csv.reader(inputfile):
+                    if row:
+                        urls.append(row[0])
         else:
+            # Fallback to default path from settings or constants
             try:
                 settings_get = self.settings.get if hasattr(self, "settings") else None
             except Exception:
                 settings_get = None
 
-            if self.urlpath is None:
-                if settings_get:
-                    self.urlpath = settings_get('FARFETCH_URLS_PATH', constants.FARFETCH_URLS)
-                else:
-                    self.urlpath = constants.FARFETCH_URLS
+            urlpath = constants.FARFETCH_URLS
+            if settings_get:
+                urlpath = settings_get('FARFETCH_URLS_PATH', constants.FARFETCH_URLS)
 
-            with open(self.urlpath, newline='') as inputfile:
+            with open(urlpath, newline='') as inputfile:
                 for row in csv.reader(inputfile):
                     if row:
                         urls.append(row[0])
 
         for url in urls:
-            yield scrapy.Request(url=url, callback=self.parse)
+            yield self._schedule(url, callback=self.parse, cb_kwargs={'_initial': True})
 
     # ---------- Pagination helper (returns ONLY pages 2..N) ----------
     def get_pages(self, response):
@@ -69,9 +84,9 @@ class FFSpider(scrapy.Spider, Mastercrawl):
         return urls
 
     # ---------- Router ----------
-    def parse(self, response):
+    def parse(self, response, _initial=False):
         if rules.is_plp(response.url):      # PLP
-            yield from self.parse_plp(response)
+            yield from self.parse_plp(response, _initial=_initial)
             return
 
         if rules.is_pdp_url(response.url):         # PDP
@@ -80,16 +95,17 @@ class FFSpider(scrapy.Spider, Mastercrawl):
         # else: ignore non-product URLs
 
     # ---------- PLP handler ----------
-    def parse_plp(self, response):
+    def parse_plp(self, response, _initial=False):
         # 1) Always process the current PLP (including page 1)
         pdps = rules.get_pdp_urls(response)
         for pdp in pdps:
-            yield response.follow(pdp, callback=self.parse)
+            pdp_url = response.urljoin(pdp)
+            yield self._schedule(pdp_url, callback=self.parse)
 
         # 2) Only the first page schedules the other pages 2..N
-        if rules.is_first_page(response.url):
+        if _initial:
             for url in self.get_pages(response):
-                yield scrapy.Request(url=url, callback=self.parse)
+                yield self._schedule(url, callback=self.parse)
 
     # ---------- PDP handler ----------
     def parse_pdp(self, response):
@@ -165,7 +181,7 @@ class FFSpider(scrapy.Spider, Mastercrawl):
 
             for img_url in urls:
                 if img_url:
-                    yield scrapy.Request(img_url, callback=self.save_image, meta={'image_dir': image_dir})
+                    yield self._schedule(img_url, callback=self.save_image, meta={'image_dir': image_dir})
 
 if __name__ == "__main__":
     configure_logging(install_root_handler=False)

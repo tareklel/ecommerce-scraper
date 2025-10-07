@@ -1,103 +1,71 @@
-# Define here the models for your spider middleware
-#
-# See documentation in:
-# https://docs.scrapy.org/en/latest/topics/spider-middleware.html
-
-from scrapy import signals
-
-# useful for handling different item types with a single interface
-from itemadapter import is_item, ItemAdapter
+import time
+from scrapy.downloadermiddlewares.retry import RetryMiddleware
+from scrapy.utils.response import response_status_message
+from twisted.internet.task import deferLater
+from twisted.internet import reactor
 
 
-class EcommercecrawlSpiderMiddleware:
-    # Not all methods need to be defined. If a method is not defined,
-    # scrapy acts as if the spider middleware does not modify the
-    # passed objects.
-
-    @classmethod
-    def from_crawler(cls, crawler):
-        # This method is used by Scrapy to create your spiders.
-        s = cls()
-        crawler.signals.connect(s.spider_opened, signal=signals.spider_opened)
-        return s
-
-    def process_spider_input(self, response, spider):
-        # Called for each response that goes through the spider
-        # middleware and into the spider.
-
-        # Should return None or raise an exception.
-        return None
-
-    def process_spider_output(self, response, result, spider):
-        # Called with the results returned from the Spider, after
-        # it has processed the response.
-
-        # Must return an iterable of Request, or item objects.
-        for i in result:
-            yield i
-
-    def process_spider_exception(self, response, exception, spider):
-        # Called when a spider or process_spider_input() method
-        # (from other spider middleware) raises an exception.
-
-        # Should return either None or an iterable of Request or item objects.
-        pass
-
-    def process_start_requests(self, start_requests, spider):
-        # Called with the start requests of the spider, and works
-        # similarly to the process_spider_output() method, except
-        # that it doesn’t have a response associated.
-
-        # Must return only requests (not items).
-        for r in start_requests:
-            yield r
-
-    def spider_opened(self, spider):
-        spider.logger.info('Spider opened: %s' % spider.name)
+def _sleep(seconds):
+    """
+    Async sleep for 'seconds' using Twisted reactor.
+    Unlike time.sleep(), this won’t block the entire Scrapy engine.
+    """
+    return deferLater(reactor, seconds, lambda: None)
 
 
-class EcommercecrawlDownloaderMiddleware:
-    # Not all methods need to be defined. If a method is not defined,
-    # scrapy acts as if the downloader middleware does not modify the
-    # passed objects.
+class RetryAfterMiddleware(RetryMiddleware):
+    """
+    Custom retry logic that respects Retry-After headers and uses exponential backoff.
 
-    @classmethod
-    def from_crawler(cls, crawler):
-        # This method is used by Scrapy to create your spiders.
-        s = cls()
-        crawler.signals.connect(s.spider_opened, signal=signals.spider_opened)
-        return s
+    Usage:
+    ------
+    Add this to settings.py:
 
-    def process_request(self, request, spider):
-        # Called for each request that goes through the downloader
-        # middleware.
+    DOWNLOADER_MIDDLEWARES = {
+        'middlewares.RetryAfterMiddleware': 550,  # after default RetryMiddleware (543)
+    }
 
-        # Must either:
-        # - return None: continue processing this request
-        # - or return a Response object
-        # - or return a Request object
-        # - or raise IgnoreRequest: process_exception() methods of
-        #   installed downloader middleware will be called
-        return None
+    And make sure RETRY_HTTP_CODES includes 429, 503, etc.
+    """
 
     def process_response(self, request, response, spider):
-        # Called with the response returned from the downloader.
+        """
+        Called every time Scrapy gets an HTTP response.
+        If the response code is retryable (e.g. 429, 503), decide how long to wait
+        before retrying the request.
+        """
+        # Check if the status code is in the retry list
+        if response.status in spider.settings.get('RETRY_HTTP_CODES'):
 
-        # Must either;
-        # - return a Response object
-        # - return a Request object
-        # - or raise IgnoreRequest
+            # Check if the server sent a Retry-After header
+            retry_after = response.headers.get("Retry-After")
+            if retry_after:
+                try:
+                    # Retry-After usually contains seconds to wait
+                    delay = int(retry_after.decode())
+                except Exception:
+                    # If parsing fails, fall back to a safe default
+                    delay = 5
+            else:
+                # No Retry-After header → use exponential backoff
+                retry_count = request.meta.get('retry_times', 0)
+                delay = min(60, 2 ** retry_count)  # cap delay at 60s
+
+            # Ask parent class if retry is allowed for this request
+            if self._retry(request, response_status_message(response.status), spider):
+                spider.logger.info(
+                    f"Retryable error {response.status} on {request.url}; "
+                    f"waiting {delay}s before retry"
+                )
+                # Wait asynchronously, then return a fresh copy of the request
+                return _sleep(delay).addCallback(lambda _: request.copy())
+
+        # If status code not in retry list → just return the response normally
         return response
 
     def process_exception(self, request, exception, spider):
-        # Called when a download handler or a process_request()
-        # (from other downloader middleware) raises an exception.
-
-        # Must either:
-        # - return None: continue processing this exception
-        # - return a Response object: stops process_exception() chain
-        # - return a Request object: stops process_exception() chain
-        pass
-
-    def spider_opened(self, spider):
-        spider.logger.info('Spider opened: %s' % spider.name)
+        """
+        Handles network errors, timeouts, DNS errors, etc.
+        For those, we just fall back to Scrapy’s default retry logic.
+        """
+        return super().process_exception(request, exception, spider)
