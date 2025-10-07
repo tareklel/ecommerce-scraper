@@ -84,9 +84,9 @@ class FFSpider(scrapy.Spider, Mastercrawl):
         return urls
 
     # ---------- Router ----------
-    def parse(self, response, _initial=False):
+    def parse(self, response):
         if rules.is_plp(response.url):      # PLP
-            yield from self.parse_plp(response, _initial=_initial)
+            yield from self.parse_plp(response)
             return
 
         if rules.is_pdp_url(response.url):         # PDP
@@ -95,7 +95,7 @@ class FFSpider(scrapy.Spider, Mastercrawl):
         # else: ignore non-product URLs
 
     # ---------- PLP handler ----------
-    def parse_plp(self, response, _initial=False):
+    def parse_plp(self, response):
         # 1) Always process the current PLP (including page 1)
         pdps = rules.get_pdp_urls(response)
         for pdp in pdps:
@@ -103,7 +103,7 @@ class FFSpider(scrapy.Spider, Mastercrawl):
             yield self._schedule(pdp_url, callback=self.parse)
 
         # 2) Only the first page schedules the other pages 2..N
-        if _initial:
+        if rules.is_first_page(response.url):
             for url in self.get_pages(response):
                 yield self._schedule(url, callback=self.parse)
 
