@@ -185,40 +185,37 @@ class TestFFSpider:
             assert data['category'] == 'Accessories'
             assert data['image_url'] == None
 
-    @patch('ecommercecrawl.spiders.farfetch_crawl.FFSpider.download_images')
     @patch('ecommercecrawl.spiders.farfetch_crawl.FFSpider.save_to_csv')
     @patch('ecommercecrawl.spiders.farfetch_crawl.FFSpider.ensure_dir')
     @patch('ecommercecrawl.spiders.farfetch_crawl.FFSpider.build_output_basename')
     @patch('ecommercecrawl.spiders.farfetch_crawl.FFSpider._populate_pdp_data')
     def test_parse_pdp(self, mock_populate_pdp_data, mock_build_output_basename,
-                       mock_ensure_dir, mock_save_to_csv, mock_download_images):
+                       mock_ensure_dir, mock_save_to_csv):
         """
         Tests the parse_pdp method to ensure it correctly orchestrates
-        data extraction, persistence, and image downloading.
+        data extraction and persistence.
         """
         spider = FFSpider()
         mock_response = MagicMock()
         mock_response.url = "https://www.farfetch.com/item/12345.aspx"
 
         # Mock return values for internal methods
-        mock_populate_pdp_data.return_value = {
+        mock_data = {
             'crawl_date': '2024-01-01',
             'image_url': 'https://example.com/image.jpg'
         }
+        mock_populate_pdp_data.return_value = mock_data
         mock_build_output_basename.return_value = '/path/to/output/farfetch_2024-01-01'
 
         # Call the method under test
-        list(spider.parse_pdp(mock_response))  # Convert generator to list to ensure all yields are processed
+        result = list(spider.parse_pdp(mock_response))  # Convert generator to list to ensure all yields are processed
 
         # Assertions
         mock_populate_pdp_data.assert_called_once_with(mock_response)
         mock_build_output_basename.assert_called_once_with('output', 'farfetch', '2024-01-01')
         mock_ensure_dir.assert_called_once_with('output')
-        mock_save_to_csv.assert_called_once_with('/path/to/output/farfetch_2024-01-01', {
-            'crawl_date': '2024-01-01',
-            'image_url': 'https://example.com/image.jpg'
-        })
-        mock_download_images.assert_called_once_with('2024-01-01', mock_response.url, 'https://example.com/image.jpg')
+        mock_save_to_csv.assert_called_once_with('/path/to/output/farfetch_2024-01-01', mock_data)
+        assert result == [mock_data]
 
     @patch('ecommercecrawl.spiders.farfetch_crawl.rules')
     @patch('ecommercecrawl.spiders.farfetch_crawl.FFSpider.ensure_dir')

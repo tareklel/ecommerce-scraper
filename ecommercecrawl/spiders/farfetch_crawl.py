@@ -57,7 +57,7 @@ class FFSpider(scrapy.Spider, Mastercrawl):
                         urls.append(row[0])
 
         for url in urls:
-            yield self._schedule(url, callback=self.parse, cb_kwargs={'_initial': True})
+            yield self._schedule(url, callback=self.parse)
 
     # ---------- Pagination helper (returns ONLY pages 2..N) ----------
     def get_pages(self, response):
@@ -121,7 +121,9 @@ class FFSpider(scrapy.Spider, Mastercrawl):
         self.save_to_csv(outfile_base, data)
 
         # Images
-        yield from self.download_images(date_string, response.url, data.get('image_url'))
+        # yield from self.download_images(date_string, response.url, data.get('image_url'))
+
+        yield data
 
     def _populate_pdp_data(self, response):
         """
