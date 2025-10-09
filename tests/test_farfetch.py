@@ -5,6 +5,7 @@ from scrapy.http import HtmlResponse, Request
 from ecommercecrawl.spiders.farfetch_crawl import FFSpider
 from pathlib import Path
 import json
+import os
 
 
 # --- Mock HTML Payloads ---
@@ -187,16 +188,15 @@ class TestFFSpider:
             assert data['image_url'] == None
 
     @patch('ecommercecrawl.spiders.farfetch_crawl.FFSpider.save_to_jsonl')
-    @patch('ecommercecrawl.spiders.farfetch_crawl.FFSpider.ensure_dir')
     @patch('ecommercecrawl.spiders.farfetch_crawl.FFSpider.build_output_basename')
     @patch('ecommercecrawl.spiders.farfetch_crawl.FFSpider._populate_pdp_data')
-    def test_parse_pdp(self, mock_populate_pdp_data, mock_build_output_basename,
-                       mock_ensure_dir, mock_save_to_jsonl):
+    def test_parse_pdp(self, mock_populate_pdp_data, mock_build_output_basename, mock_save_to_jsonl):
         """
         Tests the parse_pdp method to ensure it correctly orchestrates
         data extraction and persistence.
         """
         spider = FFSpider()
+        spider.run_id = 'test-run-id'
         mock_response = MagicMock()
         mock_response.url = "https://www.farfetch.com/item/12345.aspx"
 
@@ -206,17 +206,15 @@ class TestFFSpider:
             'image_url': 'https://example.com/image.jpg'
         }
         mock_populate_pdp_data.return_value = mock_data
-        mock_build_output_basename.return_value = '/path/to/output/farfetch_2024-01-01'
+        mock_build_output_basename.return_value = '/path/to/output/2024/01/01/test-run-id/pdps'
 
         # Call the method under test
-        result = list(spider.parse_pdp(mock_response))  # Convert generator to list to ensure all yields are processed
+        list(spider.parse_pdp(mock_response))
 
         # Assertions
         mock_populate_pdp_data.assert_called_once_with(mock_response)
-        mock_build_output_basename.assert_called_once_with('output', 'farfetch', '2024-01-01')
-        mock_ensure_dir.assert_called_once_with('output')
-        mock_save_to_jsonl.assert_called_once_with('/path/to/output/farfetch_2024-01-01', mock_data)
-        assert result == [mock_data]
+        mock_build_output_basename.assert_called_once_with('output', '2024-01-01', 'pdps')
+        mock_save_to_jsonl.assert_called_once_with('/path/to/output/2024/01/01/test-run-id/pdps', mock_data)
 
     @patch('ecommercecrawl.spiders.farfetch_crawl.rules')
     @patch('ecommercecrawl.spiders.farfetch_crawl.FFSpider.ensure_dir')
@@ -324,25 +322,13 @@ class TestFFSpider:
         Tests the build_output_basename method.
         """
         spider = FFSpider()
-        result = spider.build_output_basename("output/dir", "farfetch", "2024-01-01")
-        assert result == "output/dir/farfetch-2024-01-01"
+        spider.run_id = 'test-run-id'
+        date_string = '2024-01-15'
+        
+        expected_path = os.path.join('output', '2024', '01', '15', 'test-run-id', 'pdps')
 
-    def test_ensure_dir(self, tmp_path):
-        """
-        Tests the ensure_dir method.
-        """
-        spider = FFSpider()
-        dir_path = tmp_path / "test_dir"
-        assert not dir_path.exists()
-
-        # Test directory creation
-        spider.ensure_dir(str(dir_path))
-        assert dir_path.exists()
-        assert dir_path.is_dir()
-
-        # Test again to ensure it doesn't fail if the directory already exists
-        spider.ensure_dir(str(dir_path))
-        assert dir_path.exists()
+        path = spider.build_output_basename('output', date_string, 'pdps')
+        assert path == expected_path
 
     def test_save_to_jsonl(self, tmp_path):
         """

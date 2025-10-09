@@ -10,10 +10,11 @@ class MasterCrawl(Spider):
         super().__init__(*args, **kwargs)
         self.run_id = datetime.utcnow().strftime('%Y-%m-%dT%H-%M-%S-%fZ')
 
-    def save_to_jsonl(self, filename, data):
-        """Saves a dictionary to a JSONL file, appending if the file exists."""
-        filename = f'{filename}.jsonl'
-        with open(filename, "a") as f:
+    def save_to_jsonl(self, basename, data):
+        """Saves a dictionary to a JSONL file, creating dirs and appending if the file exists."""
+        filepath = f'{basename}.jsonl'
+        self.ensure_dir(os.path.dirname(filepath))
+        with open(filepath, "a") as f:
             f.write(json.dumps(data) + '\n')
 
     def save_image(self, response):
@@ -23,9 +24,10 @@ class MasterCrawl(Spider):
             f.write(response.body)
     
         # ---------- Utilities ----------
-    def build_output_basename(self, output_dir, name, date_string: str) -> str:
-        return f'{output_dir}/{name}-{date_string}'
-
-    def ensure_dir(self, path: str):
-        if not os.path.exists(path):
-            os.makedirs(path, exist_ok=True)
+    def build_output_basename(self, output_dir, date_string: str, filename: str) -> str:
+        year, month, day = date_string.split('-')
+        return os.path.join(output_dir, year, month, day, self.run_id, filename)
+    
+    def ensure_dir(self, directory_path):
+        """Ensures that a directory exists, creating it if necessary."""
+        os.makedirs(directory_path, exist_ok=True)

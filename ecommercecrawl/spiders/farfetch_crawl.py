@@ -114,10 +114,9 @@ class FFSpider(MasterCrawl):
         """
         data = self._populate_pdp_data(response)
         date_string = data['crawl_date']
-        outfile_base = self.build_output_basename(constants.OUTPUT_DIR, constants.NAME, date_string)
+        outfile_base = self.build_output_basename(constants.OUTPUT_DIR, date_string, 'pdps')
 
         # Persist
-        self.ensure_dir(constants.OUTPUT_DIR)
         self.save_to_jsonl(outfile_base, data)
 
         # Images
