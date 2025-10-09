@@ -6,6 +6,7 @@ from datetime import datetime
 
 
 class MasterCrawl(Spider):
+    name = "mastercrawl"
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.run_id = datetime.utcnow().strftime('%Y-%m-%dT%H-%M-%S-%fZ')
@@ -16,12 +17,6 @@ class MasterCrawl(Spider):
         self.ensure_dir(os.path.dirname(filepath))
         with open(filepath, "a") as f:
             f.write(json.dumps(data) + '\n')
-
-    def save_image(self, response):
-        image_dir = response.meta['image_dir']
-        image_name = response.url.split('/')[-1]
-        with open(os.path.join(image_dir, image_name), 'wb') as f:
-            f.write(response.body)
     
         # ---------- Utilities ----------
     def build_output_basename(self, output_dir, date_string: str, filename: str) -> str:

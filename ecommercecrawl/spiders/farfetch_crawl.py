@@ -24,7 +24,6 @@ class FFSpider(MasterCrawl):
         self.start_urls = urls
         self.limit = limit
         self.settings = settings
-        self.name = constants.NAME
 
     def _schedule(self, url, **kw):
         req = scrapy.Request(url, **kw)
@@ -165,24 +164,6 @@ class FFSpider(MasterCrawl):
             'image_url': image_url,
             'text': rules.get_text(response),
         }
-
-    # ---------- Image downloader ----------
-    def download_images(self, date_string: str, pdp_url: str, image_field):
-            """
-            Create target image directory and schedule image downloads.
-            Accepts a single URL (str) or list of URLs.
-            """
-            image_dir = f'{constants.FARFETCH_IMAGE_BASE_DIR}/{date_string}/{rules.get_pdp_subfolder(pdp_url)}'
-            self.ensure_dir(image_dir)
-
-            # Normalize to iterable
-            if not image_field:
-                return
-            urls = image_field if isinstance(image_field, (list, tuple)) else [image_field]
-
-            for img_url in urls:
-                if img_url:
-                    yield self._schedule(img_url, callback=self.save_image, meta={'image_dir': image_dir})
 
 if __name__ == "__main__":
     configure_logging(install_root_handler=False)
