@@ -4,7 +4,7 @@ from datetime import date
 import logging
 from scrapy.utils.log import configure_logging
 import os
-from ecommercecrawl.spiders.mastercrawl import Mastercrawl
+from ecommercecrawl.spiders.mastercrawl import MasterCrawl
 from ecommercecrawl import settings
 from ecommercecrawl.rules import farfetch_rules as rules
 from ecommercecrawl.constants import farfetch_constants as constants
@@ -16,10 +16,10 @@ def _slot_delay(url):
     return 0.5
 
 
-class FFSpider(scrapy.Spider, Mastercrawl):
+class FFSpider(MasterCrawl):
     name = constants.NAME
     def __init__(self, urlpath=None, urls=None, limit=None, *args, **kwargs):
-        super(FFSpider, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.urlpath = urlpath
         self.start_urls = urls
         self.limit = limit
@@ -118,7 +118,7 @@ class FFSpider(scrapy.Spider, Mastercrawl):
 
         # Persist
         self.ensure_dir(constants.OUTPUT_DIR)
-        self.save_to_csv(outfile_base, data)
+        self.save_to_jsonl(outfile_base, data)
 
         # Images
         # yield from self.download_images(date_string, response.url, data.get('image_url'))

@@ -3,11 +3,11 @@ import scrapy
 from datetime import date
 import logging
 from scrapy.utils.log import configure_logging
-from ecommercecrawl.spiders.mastercrawl import Mastercrawl
+from ecommercecrawl.spiders.mastercrawl import MasterCrawl
 import os
 
 
-class OunassSpider(scrapy.Spider, Mastercrawl):
+class OunassSpider(MasterCrawl, scrapy.Spider):
     name = "ounass"
 
     def __init__(self, urlpath=None, *args, **kwargs):

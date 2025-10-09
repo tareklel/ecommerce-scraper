@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 from scrapy.http import HtmlResponse, Request
 from ecommercecrawl.spiders.farfetch_crawl import FFSpider
 from pathlib import Path
+import json
 
 
 # --- Mock HTML Payloads ---
@@ -185,12 +186,12 @@ class TestFFSpider:
             assert data['category'] == 'Accessories'
             assert data['image_url'] == None
 
-    @patch('ecommercecrawl.spiders.farfetch_crawl.FFSpider.save_to_csv')
+    @patch('ecommercecrawl.spiders.farfetch_crawl.FFSpider.save_to_jsonl')
     @patch('ecommercecrawl.spiders.farfetch_crawl.FFSpider.ensure_dir')
     @patch('ecommercecrawl.spiders.farfetch_crawl.FFSpider.build_output_basename')
     @patch('ecommercecrawl.spiders.farfetch_crawl.FFSpider._populate_pdp_data')
     def test_parse_pdp(self, mock_populate_pdp_data, mock_build_output_basename,
-                       mock_ensure_dir, mock_save_to_csv):
+                       mock_ensure_dir, mock_save_to_jsonl):
         """
         Tests the parse_pdp method to ensure it correctly orchestrates
         data extraction and persistence.
@@ -214,7 +215,7 @@ class TestFFSpider:
         mock_populate_pdp_data.assert_called_once_with(mock_response)
         mock_build_output_basename.assert_called_once_with('output', 'farfetch', '2024-01-01')
         mock_ensure_dir.assert_called_once_with('output')
-        mock_save_to_csv.assert_called_once_with('/path/to/output/farfetch_2024-01-01', mock_data)
+        mock_save_to_jsonl.assert_called_once_with('/path/to/output/farfetch_2024-01-01', mock_data)
         assert result == [mock_data]
 
     @patch('ecommercecrawl.spiders.farfetch_crawl.rules')
@@ -343,33 +344,32 @@ class TestFFSpider:
         spider.ensure_dir(str(dir_path))
         assert dir_path.exists()
 
-    def test_save_to_csv(self, tmp_path):
+    def test_save_to_jsonl(self, tmp_path):
         """
-        Tests the save_to_csv method.
+        Tests the save_to_jsonl method.
         """
         spider = FFSpider()
         basename = tmp_path / "test_output"
         data = {"col1": "val1", "col2": "val2"}
 
-        # Test creating a new file with headers
-        spider.save_to_csv(str(basename), data)
+        # Test creating a new file
+        spider.save_to_jsonl(str(basename), data)
         
-        csv_path = tmp_path / "test_output.csv"
-        assert csv_path.exists()
-        with open(csv_path, 'r') as f:
+        jsonl_path = tmp_path / "test_output.jsonl"
+        assert jsonl_path.exists()
+        with open(jsonl_path, 'r') as f:
             lines = f.readlines()
-            assert len(lines) == 2
-            assert lines[0].strip() == "col1,col2"
-            assert lines[1].strip() == "val1,val2"
+            assert len(lines) == 1
+            assert json.loads(lines[0]) == data
 
         # Test appending to an existing file
         data2 = {"col1": "val3", "col2": "val4"}
-        spider.save_to_csv(str(basename), data2)
+        spider.save_to_jsonl(str(basename), data2)
 
-        with open(csv_path, 'r') as f:
+        with open(jsonl_path, 'r') as f:
             lines = f.readlines()
-            assert len(lines) == 3
-            assert lines[2].strip() == "val3,val4"
+            assert len(lines) == 2
+            assert json.loads(lines[1]) == data2
 
     def test_save_image(self, tmp_path):
         """
