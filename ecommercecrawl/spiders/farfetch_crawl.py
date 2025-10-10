@@ -146,6 +146,8 @@ class FFSpider(MasterCrawl):
             image_url = None
 
         return {
+            'run_id': self.run_id,
+            'spider_name': self.name,
             'site': constants.NAME,
             'crawl_date': date_string,
             'country': rules.get_country(response.url),
