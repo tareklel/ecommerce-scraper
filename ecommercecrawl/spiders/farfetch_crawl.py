@@ -147,7 +147,6 @@ class FFSpider(MasterCrawl):
 
         return {
             'run_id': self.run_id,
-            'spider_name': self.name,
             'site': constants.NAME,
             'crawl_date': date_string,
             'country': rules.get_country(response.url),
@@ -166,12 +165,3 @@ class FFSpider(MasterCrawl):
             'image_url': image_url,
             'text': rules.get_text(response),
         }
-
-if __name__ == "__main__":
-    configure_logging(install_root_handler=False)
-    os.makedirs('log', exist_ok=True)
-    logging.basicConfig(
-        filename=f'log/{FFSpider.name}-log-{date.today()}.log',
-        format='%(asctime)s %(levelname)s: %(message)s',
-        level=logging.INFO
-    )

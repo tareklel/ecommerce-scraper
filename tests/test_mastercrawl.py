@@ -1,5 +1,7 @@
 import os
 import json
+from datetime import datetime, timezone
+from unittest.mock import MagicMock
 from ecommercecrawl.spiders.mastercrawl import MasterCrawl
 
 class TestMasterCrawl:
@@ -64,3 +66,42 @@ class TestMasterCrawl:
         # Test again to ensure it doesn't fail if the directory already exists
         spider.ensure_dir(str(dir_path))
         assert dir_path.exists()
+
+    def test_generate_manifest(self, tmp_path):
+        """
+        Test that a manifest.json file is correctly generated.
+        """
+        # 1. Setup
+        spider = MasterCrawl()
+        spider.name = 'test_spider'
+        spider.run_id = '2023-10-27T10-00-00'
+        
+        # Mock Scrapy components
+        mock_crawler = MagicMock()
+        mock_stats = MagicMock()
+        
+        start_time = datetime(2023, 10, 27, 10, 0, 0, tzinfo=timezone.utc)
+        finish_time = datetime(2023, 10, 27, 10, 5, 0, tzinfo=timezone.utc)
+        
+        stats_dict = {'start_time': start_time, 'finish_time': finish_time}
+        mock_stats.get_stats.return_value = stats_dict
+        
+        spider.crawler = mock_crawler
+        mock_crawler.stats = mock_stats
+        spider.output_dir = str(tmp_path)
+
+        # 2. Execution
+        spider.generate_manifest(spider=spider, reason='finished')
+
+        # 3. Assertions
+        manifest_path = tmp_path / 'manifest.json'
+        assert manifest_path.exists()
+
+        with open(manifest_path, 'r') as f:
+            manifest_data = json.load(f)
+
+        assert manifest_data['run_id'] == spider.run_id
+        assert manifest_data['crawler_name'] == spider.name
+        assert manifest_data['start_time'] == start_time.isoformat()
+        assert manifest_data['finish_time'] == finish_time.isoformat()
+        assert manifest_data['file_format'] == 'jsonl'
