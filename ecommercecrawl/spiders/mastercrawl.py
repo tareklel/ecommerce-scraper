@@ -5,13 +5,24 @@ from datetime import datetime, timezone
 from scrapy import Spider
 from scrapy import signals
 
+from ecommercecrawl.constants.mastercrawl_constants import RUN_ID_DATETIME_FORMAT
+
 
 class MasterCrawl(Spider):
     name = "mastercrawl"
+
+    @staticmethod
+    def _generate_run_id():
+        """Generates a unique run ID with millisecond precision."""
+        now = datetime.now(timezone.utc)
+        main_part = now.strftime(RUN_ID_DATETIME_FORMAT)
+        ms_part = f"{now.microsecond // 1000:03d}"
+        return f"{main_part}-{ms_part}"
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if not hasattr(self, 'run_id'):
-            self.run_id = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H-%M-%S')
+            self.run_id = MasterCrawl._generate_run_id()
         self.output_dir = None
 
     @classmethod
@@ -22,7 +33,7 @@ class MasterCrawl(Spider):
         """
         spider = super(MasterCrawl, cls).from_crawler(crawler, *args, **kwargs)
         
-        spider.run_id = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H-%M-%S')
+        spider.run_id = MasterCrawl._generate_run_id()
         
         # Connect the generate_manifest method to the spider_closed signal
         crawler.signals.connect(spider.generate_manifest, signal=signals.spider_closed)
