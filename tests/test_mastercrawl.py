@@ -87,6 +87,10 @@ class TestMasterCrawl:
             'item_scraped_count': 150,
             'downloader/request_count': 200,
             'log_count/ERROR': 5,
+            'downloader/response_status_count/200': 190,
+            # 301 not present to test defaulting to 0
+            'downloader/response_status_count/404': 5,
+            'downloader/response_status_count/500': 5,
         }
         mock_stats.get_stats.return_value = stats_dict
         mock_crawler.stats = mock_stats
@@ -119,7 +123,13 @@ class TestMasterCrawl:
         expected_stats = {
             "items_scraped": 150,
             "requests_made": 200,
-            "errors_count": 5
+            "errors_count": 5,
+            "status_code_counts": {
+                "200": 190,
+                "301": 0,
+                "404": 5,
+                "500": 5
+            }
         }
         assert manifest_data['stats'] == expected_stats
 

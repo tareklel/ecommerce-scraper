@@ -94,6 +94,12 @@ class MasterCrawl(Spider):
                 "items_scraped": stats.get('item_scraped_count', 0),
                 "requests_made": stats.get('downloader/request_count', 0),
                 "errors_count": stats.get('log_count/ERROR', 0),
+                "status_code_counts":{
+                    "200": stats.get('downloader/response_status_count/200', 0),
+                    "301": stats.get('downloader/response_status_count/301', 0),
+                    "404": stats.get('downloader/response_status_count/404', 0),
+                    "500": stats.get('downloader/response_status_count/500', 0)
+                    },
             },
             "file_format": "jsonl"
         }
