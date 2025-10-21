@@ -91,6 +91,9 @@ class TestMasterCrawl:
             # 301 not present to test defaulting to 0
             'downloader/response_status_count/404': 5,
             'downloader/response_status_count/500': 5,
+            'artifacts': {
+                'rows': 2 
+            }
         }
         mock_stats.get_stats.return_value = stats_dict
         mock_crawler.stats = mock_stats
@@ -99,6 +102,11 @@ class TestMasterCrawl:
         spider = MasterCrawl.from_crawler(mock_crawler, urls=entry_urls)
         spider.name = 'test_spider'
         spider.output_dir = str(tmp_path)
+
+        # Simulate saving some items to test the new self.items_written counter
+        basename = tmp_path / "output"
+        for i in range(5):
+            spider.save_to_jsonl(str(basename), {f"item": i})
 
         # 2. Execution
         with patch('ecommercecrawl.spiders.mastercrawl.datetime') as mock_dt:
@@ -119,7 +127,8 @@ class TestMasterCrawl:
         assert manifest_data['finish_time'] == finish_time.isoformat()
         assert manifest_data['duration_seconds'] == (finish_time - start_time).total_seconds()
         assert manifest_data['file_format'] == 'jsonl'
-        
+        assert manifest_data['artifacts']['rows'] == 5
+
         expected_stats = {
             "items_scraped": 150,
             "requests_made": 200,

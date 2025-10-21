@@ -25,6 +25,7 @@ class MasterCrawl(Spider):
         # is moved to from_crawler to ensure all kwargs are available.
         self.output_dir = None
         self.entry_points = {}
+        self.items_written = 0
         if not hasattr(self, 'run_id'):
             self.run_id = MasterCrawl._generate_run_id()
 
@@ -61,6 +62,8 @@ class MasterCrawl(Spider):
         self.ensure_dir(os.path.dirname(filepath))
         with open(filepath, "a", encoding='utf-8') as f:
             f.write(json.dumps(data, ensure_ascii=False) + '\n')
+        
+        self.items_written += 1
 
     def generate_manifest(self, spider, reason):
         """
@@ -81,7 +84,8 @@ class MasterCrawl(Spider):
         # fall back to the current time.
         finish_time = stats.get('finish_time') or datetime.now(timezone.utc)
         start_time = stats.get('start_time')
-        duration = (finish_time - start_time).total_seconds() if start_time else None    
+        duration = (finish_time - start_time).total_seconds() if start_time else None
+        items_scraped = stats.get('item_scraped_count', 0)
 
         manifest = {
             "run_id": self.run_id,
@@ -91,7 +95,7 @@ class MasterCrawl(Spider):
             "finish_time": finish_time.isoformat(),
             "duration_seconds": duration,
             "stats": {
-                "items_scraped": stats.get('item_scraped_count', 0),
+                "items_scraped": items_scraped,
                 "requests_made": stats.get('downloader/request_count', 0),
                 "errors_count": stats.get('log_count/ERROR', 0),
                 "status_code_counts":{
@@ -99,7 +103,10 @@ class MasterCrawl(Spider):
                     "301": stats.get('downloader/response_status_count/301', 0),
                     "404": stats.get('downloader/response_status_count/404', 0),
                     "500": stats.get('downloader/response_status_count/500', 0)
-                    },
+                },
+            },
+            "artifacts": {
+                "rows": self.items_written
             },
             "file_format": "jsonl"
         }
