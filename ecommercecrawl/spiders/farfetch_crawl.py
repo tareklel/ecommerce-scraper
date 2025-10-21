@@ -21,9 +21,14 @@ class FFSpider(MasterCrawl):
     def __init__(self, urlpath=None, urls=None, limit=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.urlpath = urlpath
-        self.start_urls = urls
+        self.start_urls = urls or []
         self.limit = limit
-        self.settings = settings
+
+    @classmethod
+    def from_crawler(cls, crawler, *args, **kwargs):
+        spider = super().from_crawler(crawler, *args, **kwargs)
+        spider.settings = crawler.settings
+        return spider
 
     def _schedule(self, url, **kw):
         req = scrapy.Request(url, **kw)

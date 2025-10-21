@@ -21,19 +21,30 @@ class MasterCrawl(Spider):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        # Initialization of attributes that depend on constructor arguments
+        # is moved to from_crawler to ensure all kwargs are available.
+        self.output_dir = None
+        self.entry_points = {}
         if not hasattr(self, 'run_id'):
             self.run_id = MasterCrawl._generate_run_id()
-        self.output_dir = None
 
     @classmethod
     def from_crawler(cls, crawler, *args, **kwargs):
         """
         This is the standard Scrapy entry point.
-        It's used to access the Crawler object and connect signals.
+        It's used to access the Crawler object, connect signals,
+        and capture entry point arguments for the manifest.
         """
         spider = super(MasterCrawl, cls).from_crawler(crawler, *args, **kwargs)
         
         spider.run_id = MasterCrawl._generate_run_id()
+
+        # Capture entry point arguments for the manifest.
+        # This is done here because from_crawler receives all spider arguments.
+        spider.entry_points = {
+            key: value for key, value in kwargs.items()
+            if key in ['start_urls', 'url', 'urls', 'urlpath', 'urls_file']
+        }
         
         # Connect the generate_manifest method to the spider_closed signal
         crawler.signals.connect(spider.generate_manifest, signal=signals.spider_closed)
@@ -69,18 +80,27 @@ class MasterCrawl(Spider):
         # value is always present, we'll use the stat if it exists, otherwise
         # fall back to the current time.
         finish_time = stats.get('finish_time') or datetime.now(timezone.utc)
+        start_time = stats.get('start_time')
+        duration = (finish_time - start_time).total_seconds() if start_time else None    
 
         manifest = {
             "run_id": self.run_id,
             "crawler_name": self.name,
-            "start_time": stats.get('start_time').isoformat() if stats.get('start_time') else None,
+            "entry_points": self.entry_points,
+            "start_time": start_time.isoformat() if start_time else None,
             "finish_time": finish_time.isoformat(),
+            "duration_seconds": duration,
+            "stats": {
+                "items_scraped": stats.get('item_scraped_count', 0),
+                "requests_made": stats.get('downloader/request_count', 0),
+                "errors_count": stats.get('log_count/ERROR', 0),
+            },
             "file_format": "jsonl"
         }
 
         manifest_path = os.path.join(self.output_dir, 'manifest.json')
         with open(manifest_path, 'w', encoding='utf-8') as f:
-            json.dump(manifest, f, indent=2, ensure_ascii=False)
+            json.dump(manifest, f, indent=4)
         spider.logger.info(f"Manifest file created at: {manifest_path}")
     
         # ---------- Utilities ----------

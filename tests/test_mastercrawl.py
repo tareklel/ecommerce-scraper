@@ -69,29 +69,37 @@ class TestMasterCrawl:
 
     def test_generate_manifest(self, tmp_path):
         """
-        Test that a manifest.json file is correctly generated.
+        Test that a manifest.json file is correctly generated with all stats,
+        simulating the spider creation via from_crawler.
         """
         # 1. Setup
-        spider = MasterCrawl()
-        spider.name = 'test_spider'
-        spider.run_id = '2023-10-27T10-00-00'
+        entry_urls = ['http://example.com/1', 'http://example.com/2']
         
         # Mock Scrapy components
         mock_crawler = MagicMock()
         mock_stats = MagicMock()
         
         start_time = datetime(2023, 10, 27, 10, 0, 0, tzinfo=timezone.utc)
-        finish_time = datetime(2023, 10, 27, 10, 5, 0, tzinfo=timezone.utc)
+        finish_time = datetime(2023, 10, 27, 10, 5, 30, tzinfo=timezone.utc)
         
-        stats_dict = {'start_time': start_time, 'finish_time': finish_time}
+        stats_dict = {
+            'start_time': start_time,
+            'item_scraped_count': 150,
+            'downloader/request_count': 200,
+            'log_count/ERROR': 5,
+        }
         mock_stats.get_stats.return_value = stats_dict
-        
-        spider.crawler = mock_crawler
         mock_crawler.stats = mock_stats
+
+        # Create the spider instance using from_crawler
+        spider = MasterCrawl.from_crawler(mock_crawler, urls=entry_urls)
+        spider.name = 'test_spider'
         spider.output_dir = str(tmp_path)
 
         # 2. Execution
-        spider.generate_manifest(spider=spider, reason='finished')
+        with patch('ecommercecrawl.spiders.mastercrawl.datetime') as mock_dt:
+            mock_dt.now.return_value = finish_time
+            spider.generate_manifest(spider=spider, reason='finished')
 
         # 3. Assertions
         manifest_path = tmp_path / 'manifest.json'
@@ -102,9 +110,18 @@ class TestMasterCrawl:
 
         assert manifest_data['run_id'] == spider.run_id
         assert manifest_data['crawler_name'] == spider.name
+        assert manifest_data['entry_points'] == {'urls': entry_urls}
         assert manifest_data['start_time'] == start_time.isoformat()
         assert manifest_data['finish_time'] == finish_time.isoformat()
+        assert manifest_data['duration_seconds'] == (finish_time - start_time).total_seconds()
         assert manifest_data['file_format'] == 'jsonl'
+        
+        expected_stats = {
+            "items_scraped": 150,
+            "requests_made": 200,
+            "errors_count": 5
+        }
+        assert manifest_data['stats'] == expected_stats
 
     def test_generate_run_id(self):
         """
