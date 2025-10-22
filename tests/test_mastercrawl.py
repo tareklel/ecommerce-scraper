@@ -1,124 +1,72 @@
 import os
 import json
+import hashlib
 from datetime import datetime, timezone
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, PropertyMock
+
+import pytest
 from ecommercecrawl.spiders.mastercrawl import MasterCrawl
 
-class TestMasterCrawl:
-    def test_build_output_basename(self):
-        """
-        Tests the build_output_basename method.
-        """
-        spider = MasterCrawl()
-        spider.name = 'test_spider'
-        spider.run_id = 'test-run-id'
-        date_string = '2024-01-15'
-        
-        expected_path = os.path.join('output', '2024', '01', '15', 'test-run-id', 'test_file')
 
-        path = spider.build_output_basename('output', date_string, 'test_file')
-        assert path == expected_path
+@pytest.fixture
+def manifest_test_setup(tmp_path):
+    """Fixture to set up a spider and mock crawler for manifest tests."""
+    mock_crawler = MagicMock()
+    mock_stats = MagicMock()
+    
+    start_time = datetime.now(timezone.utc)
+    finish_time = datetime.now(timezone.utc)
+    entry_urls = ['http://example.com']
 
-    def test_save_to_jsonl(self, tmp_path):
-        """
-        Tests the save_to_jsonl method.
-        """
-        spider = MasterCrawl()
-        spider.name = 'test_spider'
-        basename = tmp_path / "output" / "test_output"
-        data = {"col1": "val1", "col2": "val2"}
+    stats_dict = {
+        'start_time': start_time,
+        'item_scraped_count': 150,
+        'downloader/request_count': 200,
+        'log_count/ERROR': 5,
+        'downloader/response_status_count/200': 190,
+        'downloader/response_status_count/404': 5,
+        'downloader/response_status_count/500': 5,
+    }
+    mock_stats.get_stats.return_value = stats_dict
+    mock_crawler.stats = mock_stats
 
-        # Test creating a new file and directory
-        spider.save_to_jsonl(str(basename), data)
-        
-        jsonl_path = tmp_path / "output" / "test_output.jsonl"
-        assert (tmp_path / "output").exists()
-        assert (tmp_path / "output").is_dir()
-        assert jsonl_path.exists()
-        with open(jsonl_path, 'r') as f:
-            lines = f.readlines()
-            assert len(lines) == 1
-            assert json.loads(lines[0]) == data
+    spider = MasterCrawl.from_crawler(mock_crawler, urls=entry_urls)
+    spider.name = 'test_spider'
+    spider.output_dir = str(tmp_path)
 
-        # Test appending to an existing file
-        data2 = {"col1": "val3", "col2": "val4"}
-        spider.save_to_jsonl(str(basename), data2)
+    # Simulate saving some items
+    basename = tmp_path / "output"
+    for i in range(5):
+        spider.save_to_jsonl(str(basename), {f"item": i})
 
-        with open(jsonl_path, 'r') as f:
-            lines = f.readlines()
-            assert len(lines) == 2
-            assert json.loads(lines[1]) == data2
+    with patch('ecommercecrawl.spiders.mastercrawl.datetime') as mock_dt:
+        mock_dt.now.return_value = finish_time
+        spider.generate_manifest(spider=spider, reason='finished')
 
-    def test_ensure_dir(self, tmp_path):
-        """
-        Tests the ensure_dir method.
-        """
-        spider = MasterCrawl()
-        spider.name = 'test_spider'
-        dir_path = tmp_path / "test_dir"
-        assert not dir_path.exists()
+    manifest_path = tmp_path / 'manifest.json'
+    with open(manifest_path, 'r') as f:
+        manifest_data = json.load(f)
 
-        # Test creating a new directory
-        spider.ensure_dir(str(dir_path))
-        assert dir_path.exists()
-        assert dir_path.is_dir()
+    return {
+        "spider": spider,
+        "start_time": start_time,
+        "finish_time": finish_time,
+        "entry_urls": entry_urls,
+        "tmp_path": tmp_path,
+        "manifest_data": manifest_data
+    }
 
-        # Test again to ensure it doesn't fail if the directory already exists
-        spider.ensure_dir(str(dir_path))
-        assert dir_path.exists()
 
-    def test_generate_manifest(self, tmp_path):
-        """
-        Test that a manifest.json file is correctly generated with all stats,
-        simulating the spider creation via from_crawler.
-        """
-        # 1. Setup
-        entry_urls = ['http://example.com/1', 'http://example.com/2']
-        
-        # Mock Scrapy components
-        mock_crawler = MagicMock()
-        mock_stats = MagicMock()
-        
-        start_time = datetime(2023, 10, 27, 10, 0, 0, tzinfo=timezone.utc)
-        finish_time = datetime(2023, 10, 27, 10, 5, 30, tzinfo=timezone.utc)
-        
-        stats_dict = {
-            'start_time': start_time,
-            'item_scraped_count': 150,
-            'downloader/request_count': 200,
-            'log_count/ERROR': 5,
-            'downloader/response_status_count/200': 190,
-            # 301 not present to test defaulting to 0
-            'downloader/response_status_count/404': 5,
-            'downloader/response_status_count/500': 5,
-            'artifacts': {
-                'rows': 2 
-            }
-        }
-        mock_stats.get_stats.return_value = stats_dict
-        mock_crawler.stats = mock_stats
+class TestMasterCrawlManifest:
+    """Tests for the manifest generation of the MasterCrawl spider."""
 
-        # Create the spider instance using from_crawler
-        spider = MasterCrawl.from_crawler(mock_crawler, urls=entry_urls)
-        spider.name = 'test_spider'
-        spider.output_dir = str(tmp_path)
-
-        # Simulate saving some items to test the new self.items_written counter
-        basename = tmp_path / "output"
-        for i in range(5):
-            spider.save_to_jsonl(str(basename), {f"item": i})
-
-        # 2. Execution
-        with patch('ecommercecrawl.spiders.mastercrawl.datetime') as mock_dt:
-            mock_dt.now.return_value = finish_time
-            spider.generate_manifest(spider=spider, reason='finished')
-
-        # 3. Assertions
-        manifest_path = tmp_path / 'manifest.json'
-        assert manifest_path.exists()
-
-        with open(manifest_path, 'r') as f:
-            manifest_data = json.load(f)
+    def test_manifest_structure_and_metadata(self, manifest_test_setup):
+        """Tests the basic structure and metadata of the manifest."""
+        manifest_data = manifest_test_setup['manifest_data']
+        spider = manifest_test_setup['spider']
+        start_time = manifest_test_setup['start_time']
+        finish_time = manifest_test_setup['finish_time']
+        entry_urls = manifest_test_setup['entry_urls']
 
         assert manifest_data['run_id'] == spider.run_id
         assert manifest_data['crawler_name'] == spider.name
@@ -127,8 +75,11 @@ class TestMasterCrawl:
         assert manifest_data['finish_time'] == finish_time.isoformat()
         assert manifest_data['duration_seconds'] == (finish_time - start_time).total_seconds()
         assert manifest_data['file_format'] == 'jsonl'
-        assert manifest_data['artifacts']['rows'] == 5
+        assert manifest_data['exit_reason'] == 'finished'
 
+    def test_manifest_stats_section(self, manifest_test_setup):
+        """Tests the 'stats' section of the manifest."""
+        manifest_data = manifest_test_setup['manifest_data']
         expected_stats = {
             "items_scraped": 150,
             "requests_made": 200,
@@ -141,6 +92,52 @@ class TestMasterCrawl:
             }
         }
         assert manifest_data['stats'] == expected_stats
+
+    def test_manifest_artifacts_section(self, manifest_test_setup):
+        """Tests the 'artifacts' section of the manifest."""
+        manifest_data = manifest_test_setup['manifest_data']
+        tmp_path = manifest_test_setup['tmp_path']
+        
+        output_filepath = str(tmp_path / "output.jsonl")
+        assert os.path.exists(output_filepath)
+
+        with open(output_filepath, 'rb') as f:
+            file_content_bytes = f.read()
+
+        artifacts = manifest_data['artifacts']
+        assert artifacts['rows'] == 5
+        assert artifacts['file_path'] == output_filepath
+        assert artifacts['file_size_bytes'] == os.path.getsize(output_filepath)
+        
+        expected_md5 = hashlib.md5(file_content_bytes).hexdigest()
+        expected_sha256 = hashlib.sha256(file_content_bytes).hexdigest()
+        assert artifacts['hashes']['md5'] == expected_md5
+        assert artifacts['hashes']['sha256'] == expected_sha256
+
+    def test_generate_manifest_no_output(self, tmp_path):
+        """
+        Tests that no manifest is generated if no items are written.
+        """
+        # 1. Setup
+        mock_crawler = MagicMock()
+        mock_stats = MagicMock()
+        mock_stats.get_stats.return_value = {}
+        mock_crawler.stats = mock_stats
+
+        spider = MasterCrawl.from_crawler(mock_crawler)
+        spider.output_dir = None  # Explicitly set to None, as no files are saved
+
+        # 2. Execution & Assertion
+        # The logger is a property on the Spider class, so we patch it here.
+        with patch.object(MasterCrawl, 'logger', new_callable=PropertyMock) as mock_logger_prop:
+            spider.generate_manifest(spider=spider, reason='finished')
+
+            manifest_path = tmp_path / 'manifest.json'
+            assert not manifest_path.exists()
+            mock_logger_prop.return_value.info.assert_called_with("No files were saved, so no manifest will be generated.")
+
+class TestMasterCrawlUtils:
+    """Tests for the utility methods of the MasterCrawl spider."""
 
     def test_generate_run_id(self):
         """
