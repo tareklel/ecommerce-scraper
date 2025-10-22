@@ -115,6 +115,20 @@ class TestMasterCrawlManifest:
         assert artifacts['hashes']['md5'] == expected_md5
         assert artifacts['hashes']['sha256'] == expected_sha256
 
+    def test_manifest_bronze_verification(self, post_closure_test_setup):
+        """Tests the 'bronze_verification' section of the manifest."""
+        manifest_data = post_closure_test_setup['manifest_data']
+        artifacts = manifest_data['artifacts']
+
+        assert 'bronze_verification' in manifest_data
+        bronze_verification = manifest_data['bronze_verification']
+
+        assert 'expected' in bronze_verification
+        expected_verification = bronze_verification['expected']
+
+        assert expected_verification['file_size_bytes'] == artifacts.get('file_size_bytes', 0)
+        assert expected_verification['hashes'] == artifacts.get('hashes', {}).get('sha256', '')
+
     def test_generate_manifest_no_output(self, tmp_path):
         """
         Tests that no manifest is generated if no items are written.

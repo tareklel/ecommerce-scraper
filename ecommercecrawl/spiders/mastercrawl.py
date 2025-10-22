@@ -170,6 +170,14 @@ class MasterCrawl(Spider):
             "artifacts": self._build_manifest_artifacts()
         }
 
+        # add manifest bronze_verification
+        manifest["bronze_verification"] = {
+            "expected": {
+                "file_size_bytes": manifest["artifacts"].get("file_size_bytes", 0),
+                "hashes": manifest["artifacts"]["hashes"].get("sha256", "") if "hashes" in manifest["artifacts"] else ""
+            }
+        }
+
         manifest_path = os.path.join(self.output_dir, 'manifest.json')
         with open(manifest_path, 'w', encoding='utf-8') as f:
             json.dump(manifest, f, indent=4)
