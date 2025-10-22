@@ -1,6 +1,8 @@
 import os
 import hashlib
 import json
+import gzip
+import shutil
 from datetime import datetime, timezone
 from scrapy import Spider
 from scrapy import signals
@@ -65,7 +67,7 @@ class MasterCrawl(Spider):
         }
         
         # Connect the generate_manifest method to the spider_closed signal
-        crawler.signals.connect(spider.generate_manifest, signal=signals.spider_closed)
+        crawler.signals.connect(spider.post_closure, signal=signals.spider_closed)
         
         return spider
 
@@ -85,7 +87,65 @@ class MasterCrawl(Spider):
         
         self.items_written += 1
 
-    def generate_manifest(self, spider, reason):
+    def post_closure(self, spider, reason):
+        """Called when the spider is closed to perform post-crawl actions."""
+        self._sample_output()
+        self._gzip_output()
+        self._generate_manifest(spider, reason)
+
+    def _gzip_output(self):
+        """Gzips the output file and updates the output_filepath."""
+        if not self.output_filepath or not os.path.exists(self.output_filepath):
+            self.logger.info("Output file not found, skipping gzip.")
+            return
+
+        gzipped_filepath = f"{self.output_filepath}.gz"
+        
+        try:
+            with open(self.output_filepath, 'rb') as f_in:
+                with gzip.open(gzipped_filepath, 'wb') as f_out:
+                    shutil.copyfileobj(f_in, f_out)
+            
+            self.logger.info(f"Gzipped output file to {gzipped_filepath}")
+            
+            original_filepath = self.output_filepath
+            self.output_filepath = gzipped_filepath
+            
+            os.remove(original_filepath)
+            self.logger.info(f"Removed original output file: {original_filepath}")
+
+        except Exception as e:
+            self.logger.error(f"Error gzipping file {original_filepath}: {e}")
+
+    def _sample_output(self):
+        """Takes at most three samples from the output file."""
+        if not self.output_filepath or not os.path.exists(self.output_filepath):
+            self.logger.info("Output file not found, skipping sampling.")
+            return
+
+        samples = []
+        try:
+            with open(self.output_filepath, 'r', encoding='utf-8') as f:
+                for i, line in enumerate(f):
+                    if i >= 3:
+                        break
+                    samples.append(line)
+        except Exception as e:
+            self.logger.error(f"Error reading samples from {self.output_filepath}: {e}")
+            return
+
+        if samples:
+            # Correctly join the path for the sample file
+            sample_filename = f"sample_{os.path.basename(self.output_filepath)}"
+            sample_filepath = os.path.join(self.output_dir, sample_filename)
+            try:
+                with open(sample_filepath, 'w', encoding='utf-8') as f:
+                    f.writelines(samples)
+                self.logger.info(f"Saved {len(samples)} samples to {sample_filepath}")
+            except Exception as e:
+                self.logger.error(f"Error writing samples to {sample_filepath}: {e}")
+
+    def _generate_manifest(self, spider, reason):
         """
         Generates a manifest.json file at the end of the crawl.
         This method is connected to the spider_closed signal.
@@ -107,8 +167,7 @@ class MasterCrawl(Spider):
             "finish_time": finish_time.isoformat(),
             "duration_seconds": (finish_time - start_time).total_seconds() if start_time else None,
             "stats": self._build_manifest_stats(stats),
-            "artifacts": self._build_manifest_artifacts(),
-            "file_format": "jsonl"
+            "artifacts": self._build_manifest_artifacts()
         }
 
         manifest_path = os.path.join(self.output_dir, 'manifest.json')
@@ -140,6 +199,8 @@ class MasterCrawl(Spider):
             artifacts_data["file_path"] = self.output_filepath
             artifacts_data["file_size_bytes"] = os.path.getsize(self.output_filepath)
             artifacts_data["hashes"] = self._calculate_hashes(self.output_filepath)
+            artifacts_data["file_format"] = 'jsonl.gz' if self.output_filepath.endswith('.gz') else 'jsonl'
+            artifacts_data["compressed"] = self.output_filepath.endswith('.gz')
         
         return artifacts_data
     

@@ -9,7 +9,7 @@ from ecommercecrawl.spiders.mastercrawl import MasterCrawl
 
 
 @pytest.fixture
-def manifest_test_setup(tmp_path):
+def post_closure_test_setup(tmp_path):
     """Fixture to set up a spider and mock crawler for manifest tests."""
     mock_crawler = MagicMock()
     mock_stats = MagicMock()
@@ -41,7 +41,7 @@ def manifest_test_setup(tmp_path):
 
     with patch('ecommercecrawl.spiders.mastercrawl.datetime') as mock_dt:
         mock_dt.now.return_value = finish_time
-        spider.generate_manifest(spider=spider, reason='finished')
+        spider.post_closure(spider=spider, reason='finished')
 
     manifest_path = tmp_path / 'manifest.json'
     with open(manifest_path, 'r') as f:
@@ -60,13 +60,13 @@ def manifest_test_setup(tmp_path):
 class TestMasterCrawlManifest:
     """Tests for the manifest generation of the MasterCrawl spider."""
 
-    def test_manifest_structure_and_metadata(self, manifest_test_setup):
+    def test_manifest_structure_and_metadata(self, post_closure_test_setup):
         """Tests the basic structure and metadata of the manifest."""
-        manifest_data = manifest_test_setup['manifest_data']
-        spider = manifest_test_setup['spider']
-        start_time = manifest_test_setup['start_time']
-        finish_time = manifest_test_setup['finish_time']
-        entry_urls = manifest_test_setup['entry_urls']
+        manifest_data = post_closure_test_setup['manifest_data']
+        spider = post_closure_test_setup['spider']
+        start_time = post_closure_test_setup['start_time']
+        finish_time = post_closure_test_setup['finish_time']
+        entry_urls = post_closure_test_setup['entry_urls']
 
         assert manifest_data['run_id'] == spider.run_id
         assert manifest_data['crawler_name'] == spider.name
@@ -74,12 +74,11 @@ class TestMasterCrawlManifest:
         assert manifest_data['start_time'] == start_time.isoformat()
         assert manifest_data['finish_time'] == finish_time.isoformat()
         assert manifest_data['duration_seconds'] == (finish_time - start_time).total_seconds()
-        assert manifest_data['file_format'] == 'jsonl'
         assert manifest_data['exit_reason'] == 'finished'
 
-    def test_manifest_stats_section(self, manifest_test_setup):
+    def test_manifest_stats_section(self, post_closure_test_setup):
         """Tests the 'stats' section of the manifest."""
-        manifest_data = manifest_test_setup['manifest_data']
+        manifest_data = post_closure_test_setup['manifest_data']
         expected_stats = {
             "items_scraped": 150,
             "requests_made": 200,
@@ -93,12 +92,12 @@ class TestMasterCrawlManifest:
         }
         assert manifest_data['stats'] == expected_stats
 
-    def test_manifest_artifacts_section(self, manifest_test_setup):
+    def test_manifest_artifacts_section(self, post_closure_test_setup):
         """Tests the 'artifacts' section of the manifest."""
-        manifest_data = manifest_test_setup['manifest_data']
-        tmp_path = manifest_test_setup['tmp_path']
+        manifest_data = post_closure_test_setup['manifest_data']
+        tmp_path = post_closure_test_setup['tmp_path']
         
-        output_filepath = str(tmp_path / "output.jsonl")
+        output_filepath = str(tmp_path / "output.jsonl.gz")
         assert os.path.exists(output_filepath)
 
         with open(output_filepath, 'rb') as f:
@@ -108,6 +107,8 @@ class TestMasterCrawlManifest:
         assert artifacts['rows'] == 5
         assert artifacts['file_path'] == output_filepath
         assert artifacts['file_size_bytes'] == os.path.getsize(output_filepath)
+        assert artifacts['file_format'] == 'jsonl.gz'
+        assert artifacts['compressed'] is True
         
         expected_md5 = hashlib.md5(file_content_bytes).hexdigest()
         expected_sha256 = hashlib.sha256(file_content_bytes).hexdigest()
@@ -130,7 +131,7 @@ class TestMasterCrawlManifest:
         # 2. Execution & Assertion
         # The logger is a property on the Spider class, so we patch it here.
         with patch.object(MasterCrawl, 'logger', new_callable=PropertyMock) as mock_logger_prop:
-            spider.generate_manifest(spider=spider, reason='finished')
+            spider._generate_manifest(spider=spider, reason='finished')
 
             manifest_path = tmp_path / 'manifest.json'
             assert not manifest_path.exists()
