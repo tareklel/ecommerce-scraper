@@ -117,11 +117,11 @@ class FFSpider(MasterCrawl):
         Orchestrates PDP data extraction, persistence, and image downloading.
         """
         data = self._populate_pdp_data(response)
-        date_string = data['crawl_date']
-        outfile_base = self.build_output_basename(constants.OUTPUT_DIR, date_string, 'pdps')
+        #date_string = data['crawl_date']
+        #outfile_base = self.build_output_basename(constants.OUTPUT_DIR, date_string, 'pdps')
 
         # Persist
-        self.save_to_jsonl(outfile_base, data)
+        #self.save_to_jsonl(outfile_base, data)
 
         # Images
         # yield from self.download_images(date_string, response.url, data.get('image_url'))

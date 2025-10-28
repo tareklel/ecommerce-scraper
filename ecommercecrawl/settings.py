@@ -83,8 +83,11 @@ DOWNLOADER_MIDDLEWARES = {
 # Configure item pipelines
 # See https://docs.scrapy.org/en/latest/topics/item-pipeline.html
 ITEM_PIPELINES = {
+   "ecommercecrawl.pipelines.JsonlWriterPipeline": 200,
    "ecommercecrawl.pipelines.EcommercecrawlPipeline": 300,
    "ecommercecrawl.pipelines.PostCrawlPipeline": 900,
 }
 
+# Enable and configure the AutoThrottle extension (disabled by default)
+# See https://docs.scrapy.org/en/latest/topics/autothrottle.html
 FILES_STORE = 'output'

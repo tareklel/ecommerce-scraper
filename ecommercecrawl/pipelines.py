@@ -20,6 +20,66 @@ class EcommercecrawlPipeline:
         return item
 
 
+class JsonlWriterPipeline:
+    def __init__(self):
+        self.file = None
+        self.items_written = 0
+        self.output_filepath = None
+        self.output_dir = None
+
+    @classmethod
+    def from_crawler(cls, crawler):
+        pipeline = cls()
+        crawler.signals.connect(pipeline.spider_opened, signals.spider_opened)
+        crawler.signals.connect(pipeline.spider_closed, signals.spider_closed)
+        return pipeline
+
+    def spider_opened(self, spider):
+        # Create a dummy filepath to establish the output_dir, which is used by other pipelines
+        # The final output_filepath will be set in process_item
+        if not self.output_dir:
+            basename = spider.build_output_basename(
+                output_dir='output',
+                date_string=datetime.now(timezone.utc).strftime('%Y-%m-%d'),
+                filename=spider.name
+            )
+            self.output_dir = os.path.dirname(f'{basename}.jsonl')
+            spider.output_dir = self.output_dir
+
+    def spider_closed(self, spider):
+        if self.file:
+            self.file.close()
+        spider.items_written = self.items_written
+        spider.output_filepath = self.output_filepath
+
+    def process_item(self, item, spider):
+        if not self.file:
+            # The output path is determined by the first item processed
+            # This assumes all items from a spider go to the same file
+            basename = spider.build_output_basename(
+                output_dir='output',
+                date_string=datetime.now(timezone.utc).strftime('%Y-%m-%d'),
+                filename=spider.name
+            )
+            self.output_filepath = f'{basename}.jsonl'
+            self.output_dir = os.path.dirname(self.output_filepath)
+            self.ensure_dir(self.output_dir)
+            self.file = open(self.output_filepath, 'a', encoding='utf-8')
+
+            # Update spider attributes for other pipelines
+            spider.output_dir = self.output_dir
+            spider.output_filepath = self.output_filepath
+
+        line = json.dumps(ItemAdapter(item).asdict(), ensure_ascii=False) + "\n"
+        self.file.write(line)
+        self.items_written += 1
+        return item
+
+    def ensure_dir(self, directory_path):
+        """Ensures that a directory exists, creating it if necessary."""
+        os.makedirs(directory_path, exist_ok=True)
+
+
 class PostCrawlPipeline:
     def __init__(self):
         self.output_dir = None
@@ -75,20 +135,12 @@ class PostCrawlPipeline:
             return
 
         samples = []
-        try:
-            # Determine if the file is gzipped and open accordingly
-            if self.output_filepath.endswith('.gz'):
-                with gzip.open(self.output_filepath, 'rt', encoding='utf-8') as f:
-                    for i, line in enumerate(f):
-                        if i >= 3:
-                            break
-                        samples.append(line)
-            else:
-                with open(self.output_filepath, 'r', encoding='utf-8') as f:
-                    for i, line in enumerate(f):
-                        if i >= 3:
-                            break
-                        samples.append(line)
+        try:  
+            with open(self.output_filepath, 'r', encoding='utf-8') as f:
+                for i, line in enumerate(f):
+                    if i >= 3:
+                        break
+                    samples.append(line)
         except Exception as e:
             spider.logger.error(f"Error reading samples from {self.output_filepath}: {e}")
             return

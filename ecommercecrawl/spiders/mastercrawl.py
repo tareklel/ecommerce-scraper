@@ -70,11 +70,7 @@ class MasterCrawl(Spider):
             f.write(json.dumps(data, ensure_ascii=False) + '\n')
         
         self.items_written += 1
-    
-    def ensure_dir(self, directory_path):
-        """Ensures that a directory exists, creating it if necessary."""
-        os.makedirs(directory_path, exist_ok=True)
-    
+
     def build_output_basename(self, output_dir, date_string: str, filename: str) -> str:
         year, month, day = date_string.split('-')
         return os.path.join(output_dir, year, month, day, self.run_id, filename)

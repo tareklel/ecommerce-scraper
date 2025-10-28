@@ -206,15 +206,12 @@ class TestFFSpider:
             'image_url': 'https://example.com/image.jpg'
         }
         mock_populate_pdp_data.return_value = mock_data
-        mock_build_output_basename.return_value = '/path/to/output/2024/01/01/test-run-id/pdps'
 
         # Call the method under test
         list(spider.parse_pdp(mock_response))
 
         # Assertions
         mock_populate_pdp_data.assert_called_once_with(mock_response)
-        mock_build_output_basename.assert_called_once_with('output', '2024-01-01', 'pdps')
-        mock_save_to_jsonl.assert_called_once_with('/path/to/output/2024/01/01/test-run-id/pdps', mock_data)
 
     @patch('ecommercecrawl.spiders.farfetch_crawl.rules')
     def test_parse_plp_first_page(self, mock_rules):

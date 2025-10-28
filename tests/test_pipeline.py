@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch, PropertyMock
 
 import pytest
 from ecommercecrawl.spiders.mastercrawl import MasterCrawl
-from ecommercecrawl.pipelines import PostCrawlPipeline
+from ecommercecrawl.pipelines import PostCrawlPipeline, JsonlWriterPipeline
 
 
 @pytest.fixture
@@ -42,6 +42,77 @@ def pipeline_setup(tmp_path):
         spider.items_written = lines_to_write
         
         yield pipeline, spider, mock_crawler
+
+
+@pytest.fixture
+def jsonl_writer_setup(tmp_path):
+    """Fixture for setting up the JsonlWriterPipeline tests."""
+    mock_crawler = MagicMock()
+    with patch('ecommercecrawl.spiders.mastercrawl.MasterCrawl.logger', new_callable=PropertyMock) as mock_logger:
+        mock_logger.return_value = MagicMock()
+
+        spider = MasterCrawl.from_crawler(mock_crawler)
+        spider.name = 'test_spider'
+        spider.run_id = "test_run_id"
+        
+        # Mock build_output_basename to return a predictable path
+        output_dir = tmp_path / "output"
+        output_basename = output_dir / "test_spider"
+        spider.build_output_basename = MagicMock(return_value=str(output_basename))
+
+        pipeline = JsonlWriterPipeline.from_crawler(mock_crawler)
+        
+        yield pipeline, spider, mock_crawler
+
+
+class TestJsonlWriterPipeline:
+    """Tests for the JsonlWriterPipeline."""
+
+    def test_spider_opened(self, jsonl_writer_setup):
+        """Tests that spider_opened correctly sets the output directory."""
+        pipeline, spider, _ = jsonl_writer_setup
+        
+        pipeline.spider_opened(spider)
+        
+        assert spider.output_dir is not None
+        assert "output" in spider.output_dir
+
+    def test_process_item(self, jsonl_writer_setup):
+        """Tests that process_item writes items to a file and updates attributes."""
+        pipeline, spider, _ = jsonl_writer_setup
+        
+        # Manually call spider_opened to set up the output directory
+        pipeline.spider_opened(spider)
+
+        item = {'data': 'test'}
+        pipeline.process_item(item, spider)
+        
+        # Close the file to ensure the buffer is flushed to disk before reading
+        pipeline.file.close()
+        
+        assert pipeline.file is not None
+        assert pipeline.items_written == 1
+        assert spider.output_filepath is not None
+        assert os.path.exists(spider.output_filepath)
+        
+        with open(spider.output_filepath, 'r') as f:
+            line = f.readline()
+            assert json.loads(line) == item
+
+    def test_spider_closed(self, jsonl_writer_setup):
+        """Tests that spider_closed finalizes spider attributes."""
+        pipeline, spider, _ = jsonl_writer_setup
+        
+        # Simulate opening the pipeline and processing an item
+        pipeline.spider_opened(spider)
+        item = {'data': 'test'}
+        pipeline.process_item(item, spider)
+        
+        # Now, close the spider
+        pipeline.spider_closed(spider)
+        
+        assert spider.items_written == 1
+        assert spider.output_filepath == pipeline.output_filepath
 
 
 @pytest.fixture
