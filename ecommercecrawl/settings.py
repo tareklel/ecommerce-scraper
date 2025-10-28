@@ -84,7 +84,7 @@ DOWNLOADER_MIDDLEWARES = {
 # See https://docs.scrapy.org/en/latest/topics/item-pipeline.html
 ITEM_PIPELINES = {
    "ecommercecrawl.pipelines.EcommercecrawlPipeline": 300,
-   "ecommercecrawl.pipelines.ManifestPipeline": 900,
+   "ecommercecrawl.pipelines.PostCrawlPipeline": 900,
 }
 
 FILES_STORE = 'output'

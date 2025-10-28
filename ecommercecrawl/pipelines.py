@@ -11,6 +11,8 @@ import json
 import hashlib
 from datetime import datetime, timezone
 from scrapy import signals
+import gzip
+import shutil
 
 
 class EcommercecrawlPipeline:
@@ -46,8 +48,10 @@ class PostCrawlPipeline:
         self.crawler_name = spider.name
         self.entry_points = spider.entry_points
         self.stats = self.crawler.stats.get_stats()
+        self._sample_output(spider)
+        self._gzip_output(spider)
         self._generate_manifest(spider, reason)
-
+    
     @staticmethod
     def _calculate_hashes(filepath):
         """Calculates MD5 and SHA256 hashes for a given file."""
@@ -63,6 +67,67 @@ class PostCrawlPipeline:
             return {name: h.hexdigest() for name, h in hashes.items()}
         except FileNotFoundError:
             return {}
+
+    def _sample_output(self, spider):
+        """Takes at most three samples from the output file."""
+        if not self.output_filepath or not os.path.exists(self.output_filepath):
+            spider.logger.info("Output file not found, skipping sampling.")
+            return
+
+        samples = []
+        try:
+            # Determine if the file is gzipped and open accordingly
+            if self.output_filepath.endswith('.gz'):
+                with gzip.open(self.output_filepath, 'rt', encoding='utf-8') as f:
+                    for i, line in enumerate(f):
+                        if i >= 3:
+                            break
+                        samples.append(line)
+            else:
+                with open(self.output_filepath, 'r', encoding='utf-8') as f:
+                    for i, line in enumerate(f):
+                        if i >= 3:
+                            break
+                        samples.append(line)
+        except Exception as e:
+            spider.logger.error(f"Error reading samples from {self.output_filepath}: {e}")
+            return
+
+        if samples:
+            # Correctly join the path for the sample file
+            sample_filename = f"sample_{os.path.basename(self.output_filepath)}"
+            sample_filepath = os.path.join(self.output_dir, sample_filename)
+            try:
+                with open(sample_filepath, 'w', encoding='utf-8') as f:
+                    f.writelines(samples)
+                spider.logger.info(f"Saved {len(samples)} samples to {sample_filepath}")
+            except Exception as e:
+                spider.logger.error(f"Error writing samples to {sample_filepath}: {e}")
+
+    def _gzip_output(self, spider):
+        """Gzips the output file and updates the output_filepath."""
+        if not self.output_filepath or not os.path.exists(self.output_filepath) or self.output_filepath.endswith('.gz'):
+            spider.logger.info("Output file not found, already gzipped, or skipping gzip.")
+            return
+
+        gzipped_filepath = f"{self.output_filepath}.gz"
+        
+        try:
+            with open(self.output_filepath, 'rb') as f_in:
+                with gzip.open(gzipped_filepath, 'wb') as f_out:
+                    shutil.copyfileobj(f_in, f_out)
+            
+            spider.logger.info(f"Gzipped output file to {gzipped_filepath}")
+            
+            original_filepath = self.output_filepath
+            self.output_filepath = gzipped_filepath
+            spider.output_filepath = gzipped_filepath # Also update spider's attribute
+            
+            os.remove(original_filepath)
+            spider.logger.info(f"Removed original output file: {original_filepath}")
+
+        except Exception as e:
+            spider.logger.error(f"Error gzipping file {original_filepath}: {e}")
 
     def _generate_manifest(self, spider, reason):
         """
