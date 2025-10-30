@@ -1,12 +1,7 @@
-# Scrapy settings for ecommercecrawl project
-#
-# For simplicity, this file contains only settings considered important or
-# commonly used. You can find more settings consulting the documentation:
-#
-#     https://docs.scrapy.org/en/latest/topics/settings.html
-#     https://docs.scrapy.org/en/latest/topics/downloader-middleware.html
-#     https://docs.scrapy.org/en/latest/topics/spider-middleware.html
+import os 
 
+
+ENV = os.getenv("APP_ENV", "dev").lower()
 BOT_NAME = 'ecommercecrawl'
 FARFETCH_URLS_PATH = "resources/farfetch_urls.csv"
 
@@ -87,6 +82,17 @@ ITEM_PIPELINES = {
    "ecommercecrawl.pipelines.EcommercecrawlPipeline": 300,
    "ecommercecrawl.pipelines.PostCrawlPipeline": 900,
 }
+
+# Logging
+LOG_FORMAT = '%(asctime)s [%(name)s] %(levelname)s: %(message)s'
+
+if ENV == "prod":
+    LOG_LEVEL = "INFO"
+    LOG_FILE = "logs/scrapy.log"
+    if not os.path.exists('logs'):
+        os.makedirs('logs')
+else:
+    LOG_LEVEL = "DEBUG"
 
 # Enable and configure the AutoThrottle extension (disabled by default)
 # See https://docs.scrapy.org/en/latest/topics/autothrottle.html
