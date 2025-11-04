@@ -5,6 +5,8 @@ from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch, PropertyMock
 
 import pytest
+import boto3
+from moto import mock_aws
 from ecommercecrawl.spiders.mastercrawl import MasterCrawl
 from ecommercecrawl.pipelines import PostCrawlPipeline, JsonlWriterPipeline
 
@@ -289,3 +291,52 @@ class TestPostCrawlPipelineHelpers:
             lines = f.readlines()
             assert len(lines) == 3
             assert json.loads(lines[0]) == {"item": 0}
+
+
+class TestS3Upload:
+    """Tests for the S3 upload functionality in the pipeline."""
+
+    @mock_aws
+    def test_upload_to_s3_success(self, pipeline_setup):
+        """
+        Tests that _upload_to_s3 correctly uploads files from the output directory.
+        """
+        # 1. Setup
+        s3_client = boto3.client("s3", region_name="us-east-1")
+        s3_bucket = "test-bucket"
+        s3_client.create_bucket(Bucket=s3_bucket)
+
+        pipeline, spider, mock_crawler = pipeline_setup
+        
+        # Mock S3 bucket setting
+        mock_crawler.settings.get.side_effect = lambda key: s3_bucket if key == 'S3_BUCKET' else None
+
+        # Manually set attributes on pipeline that are normally set in spider_closed
+        pipeline.output_dir = spider.output_dir
+        pipeline.crawler_name = spider.name
+        pipeline.run_id = spider.run_id
+
+        # The pipeline_setup fixture already creates 'output.jsonl'.
+        # We'll create another file to ensure all files in the directory are uploaded.
+        manifest_path = os.path.join(spider.output_dir, "manifest.json")
+        with open(manifest_path, "w") as f:
+            f.write('{"run_id": "test_run_id"}')
+
+        # 2. Execute
+        pipeline._upload_to_s3(spider)
+
+        # 3. Verify
+        s3_prefix = f"crawls/{spider.name}/{spider.run_id}"
+        response = s3_client.list_objects_v2(Bucket=s3_bucket, Prefix=s3_prefix)
+        
+        assert 'Contents' in response, "S3 bucket is empty."
+        
+        uploaded_keys = {obj['Key'] for obj in response['Contents']}
+        
+        # The output.jsonl file is created by the pipeline_setup fixture
+        expected_keys = {
+            f"{s3_prefix}/manifest.json",
+            f"{s3_prefix}/{os.path.basename(spider.output_filepath)}"
+        }
+        
+        assert uploaded_keys == expected_keys

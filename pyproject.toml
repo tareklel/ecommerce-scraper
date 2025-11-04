@@ -13,6 +13,7 @@ scrapy-user-agents = "^0.1.1"
 pandas = "^1.5.0"
 scrapy-proxies = "^0.4"
 pytest = "^8.4.2"
+moto = "^5.1.16"
 
 [tool.poetry.group.dev.dependencies]
 

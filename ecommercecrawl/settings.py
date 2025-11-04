@@ -97,3 +97,4 @@ else:
 # Enable and configure the AutoThrottle extension (disabled by default)
 # See https://docs.scrapy.org/en/latest/topics/autothrottle.html
 FILES_STORE = 'output'
+S3_BUCKET = os.getenv("S3_BUCKET_NAME")
