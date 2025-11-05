@@ -8,8 +8,8 @@ def main():
     parser = argparse.ArgumentParser(description="E-commerce scraper CLI.")
     parser.add_argument('spider', choices=['farfetch'], help='The spider to run.')
     parser.add_argument('urls', help='URL to crawl or path to a CSV file with URLs.')
-    parser.add_argument('--limit', type=int, help='Limit the number of pages to crawl.')
     parser.add_argument('--env', choices=['dev', 'prod'], default='dev', help='Environment setting (dev or prod).')
+    parser.add_argument('--limit', type=int, help='Limit the number of pages to crawl.')
 
     args = parser.parse_args()
 
