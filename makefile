@@ -1,3 +1,7 @@
+# load variables form .env file
+include .env
+export $(shell sed 's/=.*//' .env)
+
 IMAGE_NAME = ecommerce-scraper
 FF_TEST_URL = https://www.farfetch.com/ae/shopping/women/louis-vuitton-pre-owned/clothing-1/items.aspx
 
@@ -19,6 +23,12 @@ run-ff-local:
 
 pytest-local:
 	poetry run pytest -v
+
+run-ff-test-upload:
+	AWS_PROFILE=$(AWS_PROFILE) \
+	S3_BUCKET=$(S3_BUCKET) \
+	S3_UPLOAD_ENABLED=true \
+	poetry run python3 run_crawler.py farfetch $(FF_TEST_URL)
 
 docker-run-ff-dev:
 	docker run --rm -v $(PWD)/output:/app/output $(IMAGE_NAME):latest run_crawler.py farfetch $(FF_TEST_URL) --env dev
