@@ -85,16 +85,10 @@ ITEM_PIPELINES = {
 
 # Logging
 LOG_FORMAT = '%(asctime)s [%(name)s] %(levelname)s: %(message)s'
+LOG_LEVEL = "DEBUG"
 
-if ENV == "prod":
-    LOG_LEVEL = "INFO"
-    LOG_FILE = "logs/scrapy.log"
-    if not os.path.exists('logs'):
-        os.makedirs('logs')
-else:
-    LOG_LEVEL = "DEBUG"
 
 # Enable and configure the AutoThrottle extension (disabled by default)
 # See https://docs.scrapy.org/en/latest/topics/autothrottle.html
 FILES_STORE = 'output'
-S3_BUCKET = os.getenv("S3_BUCKET_NAME")
+S3_BUCKET = os.getenv("S3_BUCKET")

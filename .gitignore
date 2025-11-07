@@ -2,6 +2,7 @@ __pycache__
 *.json
 *.jl
 log/*
+logs/*
 .DS_Store
 images/*
 *.csv
@@ -9,3 +10,4 @@ output/
 .pytest_cache
 farfetch_html_fixtures/
 /.venv
+logs/

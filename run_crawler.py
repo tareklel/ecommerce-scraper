@@ -17,6 +17,15 @@ def main():
     os.environ['APP_ENV'] = args.env
 
     settings = get_project_settings()
+
+    if args.env == 'prod':
+        settings.set('LOG_LEVEL', 'INFO')
+        log_file = 'logs/scrapy.log'
+        log_dir = os.path.dirname(log_file)
+        if not os.path.exists(log_dir):
+            os.makedirs(log_dir)
+        settings.set('LOG_FILE', log_file)
+
     process = CrawlerProcess(settings)
 
     if args.spider == 'farfetch':

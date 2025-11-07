@@ -113,7 +113,8 @@ class PostCrawlPipeline:
         self._sample_output(spider)
         self._gzip_output(spider)
         self._generate_manifest(spider, reason)
-        if os.environ.get('APP_ENV') == 'prod':
+        # upload to S3 if in prod environment or S3 upload is enabled
+        if os.environ.get('APP_ENV') == 'prod' or os.environ.get('S3_UPLOAD_ENABLED') == 'true':
             self._upload_to_s3(spider)
 
     def _upload_to_s3(self, spider):
@@ -134,12 +135,13 @@ class PostCrawlPipeline:
             for root, _, files in os.walk(self.output_dir):
                 for filename in files:
                     local_path = os.path.join(root, filename)
-                    s3_key = os.path.join(s3_prefix, os.path.relpath(local_path, self.output_dir))
+                    app_env = os.environ.get('APP_ENV', 'dev')
+                    s3_key = os.path.join(app_env, s3_prefix, os.path.relpath(local_path, self.output_dir))
 
                     spider.logger.info(f"Uploading {local_path} to s3://{s3_bucket}/{s3_key}")
                     s3_client.upload_file(local_path, s3_bucket, s3_key)
 
-            spider.logger.info(f"Successfully uploaded output to s3://{s3_bucket}/{s3_prefix}")
+            spider.logger.info(f"Successfully uploaded output to s3://{s3_bucket}/{s3_key}")
 
         except NoCredentialsError:
             spider.logger.error("S3 credentials not found. Please configure your AWS credentials.")
