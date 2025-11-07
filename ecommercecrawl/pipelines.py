@@ -129,14 +129,14 @@ class PostCrawlPipeline:
             return
 
         s3_client = boto3.client('s3')
-        s3_prefix = f"crawls/{self.crawler_name}/{self.run_id}"
+        s3_prefix = f"{self.crawler_name}/{self.run_id}"
 
         try:
             for root, _, files in os.walk(self.output_dir):
                 for filename in files:
                     local_path = os.path.join(root, filename)
                     app_env = os.environ.get('APP_ENV', 'dev')
-                    s3_key = os.path.join('bronze', app_env, s3_prefix, os.path.relpath(local_path, self.output_dir))
+                    s3_key = os.path.join('bronze', 'crawls', app_env, s3_prefix, os.path.relpath(local_path, self.output_dir))
 
                     spider.logger.info(f"Uploading {local_path} to s3://{s3_bucket}/{s3_key}")
                     s3_client.upload_file(local_path, s3_bucket, s3_key)

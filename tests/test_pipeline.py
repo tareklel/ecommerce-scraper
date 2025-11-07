@@ -326,7 +326,8 @@ class TestS3Upload:
         pipeline._upload_to_s3(spider)
 
         # 3. Verify
-        s3_prefix = f"crawls/{spider.name}/{spider.run_id}"
+        app_env = os.environ.get('APP_ENV', 'dev')
+        s3_prefix = f"bronze/crawls/{app_env}/{spider.name}/{spider.run_id}"
         response = s3_client.list_objects_v2(Bucket=s3_bucket, Prefix=s3_prefix)
         
         assert 'Contents' in response, "S3 bucket is empty."
