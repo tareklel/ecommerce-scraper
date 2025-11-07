@@ -136,7 +136,7 @@ class PostCrawlPipeline:
                 for filename in files:
                     local_path = os.path.join(root, filename)
                     app_env = os.environ.get('APP_ENV', 'dev')
-                    s3_key = os.path.join(app_env, s3_prefix, os.path.relpath(local_path, self.output_dir))
+                    s3_key = os.path.join('bronze', app_env, s3_prefix, os.path.relpath(local_path, self.output_dir))
 
                     spider.logger.info(f"Uploading {local_path} to s3://{s3_bucket}/{s3_key}")
                     s3_client.upload_file(local_path, s3_bucket, s3_key)
