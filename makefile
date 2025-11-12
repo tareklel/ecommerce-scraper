@@ -5,6 +5,8 @@ export $(shell sed 's/=.*//' .env)
 IMAGE_NAME = ecommerce-scraper
 FF_TEST_URL = https://www.farfetch.com/ae/shopping/women/louis-vuitton-pre-owned/clothing-1/items.aspx
 
+TF_DIR = infra/terraform
+
 # Build only if image missing
 docker-build:
 	@if [ -z "$$(docker images -q $(IMAGE_NAME):latest)" ]; then \
@@ -32,3 +34,15 @@ run-ff-test-upload:
 
 docker-run-ff-dev:
 	docker run --rm -v $(PWD)/output:/app/output $(IMAGE_NAME):latest run_crawler.py farfetch $(FF_TEST_URL) --env dev
+
+tf-init:
+	cd $(TF_DIR) && terraform init
+
+tf-plan:
+	cd $(TF_DIR) && terraform plan
+
+tf-apply:
+	cd $(TF_DIR) && terraform apply -auto-approve
+
+tf-destroy:
+	cd $(TF_DIR) && terraform destroy -auto-approve
