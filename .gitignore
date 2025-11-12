@@ -11,3 +11,16 @@ output/
 farfetch_html_fixtures/
 /.venv
 logs/
+
+# Local Terraform state
+*.tfstate
+*.tfstate.backup
+
+# Terraform working directory
+.terraform/
+
+# Terraform crash logs
+crash.log
+
+# Lambda build artifacts (if any)
+*.zip
