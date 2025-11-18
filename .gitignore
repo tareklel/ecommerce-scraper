@@ -11,6 +11,9 @@ output/
 farfetch_html_fixtures/
 /.venv
 logs/
+.env
+
+*.txt
 
 # Local Terraform state
 *.tfstate
