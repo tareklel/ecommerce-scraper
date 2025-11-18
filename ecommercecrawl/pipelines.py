@@ -103,9 +103,12 @@ class PostCrawlPipeline:
     def spider_closed(self, spider, reason):
         # The spider's attributes might have been updated during the crawl.
         # Especially output_filepath after gzipping.
-        self.output_dir = spider.output_dir
-        self.output_filepath = spider.output_filepath
-        self.items_written = spider.items_written
+
+        self.output_dir = getattr(spider, 'output_dir', None)
+        if self.output_dir:
+            os.makedirs(self.output_dir, exist_ok=True)
+        self.output_filepath = getattr(spider, 'output_filepath', None)
+        self.items_written = getattr(spider, 'items_written', 0)
         self.run_id = spider.run_id
         self.crawler_name = spider.name
         self.entry_points = spider.entry_points
