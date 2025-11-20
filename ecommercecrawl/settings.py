@@ -30,9 +30,9 @@ ROBOTSTXT_OBEY = False
 
 # Concurrency & delays
 CONCURRENT_REQUESTS = 16
-CONCURRENT_REQUESTS_PER_DOMAIN = 8
+CONCURRENT_REQUESTS_PER_DOMAIN = 1
 CONCURRENT_REQUESTS_PER_IP = 8
-DOWNLOAD_DELAY = 0           # add jitter via AutoThrottle below
+DOWNLOAD_DELAY = 4           # add jitter via AutoThrottle below
 RANDOMIZE_DOWNLOAD_DELAY = False
 DOWNLOAD_TIMEOUT = 25           # keep it tight to avoid long hangs
 REACTOR_THREADPOOL_MAXSIZE = 20
@@ -42,11 +42,10 @@ REACTOR_THREADPOOL_MAXSIZE = 20
 # See also autothrottle settings and docs
 #DOWNLOAD_DELAY = 3
 # The download delay setting will honor only one of:
-CONCURRENT_REQUESTS_PER_DOMAIN = 128
 # CONCURRENT_REQUESTS_PER_IP = 16
 
 # AutoThrottle
-AUTOTHROTTLE_ENABLED = True
+AUTOTHROTTLE_ENABLED = False
 AUTOTHROTTLE_START_DELAY = 0.25
 AUTOTHROTTLE_MAX_DELAY = 8
 AUTOTHROTTLE_TARGET_CONCURRENCY = 1.5   # stay under the radar

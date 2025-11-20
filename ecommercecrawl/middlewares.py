@@ -1,4 +1,6 @@
-import time
+from collections import defaultdict
+from urllib.parse import urlparse
+
 from scrapy.downloadermiddlewares.retry import RetryMiddleware
 from scrapy.utils.response import response_status_message
 from twisted.internet.task import deferLater
@@ -15,57 +17,186 @@ def _sleep(seconds):
 
 class RetryAfterMiddleware(RetryMiddleware):
     """
-    Custom retry logic that respects Retry-After headers and uses exponential backoff.
+    Domain-level backoff middleware:
 
-    Usage:
-    ------
-    Add this to settings.py:
+    - Keeps a penalty per domain (www.farfetch.com, etc.)
+    - Domain delay grows exponentially with repeated 429/5xx
+    - Domain delay is used for:
+        * per-request retry sleep
+        * the downloader slot delay (so *all* requests slow down)
+    - When responses start succeeding, the penalty decays and the
+      domain delay shrinks back toward a base delay.
 
-    DOWNLOADER_MIDDLEWARES = {
-        'middlewares.RetryAfterMiddleware': 550,  # after default RetryMiddleware (543)
-    }
-
-    And make sure RETRY_HTTP_CODES includes 429, 503, etc.
+    Settings (optional):
+    --------------------
+    RETRY_AFTER_BASE_DELAY   = 1.0   # base delay in seconds when penalty = 1
+    RETRY_AFTER_MAX_DELAY    = 180.0 # max domain delay in seconds
+    RETRY_AFTER_DECAY        = 1     # how much to reduce penalty on success
+    RETRY_AFTER_MAX_SLOT_DELAY = 60.0  # cap for slot.delay
     """
 
-    def process_response(self, request, response, spider):
-        """
-        Called every time Scrapy gets an HTTP response.
-        If the response code is retryable (e.g. 429, 503), decide how long to wait
-        before retrying the request.
-        """
-        # Check if the status code is in the retry list
-        if response.status in spider.settings.get('RETRY_HTTP_CODES'):
+    def __init__(self, settings):
+        super().__init__(settings)
 
-            # Check if the server sent a Retry-After header
-            retry_after = response.headers.get("Retry-After")
-            if retry_after:
+        # domain -> penalty (integer)
+        self.domain_penalties = defaultdict(int)
+
+        # Base + caps for delay
+        self.base_delay = settings.getfloat("RETRY_AFTER_BASE_DELAY", 1.0)
+        self.max_delay = settings.getfloat("RETRY_AFTER_MAX_DELAY", 300)
+        self.decay = settings.getint("RETRY_AFTER_DECAY", 1)
+
+        # Slot delay base: use DOWNLOAD_DELAY or AUTOTHROTTLE_START_DELAY as min
+        dl_delay = settings.getfloat("DOWNLOAD_DELAY", 0.0)
+        at_start = settings.getfloat("AUTOTHROTTLE_START_DELAY", 0.0)
+        self.min_slot_delay = dl_delay or at_start or 0.25
+        self.max_slot_delay = settings.getfloat("RETRY_AFTER_MAX_SLOT_DELAY", self.max_delay)
+
+    @classmethod
+    def from_crawler(cls, crawler):
+        return cls(crawler.settings)
+
+    # ------------------------------------------------------------------ helpers
+
+    def _get_domain(self, request):
+        return urlparse(request.url).netloc
+
+    def _calc_domain_delay_from_penalty(self, penalty):
+        """
+        Convert a non-negative penalty into a domain delay.
+        penalty = 0 => base_delay (or very small)
+        penalty >= 1 => base_delay * 2^(penalty-1), capped at max_delay
+        """
+        if penalty <= 0:
+            return self.base_delay
+        delay = self.base_delay * (2 ** (penalty - 1))
+        return min(self.max_delay, delay)
+
+    def _update_slot_delay(self, request, spider, delay):
+        """
+        Set the downloader slot delay for this domain to the given delay.
+        This controls how often *any* request to that domain is fired.
+        """
+        key = request.meta.get("download_slot") or urlparse(request.url).hostname
+        slot = spider.crawler.engine.downloader.slots.get(key)
+        if not slot:
+            return
+
+        # Clamp to allowed slot delay range
+        new_delay = min(self.max_slot_delay, max(self.min_slot_delay, delay))
+
+        if abs(slot.delay - new_delay) > 1e-3:
+            spider.logger.info(
+                f"[RetryAfter] Updating slot delay for {key}: "
+                f"{slot.delay:.2f} -> {new_delay:.2f}"
+            )
+            slot.delay = new_delay
+
+    def _bump_penalty_and_get_delay(self, domain, response=None):
+        """
+        Increment domain penalty, compute new domain-level delay.
+        Optionally respect Retry-After header as a floor.
+        """
+        self.domain_penalties[domain] += 1
+        penalty = self.domain_penalties[domain]
+
+        exp_delay = self._calc_domain_delay_from_penalty(penalty)
+
+        retry_after_delay = None
+        if response is not None:
+            retry_after_header = response.headers.get(b"Retry-After")
+            if retry_after_header:
                 try:
-                    # Retry-After usually contains seconds to wait
-                    delay = int(retry_after.decode())
+                    retry_after_delay = float(retry_after_header.decode())
                 except Exception:
-                    # If parsing fails, fall back to a safe default
-                    delay = 5
-            else:
-                # No Retry-After header → use exponential backoff
-                retry_count = request.meta.get('retry_times', 0)
-                delay = min(60, 2 ** retry_count)  # cap delay at 60s
+                    retry_after_delay = None
 
-            # Ask parent class if retry is allowed for this request
-            if self._retry(request, response_status_message(response.status), spider):
+        if retry_after_delay is not None:
+            # prioritize retry_after_delay
+            delay = retry_after_delay
+        else:
+            delay = exp_delay
+
+        return delay, penalty
+
+    def _decay_penalty_and_get_delay(self, domain):
+        """
+        Decay domain penalty on success and compute the new domain delay.
+        """
+        if domain not in self.domain_penalties:
+            return self.base_delay, 0
+
+        old_penalty = self.domain_penalties[domain]
+        new_penalty = max(0, old_penalty - self.decay)
+
+        if new_penalty == 0:
+            self.domain_penalties.pop(domain, None)
+        else:
+            self.domain_penalties[domain] = new_penalty
+
+        delay = self._calc_domain_delay_from_penalty(new_penalty)
+        return delay, new_penalty
+
+    # ---------------------------------------------------------------- middleware
+
+    def process_response(self, request, response, spider):
+        domain = self._get_domain(request)
+
+        if response.status in self.retry_http_codes:
+            # Use parent logic to decide if we still retry at all
+            retry_req = self._retry(
+                request,
+                response_status_message(response.status),
+                spider,
+            )
+            if retry_req:
+                # Bump domain penalty, get domain-level delay
+                delay, penalty = self._bump_penalty_and_get_delay(domain, response)
+
+                # Apply this delay to the whole domain (slot.delay)
+                self._update_slot_delay(request, spider, delay)
+
                 spider.logger.info(
-                    f"Retryable error {response.status} on {request.url}; "
-                    f"waiting {delay}s before retry"
+                    f"[RetryAfter] Retryable {response.status} on {request.url}; "
+                    f"domain={domain}, domain_penalty={penalty}, "
+                    f"retry_times={retry_req.meta.get('retry_times')}, "
+                    f"domain_delay={delay:.2f}s"
                 )
-                # Wait asynchronously, then return a fresh copy of the request
-                return _sleep(delay).addCallback(lambda _: request.copy())
 
-        # If status code not in retry list → just return the response normally
+                # Sleep domain_delay before retrying this request
+                return _sleep(delay).addCallback(lambda _: retry_req)
+
+            # Max retries reached → still let domain cool down a bit
+            delay, new_penalty = self._decay_penalty_and_get_delay(domain)
+            self._update_slot_delay(request, spider, delay)
+            spider.logger.info(
+                f"[RetryAfter] Max retries reached for {domain}, "
+                f"penalty decayed to {new_penalty}, delay={delay:.2f}s"
+            )
+            return response
+
+        # Non-retryable status: consider it a "good" signal → decay domain penalty
+        delay, new_penalty = self._decay_penalty_and_get_delay(domain)
+        self._update_slot_delay(request, spider, delay)
         return response
 
     def process_exception(self, request, exception, spider):
-        """
-        Handles network errors, timeouts, DNS errors, etc.
-        For those, we just fall back to Scrapy’s default retry logic.
-        """
-        return super().process_exception(request, exception, spider)
+        # Use parent logic to decide if this exception is retryable
+        retry_req = super().process_exception(request, exception, spider)
+        if retry_req is None:
+            return None
+
+        domain = self._get_domain(request)
+
+        # No response here, so no Retry-After — purely exponential backoff
+        delay, penalty = self._bump_penalty_and_get_delay(domain, response=None)
+        self._update_slot_delay(request, spider, delay)
+
+        spider.logger.info(
+            f"[RetryAfter] Exception {type(exception).__name__} on {request.url}; "
+            f"domain={domain}, domain_penalty={penalty}, "
+            f"retry_times={retry_req.meta.get('retry_times')}, "
+            f"domain_delay={delay:.2f}s"
+        )
+
+        return _sleep(delay).addCallback(lambda _: retry_req)
