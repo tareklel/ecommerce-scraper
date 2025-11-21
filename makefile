@@ -21,7 +21,7 @@ rebuild:
 	docker build --no-cache -t $(IMAGE_NAME):latest .
 
 run-ff-local:
-	poetry run python3 run_crawler.py farfetch $(FF_TEST_URL)
+	poetry run python3 run_crawler.py farfetch --urls $(FF_TEST_URL)
 
 pytest-local:
 	poetry run pytest -v
@@ -30,10 +30,10 @@ run-ff-test-upload:
 	AWS_PROFILE=$(AWS_PROFILE) \
 	S3_BUCKET=$(S3_BUCKET) \
 	S3_UPLOAD_ENABLED=true \
-	poetry run python3 run_crawler.py farfetch $(FF_TEST_URL)
+	poetry run python3 run_crawler.py farfetch --urls $(FF_TEST_URL)
 
 docker-run-ff-dev:
-	docker run --rm -v $(PWD)/output:/app/output $(IMAGE_NAME):latest run_crawler.py farfetch $(FF_TEST_URL) --env dev
+	docker run --rm -v $(PWD)/output:/app/output $(IMAGE_NAME):latest run_crawler.py farfetch --urls $(FF_TEST_URL) --env dev
 
 tf-init:
 	cd $(TF_DIR) && terraform init

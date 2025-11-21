@@ -1,17 +1,16 @@
 import os
-import hashlib
 import json
-import gzip
-import shutil
+import csv
 from datetime import datetime, timezone
 from scrapy import Spider
-from scrapy import signals
 
 from ecommercecrawl.constants.mastercrawl_constants import RUN_ID_DATETIME_FORMAT
 
 
 class MasterCrawl(Spider):
     name = "mastercrawl"
+    default_urls_path_setting = None
+    default_urls_path_constant = None
 
     @staticmethod
     def _generate_run_id():
@@ -41,6 +40,7 @@ class MasterCrawl(Spider):
         """
         spider = super(MasterCrawl, cls).from_crawler(crawler, *args, **kwargs)
         
+        spider.settings = crawler.settings
         spider.run_id = MasterCrawl._generate_run_id()
 
         # Capture entry point arguments for the manifest.
@@ -54,6 +54,41 @@ class MasterCrawl(Spider):
         # crawler.signals.connect(spider.post_closure, signal=signals.spider_closed)
         
         return spider
+    
+    def start_requests(self):
+        """
+        This method is called by Scrapy when the spider is opened for scraping.
+        It's used to generate the initial requests for the spider to crawl.
+        It prioritizes URLs passed via command line arguments (start_urls, urlpath)
+        and falls back to a default path defined in spider-specific settings.
+        """
+        urls = []
+        if self.start_urls:
+            urls = self.start_urls
+        elif hasattr(self, 'urlpath') and self.urlpath:
+            with open(self.urlpath, newline='') as inputfile:
+                for row in csv.reader(inputfile):
+                    if row:
+                        urls.append(row[0])
+        else:
+            # Fallback to default path from settings or constants
+            urlpath = self.default_urls_path_constant
+            if hasattr(self, 'settings') and self.default_urls_path_setting:
+                urlpath = self.settings.get(self.default_urls_path_setting, self.default_urls_path_constant)
+
+            if urlpath:
+                with open(urlpath, newline='') as inputfile:
+                    for row in csv.reader(inputfile):
+                        if row:
+                            urls.append(row[0])
+
+        if not urls:
+            self.logger.warning("No URLs found to crawl.")
+            return
+
+        for url in urls:
+            # Assuming _schedule is defined in a base class or mixin
+            yield self._schedule(url, callback=self.parse)
 
     def save_to_jsonl(self, basename, data):
         """Saves a dictionary to a JSONL file, creating dirs and appending if the file exists."""

@@ -7,11 +7,22 @@ from ecommercecrawl.spiders.farfetch_crawl import FFSpider
 def main():
     parser = argparse.ArgumentParser(description="E-commerce scraper CLI.")
     parser.add_argument('spider', choices=['farfetch'], help='The spider to run.')
-    parser.add_argument('urls', help='URL to crawl or path to a CSV file with URLs.')
+    parser.add_argument('--urls', help='URL to crawl or path to a CSV file with URLs.')
     parser.add_argument('--env', choices=['dev', 'prod'], default='dev', help='Environment setting (dev or prod).')
     parser.add_argument('--limit', type=int, help='Limit the number of pages to crawl.')
 
     args = parser.parse_args()
+
+    # Map spider names to spider classes
+    spider_map = {
+        'farfetch': FFSpider,
+        # 'ounass': OunassCrawlSpider,
+    }
+
+    spider_class = spider_map.get(args.spider)
+    if not spider_class:
+        print(f"Error: Spider '{args.spider}' not found.")
+        return
 
     # Set the environment variable for settings
     os.environ['APP_ENV'] = args.env
@@ -28,14 +39,19 @@ def main():
 
     process = CrawlerProcess(settings)
 
-    if args.spider == 'farfetch':
-        is_file = os.path.isfile(args.urls)
-        if is_file:
-            process.crawl(FFSpider, urlpath=args.urls, limit=args.limit)
-        else:
-            # Pass the single URL as a list to the spider
-            process.crawl(FFSpider, urls=[args.urls], limit=args.limit)
+    spider_kwargs = {}
 
+    if args.urls:
+        if os.path.isfile(args.urls):
+            spider_kwargs['urlpath'] = args.urls
+        else:
+            # It's a single URL, pass it as start_urls
+            spider_kwargs['urls'] = [args.urls]
+
+    if args.limit:
+        spider_kwargs['limit'] = args.limit
+    
+    process.crawl(spider_class, **spider_kwargs)
     process.start()
 
 if __name__ == "__main__":

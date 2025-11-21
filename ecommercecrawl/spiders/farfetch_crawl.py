@@ -18,50 +18,19 @@ def _slot_delay(url):
 
 class FFSpider(MasterCrawl):
     name = constants.NAME
+    default_urls_path_setting = 'FARFETCH_URLS_PATH'
+    default_urls_path_constant = constants.FARFETCH_URLS
+
     def __init__(self, urlpath=None, urls=None, limit=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.urlpath = urlpath
         self.start_urls = urls or []
         self.limit = limit
 
-    @classmethod
-    def from_crawler(cls, crawler, *args, **kwargs):
-        spider = super().from_crawler(crawler, *args, **kwargs)
-        spider.settings = crawler.settings
-        return spider
-
     def _schedule(self, url, **kw):
         req = scrapy.Request(url, **kw)
         req.meta['download_delay'] = _slot_delay(req.url)
         return req
-
-    def start_requests(self):
-        urls = []
-        if self.start_urls:
-            urls = self.start_urls
-        elif self.urlpath:
-            with open(self.urlpath, newline='') as inputfile:
-                for row in csv.reader(inputfile):
-                    if row:
-                        urls.append(row[0])
-        else:
-            # Fallback to default path from settings or constants
-            try:
-                settings_get = self.settings.get if hasattr(self, "settings") else None
-            except Exception:
-                settings_get = None
-
-            urlpath = constants.FARFETCH_URLS
-            if settings_get:
-                urlpath = settings_get('FARFETCH_URLS_PATH', constants.FARFETCH_URLS)
-
-            with open(urlpath, newline='') as inputfile:
-                for row in csv.reader(inputfile):
-                    if row:
-                        urls.append(row[0])
-
-        for url in urls:
-            yield self._schedule(url, callback=self.parse)
 
     # ---------- Pagination helper (returns ONLY pages 2..N) ----------
     def get_pages(self, response):
