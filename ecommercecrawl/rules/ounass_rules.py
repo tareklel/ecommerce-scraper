@@ -8,5 +8,10 @@ def is_plp(response):
 
     return data.get("routeType") == "plp"
 
+def get_max_pages(response):
+    data = json.loads(response.text)
+    return data['pagination']['totalPages']
+
+
 def is_first_page(response):
     return False

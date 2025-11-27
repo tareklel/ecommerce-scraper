@@ -38,9 +38,8 @@ class OunassSpider(MasterCrawl, scrapy.Spider):
     
     def parse(self, response):
         if rules.is_plp(response):
-            self.logger.info(f"[SUCCESS] {response.url} is a PLP")
             # get total number of pages from plp api
-            total_pages = response.json()['pagination']['totalPages']
+            total_pages = rules.get_max_pages(response)
             # scrape all urls
             if rules.is_first_page(response):
                 urls = [
