@@ -3,8 +3,13 @@ import json
 import csv
 from datetime import datetime, timezone
 from scrapy import Spider
+import scrapy
 
 from ecommercecrawl.constants.mastercrawl_constants import RUN_ID_DATETIME_FORMAT
+
+
+def _slot_delay(url):
+    return 0.5
 
 
 class MasterCrawl(Spider):
@@ -55,17 +60,22 @@ class MasterCrawl(Spider):
         
         return spider
     
-    def start_requests(self):
+    def _iter_seed_urls(self):
         """
-        This method is called by Scrapy when the spider is opened for scraping.
-        It's used to generate the initial requests for the spider to crawl.
-        It prioritizes URLs passed via command line arguments (start_urls, urlpath)
-        and falls back to a default path defined in spider-specific settings.
+        Centralized logic to produce the initial list of URLs.
+        Subclasses can override this if they need a different way
+        to get URLs, but most spiders can reuse this.
         """
         urls = []
-        if self.start_urls:
-            urls = self.start_urls
+
+        if getattr(self, "start_urls", None):
+            start_urls = getattr(self, "start_urls")
+            if isinstance(start_urls, str):
+                urls = start_urls.split(',')
+            else:
+                urls = start_urls
         elif hasattr(self, 'urlpath') and self.urlpath:
+            import csv
             with open(self.urlpath, newline='') as inputfile:
                 for row in csv.reader(inputfile):
                     if row:
@@ -74,22 +84,47 @@ class MasterCrawl(Spider):
             # Fallback to default path from settings or constants
             urlpath = self.default_urls_path_constant
             if hasattr(self, 'settings') and self.default_urls_path_setting:
-                urlpath = self.settings.get(self.default_urls_path_setting, self.default_urls_path_constant)
+                urlpath = self.settings.get(self.default_urls_path_setting,
+                                            self.default_urls_path_constant)
 
             if urlpath:
+                import csv
                 with open(urlpath, newline='') as inputfile:
                     for row in csv.reader(inputfile):
                         if row:
                             urls.append(row[0])
+
+        return urls
+
+    def _handle_seed_url(self, url):
+        """
+        Hook method: given a single seed URL, yield Requests/Items.
+
+        Default behavior: use Scrapy downloader as usual.
+        Subclasses (like OunassSpider) can override this to do
+        special bootstrapping (e.g. using `requests`).
+        """
+        req = scrapy.Request(url, callback=self.parse)
+        req.meta['download_delay'] = _slot_delay(req.url)
+        yield req
+
+    def start_requests(self):
+        """
+        Entry point for Scrapy. Stays DRY:
+        - URL loading in `_iter_seed_urls`
+        - Per-URL behavior in `_handle_seed_url`
+        """
+        urls = self._iter_seed_urls()
 
         if not urls:
             self.logger.warning("No URLs found to crawl.")
             return
 
         for url in urls:
-            # Assuming _schedule is defined in a base class or mixin
-            yield self._schedule(url, callback=self.parse)
-
+            # `_handle_seed_url` must yield Requests or Items, not generators
+            for obj in self._handle_seed_url(url):
+                yield obj
+    
     def save_to_jsonl(self, basename, data):
         """Saves a dictionary to a JSONL file, creating dirs and appending if the file exists."""
         filepath = f'{basename}.jsonl'

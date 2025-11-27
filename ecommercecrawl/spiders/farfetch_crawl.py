@@ -1,11 +1,6 @@
-import csv
 import scrapy
 from datetime import date
-import logging
-from scrapy.utils.log import configure_logging
-import os
 from ecommercecrawl.spiders.mastercrawl import MasterCrawl
-from ecommercecrawl import settings
 from ecommercecrawl.rules import farfetch_rules as rules
 from ecommercecrawl.constants import farfetch_constants as constants
 

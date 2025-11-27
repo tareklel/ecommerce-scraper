@@ -1,0 +1,7 @@
+NAME = 'ounass'
+MAIN_SITE = 'https://www.ounass.ae/'
+OUTPUT_DIR = 'output'
+# IMAGE_CDN = 'ounass-ae.atgcdn.a'
+# ounass_IMAGE_BASE_DIR = f'{OUTPUT_DIR}/images/ounass'
+OUNASS_URLS = 'resources/ounass_urls.csv'
+SOLD_OUT_LABEL = 'OUT OF STOCK'

@@ -1,47 +1,52 @@
-import csv
 import scrapy
 from datetime import date
-import logging
-from scrapy.utils.log import configure_logging
 from ecommercecrawl.spiders.mastercrawl import MasterCrawl
+from ecommercecrawl.rules import ounass_rules as rules
+from ecommercecrawl.constants import ounass_constants as constants
+from scrapy.http import HtmlResponse
+import requests
 import os
 
-
 class OunassSpider(MasterCrawl, scrapy.Spider):
-    name = "ounass"
+    name = constants.NAME
+    default_urls_path_setting = 'OUNASS_URLS_PATH'
+    default_urls_path_constant = constants.OUNASS_URLS
 
     def __init__(self, urlpath=None, *args, **kwargs):
         super(OunassSpider, self).__init__(*args, **kwargs)
         self.urlpath = urlpath
-
-    def start_requests(self):
-        # get urls
-        urls = []
-
-        # if category null pass resources ounass file
-        if self.urlpath is None:
-            self.urlpath = 'resources/ounass_urls.csv'
-        with open(self.urlpath, newline='') as inputfile:
-            for row in csv.reader(inputfile):
-                urls.append(row[0])
-        # pass subcategory plps to get category and subcategory in crawl
-        # only pass apis
-        self.urls = urls
-        for url in self.urls:
-            if '/api/' not in url:
-                raise Exception('please pass URLs from api subfolder')
-        for url in self.urls:
-            yield scrapy.Request(url=url, callback=self.parse)
-
+    
+    def _handle_seed_url(self, url):
+        """
+        Override MasterCrawl._handle_seed_url so that the initial responses
+        are fetched via `requests` instead of Scrapy's downloader.
+        """
+        try:
+            r = requests.get(url)
+            r.raise_for_status()
+            scrapy_response = HtmlResponse(
+                url=r.url,
+                body=r.content,
+                encoding='utf-8'
+            )
+            # parse() may yield Requests and/or Items; just forward them
+            for result in self.parse(scrapy_response):
+                yield result
+        except requests.exceptions.RequestException as e:
+            self.logger.error(f"Failed to fetch {url} using requests: {e}")
+            return
+    
     def parse(self, response):
-        if response.url in self.urls:
-            # get total number of pages from plp
+        if rules.is_plp(response):
+            self.logger.info(f"[SUCCESS] {response.url} is a PLP")
+            # get total number of pages from plp api
             total_pages = response.json()['pagination']['totalPages']
             # scrape all urls
-            urls = [
-                response.url + f"?sortBy=popularity-asc&p={p}&facets=0" for p in range(total_pages)]
-            for url in urls:
-                yield scrapy.Request(url=url, callback=self.parse)
+            if rules.is_first_page(response):
+                urls = [
+                    response.url + f"?sortBy=popularity-asc&p={p}&facets=0" for p in range(total_pages)]
+                for url in urls:
+                    yield from self._handle_seed_url(url)
         elif response.url.split('?')[-1].split('=')[0] == 'sortBy':
             # get category and subcategory
             folders = response.url.split('?')[0].split('/')

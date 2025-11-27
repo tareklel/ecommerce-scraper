@@ -3,6 +3,8 @@ import os
 from scrapy.crawler import CrawlerProcess
 from scrapy.utils.project import get_project_settings
 from ecommercecrawl.spiders.farfetch_crawl import FFSpider
+from ecommercecrawl.spiders.ounass_crawl import OunassSpider
+
 
 def main():
     parser = argparse.ArgumentParser(description="E-commerce scraper CLI.")
@@ -16,7 +18,7 @@ def main():
     # Map spider names to spider classes
     spider_map = {
         'farfetch': FFSpider,
-        # 'ounass': OunassCrawlSpider,
+        'ounass': OunassSpider,
     }
 
     spider_class = spider_map.get(args.spider)
