@@ -6,20 +6,19 @@ from ecommercecrawl.spiders.farfetch_crawl import FFSpider
 from ecommercecrawl.spiders.ounass_crawl import OunassSpider
 
 
+spider_map = {
+        'farfetch': FFSpider,
+        'ounass': OunassSpider,
+    }
+
 def main():
     parser = argparse.ArgumentParser(description="E-commerce scraper CLI.")
-    parser.add_argument('spider', choices=['farfetch'], help='The spider to run.')
+    parser.add_argument('spider', choices=list(spider_map.keys()), help='The spider to run.')
     parser.add_argument('--urls', help='URL to crawl or path to a CSV file with URLs.')
     parser.add_argument('--env', choices=['dev', 'prod'], default='dev', help='Environment setting (dev or prod).')
     parser.add_argument('--limit', type=int, help='Limit the number of pages to crawl.')
 
     args = parser.parse_args()
-
-    # Map spider names to spider classes
-    spider_map = {
-        'farfetch': FFSpider,
-        'ounass': OunassSpider,
-    }
 
     spider_class = spider_map.get(args.spider)
     if not spider_class:

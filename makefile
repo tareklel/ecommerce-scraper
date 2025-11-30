@@ -4,8 +4,12 @@ export $(shell sed 's/=.*//' .env)
 
 IMAGE_NAME = ecommerce-scraper
 FF_TEST_URL = https://www.farfetch.com/ae/shopping/women/louis-vuitton-pre-owned/clothing-1/items.aspx
+OUNASS_TEST_URL=https://www.ounass.ae/api/women/designers/burberry/bags
 
 TF_DIR = infra/terraform
+
+pytest-local:
+	poetry run pytest -v
 
 # Build only if image missing
 docker-build:
@@ -20,11 +24,9 @@ docker-build:
 rebuild:
 	docker build --no-cache -t $(IMAGE_NAME):latest .
 
+# farfetch 
 run-ff-local:
 	poetry run python3 run_crawler.py farfetch --urls $(FF_TEST_URL)
-
-pytest-local:
-	poetry run pytest -v
 
 run-ff-test-upload:
 	AWS_PROFILE=$(AWS_PROFILE) \
@@ -35,6 +37,11 @@ run-ff-test-upload:
 docker-run-ff-dev:
 	docker run --rm -v $(PWD)/output:/app/output $(IMAGE_NAME):latest run_crawler.py farfetch --urls $(FF_TEST_URL) --env dev
 
+# ounass
+run-ounass-local:
+	poetry run python3 run_crawler.py ounass --urls $(OUNASS_TEST_URL)
+
+# terraform
 tf-init:
 	cd $(TF_DIR) && terraform init
 

@@ -12,9 +12,11 @@ class OunassSpider(MasterCrawl, scrapy.Spider):
     default_urls_path_setting = 'OUNASS_URLS_PATH'
     default_urls_path_constant = constants.OUNASS_URLS
 
-    def __init__(self, urlpath=None, *args, **kwargs):
+    def __init__(self, urlpath=None, urls=None, limit=None, *args, **kwargs):
         super(OunassSpider, self).__init__(*args, **kwargs)
         self.urlpath = urlpath
+        self.start_urls = urls or []
+        self.limit = limit
     
     def _handle_seed_url(self, url):
         """
@@ -35,33 +37,59 @@ class OunassSpider(MasterCrawl, scrapy.Spider):
         except requests.exceptions.RequestException as e:
             self.logger.error(f"Failed to fetch {url} using requests: {e}")
             return
+        
+    def get_pages(self, response):
+        # get total number of pages from plp api
+        try:
+            total_pages = rules.get_max_pages(response)
+            # If the URL is not sorted, we want to get all pages, even if it's just one
+            if constants.PLPSORT not in response.url:
+                return [
+                    response.url.split("?")[0] + f"?sortBy={constants.PLPSORT}&p={p}"
+                    for p in range(total_pages)
+                ]
+
+            # If already sorted, just get the subsequent pages
+            if total_pages <= 1:
+                return []
+            else:
+                # Assuming the first page is p=0, so we get pages 1 to N-1
+                return [
+                    response.url.split("?")[0] + f"?sortBy={constants.PLPSORT}&p={p + 1}"
+                    for p in range(total_pages - 1)
+                ]
+
+        except (ValueError, AttributeError) as e:
+            return []
+    
+    def parse_plp(self, response):
+        """
+        This method parses a product listing page, extracts the product URLs,
+        and also handles pagination to scrape all pages.
+        """
+        if rules.is_first_page(response) and constants.PLPSORT not in response.url:
+            plp_urls = self.get_pages(response)
+            for url in plp_urls:
+                yield from self._handle_seed_url(url)
+            return  # Stop processing this unsorted page
+        
+        # Only the first page schedules the other pages 2..N
+        if rules.is_first_page(response):
+            plp_urls = self.get_pages(response)
+            for url in plp_urls:
+                yield from self._handle_seed_url(url)
+
+        # Always process the current PLP for products
+        pdps = rules.get_pdps(response)
+        
+        for pdp in pdps:
+            yield from self._handle_seed_url(pdp)
     
     def parse(self, response):
+        # Only the first page schedules the other pages 2..N
         if rules.is_plp(response):
-            # get total number of pages from plp api
-            total_pages = rules.get_max_pages(response)
-            # scrape all urls
-            if rules.is_first_page(response):
-                urls = [
-                    response.url + f"?sortBy=popularity-asc&p={p}&facets=0" for p in range(total_pages)]
-                for url in urls:
-                    yield from self._handle_seed_url(url)
-        elif response.url.split('?')[-1].split('=')[0] == 'sortBy':
-            # get category and subcategory
-            folders = response.url.split('?')[0].split('/')
-            cat_dict = {
-                'category': folders[-2],
-                'subcategory': folders[-1]
-            }
-
-            # get products from plp
-            slugs = [x['slug'] for x in response.json()['hits']]
-            # get products
-            products = [
-                'https://' + response.url.split('/')[2] + f'/{slug}.html' for slug in slugs]
-            for product in products:
-                yield scrapy.Request(url=product, callback=self.parse, meta=cat_dict)
-        elif response.url.split('.')[-1] == 'html':
+            yield from self.parse_plp(response)
+        elif rules.is_pdp(response):
             # check country
             if response.url[8:16] == 'en-saudi':
                 country = 'sa'
@@ -103,8 +131,8 @@ class OunassSpider(MasterCrawl, scrapy.Spider):
                 'product_name': response.xpath('//h1[@class="PDPDesktop-name"]/span/text()').get(),
                 'gender': bread[0],
                 'brand': response.xpath('//h2[@class="PDPDesktop-designerCategoryName"]/a/text()').get(),
-                'category': response.meta['category'],
-                'subcategory': response.meta['subcategory'],
+                #'category': response.meta['category'],
+                #'subcategory': response.meta['subcategory'],
                 'price': response.xpath('//span[@class="PriceContainer-price"]/text()').get().split(' ')[0],
                 'currency': response.xpath('//span[@class="PriceContainer-price"]/text()').get().split(' ')[-1],
                 'price_discount': (None if discount is None else discount.split(" ")[0]),
