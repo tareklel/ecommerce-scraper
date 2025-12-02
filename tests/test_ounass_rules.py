@@ -60,29 +60,88 @@ def test_is_first_page_raises_error_if_key_missing():
     with pytest.raises(KeyError):
         rules.is_first_page(create_mock_response({}))
 
+
 # --- Tests for get_pdps ---
 
-def test_get_pdps_extracts_slugs_and_builds_urls():
-    """Should return a list of full product URLs."""
+def test_get_pdps_extracts_and_deduplicates_slugs():
+    """
+    Test that get_pdps extracts primary and additional slugs, deduplicates them, and builds correct URLs.
+    """
+    # Arrange
+    mock_data = {
+        "hits": [
+            {
+                "slug": "product-one",
+                "configurableAttributes": [
+                    {
+                        "options": [
+                            {"attributeSpecificProperties": {"slug": "product-one-variant-a"}},
+                            {"attributeSpecificProperties": {"slug": "product-one-variant-b"}}
+                        ]
+                    }
+                ]
+            },
+            {
+                "slug": "product-two",
+                "configurableAttributes": []
+            },
+            {
+                "slug": "product-one",  # Duplicate primary slug
+                "configurableAttributes": [
+                    {
+                        "options": [
+                            {"attributeSpecificProperties": {"slug": "product-one-variant-a"}} # Duplicate variant
+                        ]
+                    }
+                ]
+            }
+        ]
+    }
+    response = TextResponse(url="http://test.com", body=json.dumps(mock_data), encoding='utf-8')
+
+    # Act
+    urls = rules.get_pdps(response)
+
+    # Assert
+    expected_urls = {
+        "https://www.ounass.ae/product-one.html",
+        "https://www.ounass.ae/product-one-variant-a.html",
+        "https://www.ounass.ae/product-one-variant-b.html",
+        "https://www.ounass.ae/product-two.html"
+    }
+    
+    # The order is not guaranteed because of the set, so we compare sets
+    assert set(urls) == expected_urls
+    assert len(urls) == 4
+
+
+def test_get_pdps_handles_missing_keys():
+    """
+    Should return a list of full product URLs.
+    """
     data = {
         "hits": [
-            {"slug": "product-one"},
-            {"slug": "product-two"}
+            {"slug": "product-1"},
+            {"slug": "product-2"}
         ]
     }
     response = create_mock_response(data)
     expected_urls = [
-        f'{MAIN_SITE}product-one.html',
-        f'{MAIN_SITE}product-two.html'
+        f'{MAIN_SITE}product-1.html',
+        f'{MAIN_SITE}product-2.html',
+
     ]
     assert rules.get_pdps(response) == expected_urls
 
 def test_get_pdps_returns_empty_list_for_no_hits():
     """Should return an empty list if 'hits' is empty or missing."""
+    # Test with 'hits' as an empty list
     response_empty = create_mock_response({"hits": []})
     assert rules.get_pdps(response_empty) == []
-    with pytest.raises(KeyError):
-        rules.get_pdps(create_mock_response({}))
+
+    # Test with 'hits' key missing entirely, which should not raise an error
+    response_missing_hits = create_mock_response({})
+    assert rules.get_pdps(response_missing_hits) == []
 
 # --- Tests for is_pdp ---
 
