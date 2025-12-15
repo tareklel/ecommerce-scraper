@@ -1,4 +1,6 @@
 import json
+import re
+import logging
 from ecommercecrawl.constants.ounass_constants import MAIN_SITE
 
 def is_plp(response):
@@ -51,3 +53,109 @@ def get_pdps(response):
 
 def is_pdp(response):
     return response.url.split('.')[-1] == 'html'
+
+
+def get_state(response):
+    """
+    Extracts the window.state JSON object from a PDP response.
+
+    This function is designed to be resilient to changes in the page structure.
+    It includes robust error handling and logging to avoid scraper failures.
+    """
+    logger = logging.getLogger(__name__)
+
+    # 1. Extract the script content
+    try:
+        script = response.xpath(
+            "//script[contains(., '\"routeType\":\"new-pdp\"')]/text()"
+        ).get()
+        if not script:
+            logger.warning(f"Could not find state script on page: {response.url}")
+            return 
+    except Exception as e:
+        logger.error(f"Failed to extract script from {response.url}: {e}")
+        return 
+
+    # 2. Find the JSON object within the script
+    try:
+        state_match = re.search(r'window\.initialState\s*=\s*({.*?});', script, re.DOTALL)
+        if not state_match:
+            logger.warning(f"Could not find state JSON in script on page: {response.url}")
+            return 
+        state_json = state_match.group(1)
+    except Exception as e:
+        logger.error(f"Regex failed to find state JSON in {response.url}: {e}")
+        return
+
+    # 3. Parse the JSON
+    try:
+        return json.loads(state_json)
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse state JSON from {response.url}: {e}")
+        return
+
+def safe_get(data, keys, default=None):
+    """
+    Safely retrieve a value from a nested dictionary.
+
+    Args:
+        data (dict): The dictionary to search.
+        keys (list): A list of keys representing the path to the value.
+        default: The value to return if the path is not found.
+
+    Returns:
+        The retrieved value or the default.
+    """
+    if not isinstance(data, dict):
+        return default
+
+    for key in keys:
+        if not isinstance(data, dict):
+            return default
+        data = data.get(key)
+        if data is None:
+            return default
+    return data
+
+def get_sold_out(state):
+    try:
+        return state['pdp']['badge'] == 'OUT OF STOCK'
+    except KeyError:
+        return None
+    
+def get_discount(state):
+    try:
+        return state['pdp']['discountPercent']
+    except KeyError:
+        return None
+
+def get_primary_label(state):
+    try:
+        return state['pdp']['badge']['value']
+    except Exception:
+        return None
+    
+def get_image_url(state):
+    try:
+        return state['pdp']['images'][0]['oneX'].split('//')[1]
+    except Exception:
+        return None
+
+def get_data(state):
+    return{
+        'country': safe_get(state, ['country']),
+        'portal_itemid': safe_get(state, ['pdp', 'visibleSku']),
+        'product_name': safe_get(state, ['pdp', 'name']),
+        'gender': safe_get(state, ['pdp', 'gender']),
+        'brand': safe_get(state, ['pdp', 'designerCategoryName']),
+        'category': safe_get(state, ['pdp', 'department']),
+        'subcategory': safe_get(state, ['pdp', 'class']),
+        'color': safe_get(state, ['pdp', 'color']),
+        'price': safe_get(state, ['pdp', 'price']),
+        'currency': safe_get(state, ['currency']),
+        'discount': get_discount(state),
+        'sold_out': get_sold_out(state),
+        'primary_label': get_primary_label(state),
+        'image_url': get_image_url(state),
+    }
+    

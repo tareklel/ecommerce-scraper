@@ -84,77 +84,33 @@ class OunassSpider(MasterCrawl, scrapy.Spider):
         
         for pdp in pdps:
             yield from self._handle_seed_url(pdp)
+        
+    def parse_pdp(self, response):
+        """
+        This method parses a product detail page, extracts the product information,
+        and returns an Item.
+        """
+        try:
+            state = rules.get_state(response)
+            data = rules.get_data(state)
+
+            date_string = date.today().strftime("%Y-%m-%d")
+
+            data_dict = {
+                'run_id': self.run_id,
+                'site': constants.NAME,
+                'crawl_date': date_string,
+            }
+            merged = data_dict | data
+            yield merged
+        except Exception as e:
+            self.logger.error(f"Failed to parse PDP {response.url}: {e}")
+            return
     
     def parse(self, response):
-        # Only the first page schedules the other pages 2..N
         if rules.is_plp(response):
             yield from self.parse_plp(response)
+            return
         elif rules.is_pdp(response):
-            # check country
-            if response.url[8:16] == 'en-saudi':
-                country = 'sa'
-            elif response.url.split('/')[2].split('.')[2] == 'ae':
-                country = 'ae'
-            elif 'https://kuwait.ounass.com/' in response.url:
-                country = 'kw'
-            elif 'https://www.ounass.qa/' in response.url:
-                country = 'qa'
-
-            try:
-                bread = response.xpath('//ol[@class="BreadcrumbList hide-scrollbar"]/li/\
-                    a[@class="BreadcrumbList-breadcrumbLink "]/span/text()').getall()
-            except IndexError:
-                bread = response.xpath('//ol[@class="BreadcrumbList"]/li/\
-                    a[@class="BreadcrumbList-breadcrumbLink "]/span/text()').getall()
-
-            sold_out = ('OUT OF STOCK' in response.xpath(
-                '//span[@class="Badge"]/text()').getall())
-            discount = response.xpath(
-                '//span[@class="PriceContainer-discountPercent"]/text()').get()
-            image_url = response.xpath('//picture/source/@srcset').getall()
-
-            today = date.today()
-            date_string = today.strftime("%Y-%m-%d")
-            filename = f'output/ounass-{date_string}'
-
-            image = response.xpath(
-                '//button[@id="stylecolor-media-gallery-image-button-0"]/picture/source/@srcset').getall()[0].split('?')[0]
-            image = 'https:' + image
-
-            data = {
-                'site': 'Ounass',
-                'crawl_date': date.today(),
-                'country': country,
-                'url': response.url,
-                'portal_itemid': response.xpath('//div[@class="PDPMobile-selectedSku"]/text() \
-                    | //span[@class="Help-selectedSku"]/text()').get().split(': ')[-1],
-                'product_name': response.xpath('//h1[@class="PDPDesktop-name"]/span/text()').get(),
-                'gender': bread[0],
-                'brand': response.xpath('//h2[@class="PDPDesktop-designerCategoryName"]/a/text()').get(),
-                #'category': response.meta['category'],
-                #'subcategory': response.meta['subcategory'],
-                'price': response.xpath('//span[@class="PriceContainer-price"]/text()').get().split(' ')[0],
-                'currency': response.xpath('//span[@class="PriceContainer-price"]/text()').get().split(' ')[-1],
-                'price_discount': (None if discount is None else discount.split(" ")[0]),
-                'sold_out': sold_out,
-                'primary_label': response.xpath('//span[@class="Badge"]/text()').get(),
-                'image_url': image,
-                'text': response.xpath('//div[@id="content-tab-panel-0"]/p/text()').get()
-            }
-
-            if not os.path.exists('output'):
-                # If the directory doesn't exist, create it
-                os.makedirs('output')
-
-            # save to CSV
-            self.save_to_csv(filename, data)
-
-            # Create a directory for images if it doesn't exist
-            image_dir = 'output/images/ounass/' + date_string + '/' + \
-                response.url.split('/')[-1].split('.')[0]
-            if not os.path.exists(image_dir):
-                os.makedirs(image_dir)
-
-            # Download images
-            image_urls = data['image_url']
-            yield scrapy.Request(image_urls, callback=self.save_image, meta={'image_dir': image_dir})
+            yield from self.parse_pdp(response)
+            return

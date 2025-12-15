@@ -1,6 +1,6 @@
 import json
 import pytest
-from scrapy.http import TextResponse, Request
+from scrapy.http import HtmlResponse, TextResponse, Request
 
 from ecommercecrawl.rules import ounass_rules as rules
 from ecommercecrawl.constants.ounass_constants import MAIN_SITE
@@ -11,6 +11,10 @@ def create_mock_response(body_dict, url="http://fake.com"):
     body = json.dumps(body_dict)
     request = Request(url=url)
     return TextResponse(url=url, request=request, body=body, encoding='utf-8')
+
+def create_mock_html_response(body_html, url="http://fake.com/product.html"):
+    request = Request(url=url)
+    return HtmlResponse(url=url, request=request, body=body_html, encoding='utf-8')
 
 # --- Tests for is_plp ---
 
@@ -154,3 +158,127 @@ def test_is_pdp_false_for_non_html_url():
     """Should return False for URLs not ending in .html."""
     response = create_mock_response({}, url="https://api.ounass.ae/some/data")
     assert rules.is_pdp(response) is False
+
+# --- Tests for get_state ---
+
+def test_get_state_extracts_initial_state():
+    state = {
+        "routeType": "new-pdp",
+        "country": "AE",
+        "pdp": {"name": "Test Product"}
+    }
+    script = f"window.initialState = {json.dumps(state, separators=(',', ':'))};"
+    html = f"<html><body><script>{script}</script></body></html>"
+    response = create_mock_html_response(html)
+
+    assert rules.get_state(response) == state
+
+
+def test_get_state_returns_none_when_script_missing():
+    html = "<html><body><div>No state script here</div></body></html>"
+    response = create_mock_html_response(html)
+
+    assert rules.get_state(response) is None
+
+
+def test_get_state_returns_none_on_invalid_json():
+    script = 'window.initialState = {"routeType":"new-pdp",};'
+    html = f"<html><body><script>{script}</script></body></html>"
+    response = create_mock_html_response(html)
+
+    assert rules.get_state(response) is None
+
+
+# --- Tests for safe_get ---
+
+def test_safe_get_returns_nested_value():
+    data = {"a": {"b": {"c": 5}}}
+    assert rules.safe_get(data, ["a", "b", "c"]) == 5
+
+
+def test_safe_get_returns_default_when_missing():
+    data = {"a": {}}
+    assert rules.safe_get(data, ["a", "b"], default="missing") == "missing"
+
+
+def test_safe_get_returns_default_for_non_dict():
+    assert rules.safe_get("not-a-dict", ["a"], default=None) is None
+
+
+# --- Tests for extraction helpers ---
+
+def test_get_sold_out_recognizes_badge_string():
+    state = {"pdp": {"badge": "OUT OF STOCK"}}
+    assert rules.get_sold_out(state) is True
+
+
+def test_get_sold_out_handles_non_matching_badge():
+    state = {"pdp": {"badge": "COMING SOON"}}
+    assert rules.get_sold_out(state) is False
+
+
+def test_get_sold_out_returns_none_for_missing_badge():
+    state = {"pdp": {}}
+    assert rules.get_sold_out(state) is None
+
+
+def test_get_discount_returns_value_or_none():
+    assert rules.get_discount({"pdp": {"discountPercent": 30}}) == 30
+    assert rules.get_discount({"pdp": {}}) is None
+
+
+def test_get_primary_label_extracts_value():
+    state = {"pdp": {"badge": {"value": "NEW"}}}
+    assert rules.get_primary_label(state) == "NEW"
+
+
+def test_get_primary_label_returns_none_for_missing_badge():
+    state = {"pdp": {}}
+    assert rules.get_primary_label(state) is None
+
+
+def test_get_image_url_extracts_path():
+    state = {"pdp": {"images": [{"oneX": "https://cdn.ounass.ae/image.jpg"}]}}
+    assert rules.get_image_url(state) == "cdn.ounass.ae/image.jpg"
+
+
+def test_get_image_url_returns_none_on_error():
+    state = {"pdp": {}}
+    assert rules.get_image_url(state) is None
+
+
+def test_get_data_collects_expected_fields():
+    state = {
+        "country": "AE",
+        "currency": "AED",
+        "pdp": {
+            "visibleSku": "SKU123",
+            "name": "Product Name",
+            "gender": "MEN",
+            "designerCategoryName": "Brand",
+            "department": "Shoes",
+            "class": "Sneakers",
+            "color": "Black",
+            "price": 1500,
+            "discountPercent": 20,
+            "badge": {"value": "EXCLUSIVE"},
+            "images": [{"oneX": "https://cdn.ounass.ae/path/img.jpg"}]
+        }
+    }
+
+    assert rules.get_data(state) == {
+        "country": "AE",
+        "portal_itemid": "SKU123",
+        "product_name": "Product Name",
+        "gender": "MEN",
+        "brand": "Brand",
+        "category": "Shoes",
+        "subcategory": "Sneakers",
+        "color": "Black",
+        "price": 1500,
+        "currency": "AED",
+        "discount": 20,
+        "sold_out": False,
+        "primary_label": "EXCLUSIVE",
+        "image_url": "cdn.ounass.ae/path/img.jpg",
+    }
