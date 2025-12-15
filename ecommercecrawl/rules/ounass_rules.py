@@ -119,8 +119,8 @@ def safe_get(data, keys, default=None):
 
 def get_sold_out(state):
     try:
-        return state['pdp']['badge'] == 'OUT OF STOCK'
-    except KeyError:
+        return state['pdp']['badge']['value'] == 'OUT OF STOCK'
+    except Exception:
         return None
     
 def get_discount(state):

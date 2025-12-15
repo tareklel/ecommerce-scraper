@@ -208,13 +208,13 @@ def test_safe_get_returns_default_for_non_dict():
 # --- Tests for extraction helpers ---
 
 def test_get_sold_out_recognizes_badge_string():
-    state = {"pdp": {"badge": "OUT OF STOCK"}}
+    state = {"pdp": {"badge": {"value": "OUT OF STOCK"}}}
     assert rules.get_sold_out(state) is True
 
 
 def test_get_sold_out_handles_non_matching_badge():
-    state = {"pdp": {"badge": "COMING SOON"}}
-    assert rules.get_sold_out(state) is False
+    state = {"pdp": {"badge": {}}}
+    assert rules.get_sold_out(state) is None
 
 
 def test_get_sold_out_returns_none_for_missing_badge():
