@@ -30,7 +30,7 @@ def get_gender(url: str):
         return 'kids'
     return None
 
-def get_language(url: str):
+def get_language_plp(url: str):
     # return language from plp subpath
     if is_plp(url):
         subdomain = url.split('/')[2].split('.')[0]

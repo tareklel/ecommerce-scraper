@@ -49,7 +49,7 @@ class LevelSpider(MasterCrawl, scrapy.Spider):
             country = rules.get_country(url)
             gender = rules.get_gender(url)
             headers = constants.API_HEADERS
-            language = rules.get_language(url)
+            language = rules.get_language_plp(url)
             urlpath = rules.get_urlpath(url)
 
             api = f'{constants.API_BASE_URL}/{country}/{language}/{constants.API_ENDPOINT}'
