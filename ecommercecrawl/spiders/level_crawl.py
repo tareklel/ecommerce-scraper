@@ -3,9 +3,9 @@ from datetime import date
 from ecommercecrawl.spiders.mastercrawl import MasterCrawl
 from ecommercecrawl.rules import level_rules as rules
 from ecommercecrawl.constants import level_constants as constants
-from scrapy.http import HtmlResponse, TextResponse
 import requests
-import os
+import re
+
 
 class LevelSpider(MasterCrawl, scrapy.Spider):
     name = constants.NAME
@@ -38,12 +38,10 @@ class LevelSpider(MasterCrawl, scrapy.Spider):
         Override to fetch PLP data via the API before parsing.
         """
         if rules.is_plp(url):
-            self.handle_plp_url(url)
-                
+            yield from self.handle_plp_url(url)
+            return
+        yield scrapy.Request(url, callback=self.parse_pdp, meta={"item": {}})
 
-        # Non-PLP URLs fall back to the default Scrapy downloader.
-        yield from super()._handle_seed_url(url)
-        
     def get_api_params(self, url, page_number=0):
         if rules.is_plp(url):
             country = rules.get_country(url)
@@ -71,25 +69,49 @@ class LevelSpider(MasterCrawl, scrapy.Spider):
         page = 0
         while True:
             payload = self._fetch_plp_via_api(url, page)
-            items = rules.get_products(payload)
+            items = rules.get_products(payload) or []
             if not items:
                 break
             for item in items:
-                self.handle_plp_item(item)
+                yield from self._handle_plp_item(item)
             page +=1
-    
-    def handle_plp_item(self, item):
-        return
+        
+    def _handle_plp_item(self, item):
+        date_string = date.today().strftime("%Y-%m-%d")
+        url = rules.get_url_from_item(item)
+
+
+        data_dict = {
+                'run_id': self.run_id,
+                'site': constants.NAME,
+                'crawl_date': date_string,
+                'url': url,
+                'portal_itemid': rules.get_id_from_item(item),
+                'product_name': rules.get_name_from_item(item),
+                'gender': rules.get_gender_from_item(item),
+                'brand': rules.get_brand_from_item(item),
+                'category':rules.get_category_from_item(item),
+                'subcategory': rules.get_subcategory_from_item(item),
+                'price': rules.get_price_from_item(item),
+                'currency': rules.get_currency_from_item(item),
+                # percentage discounted
+                'price_discount': rules.get_price_discount_from_item(item),
+                'primary_label': rules.get_primary_label_from_item(item),
+                'image_urls': rules.get_image_urls_from_item(item)
+                # add sold out https://www.levelshoes.com/off-white-out-of-office-ooo-sneakers-white-calf-leather-men-low-tops-a8vplk.html
+                # 'is_sold_out': rules.is_sold_out_from_item(item),
+            }
+        yield scrapy.Request(
+            url, 
+            callback=self.parse_pdp, 
+            meta={"item": data_dict}
+            )
 
     def parse(self, response):
-        """
-        This method parses a product detail page, extracts the product information,
-        and returns an Item.
-        """
-        if rules.is_pdp(response):
-            yield from self.parse_pdp(response)
-            return
-        
+        yield from self.parse_pdp(response)
+
     def parse_pdp(self, response):
-        return
-        
+        item = response.meta.get('item', {})
+        # add logic here to handle fillng data dict for blanks in response
+        item['text'] = rules.extract_product_details(response)
+        yield item

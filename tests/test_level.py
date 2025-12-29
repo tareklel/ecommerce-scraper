@@ -1,5 +1,6 @@
 import pytest
 import requests
+import scrapy
 from ecommercecrawl.spiders.level_crawl import LevelSpider
 from ecommercecrawl.constants import level_constants as constants
 
@@ -80,34 +81,30 @@ def test_handle_plp_url_processes_products(monkeypatch):
 
     def fake_handle_item(item):
         seen.append(item)
+        return []
 
     monkeypatch.setattr(spider, "_fetch_plp_via_api", fake_fetch)
-    monkeypatch.setattr(spider, "handle_plp_item", fake_handle_item)
+    monkeypatch.setattr(spider, "_handle_plp_item", fake_handle_item)
 
-    spider.handle_plp_url("https://www.levelshoes.com/women/bags")
+    list(spider.handle_plp_url("https://www.levelshoes.com/women/bags"))
 
     assert seen == [{"id": 1}, {"id": 2}, {"id": 3}]
 
 
 def test_handle_seed_url_routes_plp(monkeypatch):
     spider = LevelSpider()
-    called = {"plp": False, "base": False}
+    called = {"plp": False}
 
     def fake_handle_plp(url):
         called["plp"] = True
-
-    def fake_base(self, url):
-        called["base"] = True
-        return iter(["base_request"])
+        return iter(["plp_request"])
 
     monkeypatch.setattr(spider, "handle_plp_url", fake_handle_plp)
-    monkeypatch.setattr("ecommercecrawl.spiders.level_crawl.MasterCrawl._handle_seed_url", fake_base)
 
     results = list(spider._handle_seed_url("https://www.levelshoes.com/women/bags"))
 
     assert called["plp"] is True
-    assert called["base"] is True
-    assert results == ["base_request"]
+    assert results == ["plp_request"]
 
 
 def test_handle_seed_url_skips_plp_logic_for_non_plp(monkeypatch):
@@ -126,4 +123,45 @@ def test_handle_seed_url_skips_plp_logic_for_non_plp(monkeypatch):
     results = list(spider._handle_seed_url("https://www.levelshoes.com/some-product.html"))
 
     assert called["plp"] is False
-    assert results == ["base_request"]
+    # Non-PLP goes through the spider's own logic (parse_pdp request), not the PLP handler.
+    assert len(results) == 1
+    assert isinstance(results[0], scrapy.Request)
+
+
+def test_handle_plp_item_builds_request_with_meta():
+    spider = LevelSpider()
+    item = {
+        "action": {"url": "https://www.levelshoes.com/p/sneaker.html"},
+        "id": "SKU123",
+        "name": "Sneaker",
+        "brandName": "BrandX",
+        "analytics": {
+            "category1": "Shoes",
+            "category2": "Sneakers",
+            "gender": "men",
+            "originalPrice": 123,
+        },
+        "originalPrice": "123 AED",
+        "discountPercentage": 20,
+        "badges": [{"text": "NEW"}],
+        "imagePreviewGallery": [{"url": "https://cdn.levelshoes.com/img.jpg"}],
+    }
+
+    requests_out = list(spider._handle_plp_item(item))
+    assert len(requests_out) == 1
+    req = requests_out[0]
+    assert isinstance(req, scrapy.Request)
+    meta_item = req.meta["item"]
+
+    assert meta_item["url"] == "https://www.levelshoes.com/p/sneaker.html"
+    assert meta_item["portal_itemid"] == "SKU123"
+    assert meta_item["product_name"] == "Sneaker"
+    assert meta_item["gender"] == "men"
+    assert meta_item["brand"] == "BrandX"
+    assert meta_item["category"] == "Shoes"
+    assert meta_item["subcategory"] == "Sneakers"
+    assert meta_item["price"] == 123
+    assert meta_item["currency"] == "AED"
+    assert meta_item["price_discount"] == 20
+    assert meta_item["primary_label"] == ["NEW"]
+    assert meta_item["image_urls"] == "https://cdn.levelshoes.com/img.jpg"
