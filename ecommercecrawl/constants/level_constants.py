@@ -20,3 +20,4 @@ GROUPID = "1000"
 
 API_BASE_URL = "https://api.levelshoes.digital/catalog"
 API_ENDPOINT = "products/urlPath/v1"
+API_ENDPOINT_PDP = "products/moreFromBrand/v1"

@@ -5,6 +5,10 @@ from scrapy.http import HtmlResponse, Request
 from ecommercecrawl.rules import level_rules as rules
 
 
+def make_response(html: str, url: str = "https://www.levelshoes.com/product.html") -> HtmlResponse:
+    return HtmlResponse(url=url, request=Request(url=url), body=html, encoding="utf-8")
+
+
 def test_get_products_returns_value():
     payload = {"products": [{"id": 1}, {"id": 2}]}
     assert rules.get_products(payload) == payload["products"]
@@ -88,18 +92,18 @@ def test_is_plp(url, expected):
 
 
 def test_is_pdp_true_when_html_and_no_gender():
-    response = SimpleNamespace(url="https://www.levelshoes.com/bally-bag.html")
-    assert rules.is_pdp(response) is True
+    url="https://www.levelshoes.com/bally-bag.html"
+    assert rules.is_pdp(url) is True
 
 
 def test_is_pdp_false_when_gender_present_in_html_url():
-    response = SimpleNamespace(url="https://www.levelshoes.com/women/bally-bag.html")
-    assert rules.is_pdp(response) is False
+    url="https://www.levelshoes.com/women/bally-bag.html"
+    assert rules.is_pdp(url) is False
 
 
 def test_is_pdp_false_when_not_html():
-    response = SimpleNamespace(url="https://www.levelshoes.com/women/bags")
-    assert rules.is_pdp(response) is False
+    url="https://www.levelshoes.com/women/bags"
+    assert rules.is_pdp(url) is False
 
 
 def test_get_url_from_item_returns_url():
@@ -113,11 +117,11 @@ def test_get_category_and_price_from_item():
             "category1": "Bags",
             "category2": "Totes",
             "gender": "women",
-            "originalPrice": 1234,
+            "price": 1234,
         }
     }
-    assert rules.get_category_from_item(item) == "Bags"
-    assert rules.get_subcategory_from_item(item) == "Totes"
+    assert rules.get_category_from_item(item) == "bags"
+    assert rules.get_subcategory_from_item(item) == "totes"
     assert rules.get_gender_from_item(item) == "women"
     assert rules.get_price_from_item(item) == 1234
 
@@ -169,3 +173,128 @@ def test_extract_product_details_returns_empty_when_missing():
         encoding="utf-8",
     )
     assert rules.extract_product_details(response) == ""
+
+
+def test_extract_sku_prefers_json_ld():
+    html = """
+    <html><head>
+    <script type="application/ld+json">
+    {"@context":"https://schema.org","@type":"Product","sku":"ELISA-105-WHITE"}
+    </script>
+    </head></html>
+    """
+    response = make_response(html)
+    assert rules.extract_sku(response) == "ELISA-105-WHITE"
+
+
+def test_extract_product_name_from_json_ld():
+    html = """
+    <script type="application/ld+json">
+    {"@context":"https://schema.org","@type":"Product","name":"Elisa pumps"}
+    </script>
+    """
+    response = make_response(html)
+    assert rules.extract_product_name(response) == "Elisa pumps"
+
+
+def test_extract_gender_from_breadcrumbs_json_ld():
+    html = """
+    <script type="application/ld+json">
+    {"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[
+      {"@type":"ListItem","position":1,"name":"Home"},
+      {"@type":"ListItem","position":2,"name":"Women"}
+    ]}
+    </script>
+    """
+    response = make_response(html)
+    assert rules.extract_gender_from_breadcrumbs(response) == "Women"
+
+
+def test_extract_product_brand_from_json_ld():
+    html = """
+    <script type="application/ld+json">
+    {"@context":"https://schema.org","@type":"Product","brand":{"name":"Dolce & Gabbana"}}
+    </script>
+    """
+    response = make_response(html)
+    assert rules.extract_product_brand(response) == "Dolce & Gabbana"
+
+
+def test_extract_category_and_subcategory_from_breadcrumbs():
+    html = """
+    <script type="application/ld+json">
+    {"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[
+      {"@type":"ListItem","position":1,"item":"https://www.levelshoes.com/men"},
+      {"@type":"ListItem","position":2,"item":"https://www.levelshoes.com/men/shoes/sneakers"}
+    ]}
+    </script>
+    """
+    response = make_response(html)
+    assert rules.extract_category_and_subcategory_from_breadcrumbs(response) == ("shoes", "sneakers")
+
+
+def test_extract_price_prefers_meta_product_amount():
+    html = """
+    <meta property="product:price:amount" content="1,234 AED">
+    """
+    response = make_response(html)
+    assert rules.extract_price(response) == 1234
+
+
+def test_extract_currency_from_meta_tag():
+    html = """
+    <meta property="product:price:currency" content="AED">
+    """
+    response = make_response(html)
+    assert rules.extract_currency(response) == "AED"
+
+
+def test_extract_price_discount_from_script_block():
+    html = """
+    <script>{"discountPercentage":"40% OFF"}</script>
+    """
+    response = make_response(html)
+    assert rules.extract_price_discount(response) == "40% OFF"
+
+
+def test_extract_badges_cleans_and_dedupes():
+    html = """
+    <div class="absolute z-10 mt-4 flex gap-1 ms-4">
+      <span class="badge">★EXCLUSIVE</span>
+      <span class="typography-badge">NEW</span>
+      <span class="badge">NEW</span>
+    </div>
+    """
+    response = make_response(html)
+    assert rules.extract_badges(response) == ["EXCLUSIVE", "NEW"]
+
+
+def test_extract_first_image_url_from_og_tag():
+    html = """
+    <meta property="og:image" content="https://cdn.levelshoes.com/primary.jpg">
+    """
+    response = make_response(html)
+    assert rules.extract_first_image_url(response) == "https://cdn.levelshoes.com/primary.jpg"
+
+
+def test_is_out_of_stock_true_when_meta_says_out():
+    html = """
+    <meta name="product:availability" content="out of stock">
+    """
+    response = make_response(html)
+    assert rules.is_out_of_stock(response) is True
+
+
+def test_is_out_of_stock_defaults_to_false_when_missing():
+    response = make_response("<html></html>")
+    assert rules.is_out_of_stock(response) is False
+
+
+def test_extract_level_category_id_returns_int():
+    html = """
+    <script type="application/ld+json">
+    {"@type":"Product","category":"2949"}
+    </script>
+    """
+    response = make_response(html)
+    assert rules.extract_level_category_id(response) == 2949

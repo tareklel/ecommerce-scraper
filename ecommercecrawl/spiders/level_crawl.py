@@ -17,21 +17,29 @@ class LevelSpider(MasterCrawl, scrapy.Spider):
         self.urlpath = urlpath
         self.start_urls = urls or []
         self.limit = limit
+        self.date_string = date.today().strftime("%Y-%m-%d")
 
-    def _fetch_plp_via_api(self, url, page_number=0):
-        """
-        Fetch a PLP payload directly from the Level API using requests.
-        """
-        api, params, headers = self.get_api_params(url, page_number)
+    def _get_payload(self, api, params, headers):
         try:
             response = requests.get(api, params=params, headers=headers)
             response.raise_for_status()
             payload = response.json()
         except requests.exceptions.RequestException as exc:
-            self.logger.error(f"Failed to fetch PLP {url} via API: {exc}")
+            self.logger.error(f"Failed to fetch PLP via API: {exc}")
             return None
 
         return payload
+    
+    def _fetch_plp_via_api(self, url, page_number=0):
+        """
+        Fetch a PLP payload directly from the Level API using requests.
+        """
+        api, params, headers = self.get_api_params_plp(url, page_number)
+        return self._get_payload(api, params, headers)
+    
+    def _fetch_pdp_via_api(self, sku, language, gender):
+        api, params, headers = self.get_api_params_pdp(sku, language, gender)
+        return self._get_payload(api, params, headers)
 
     def _handle_seed_url(self, url):
         """
@@ -40,9 +48,12 @@ class LevelSpider(MasterCrawl, scrapy.Spider):
         if rules.is_plp(url):
             yield from self.handle_plp_url(url)
             return
-        yield scrapy.Request(url, callback=self.parse_pdp, meta={"item": {}})
+        elif rules.is_pdp(url):
+            yield scrapy.Request(url, callback=self.parse)
+            return
+        return None
 
-    def get_api_params(self, url, page_number=0):
+    def get_api_params_plp(self, url, page_number=0):
         if rules.is_plp(url):
             country = rules.get_country(url)
             gender = rules.get_gender(url)
@@ -64,7 +75,7 @@ class LevelSpider(MasterCrawl, scrapy.Spider):
             return api, dict(params_base), headers
         else:
             raise ValueError(f'URL {url} is not a PLP URL')
-    
+  
     def handle_plp_url(self, url):
         page = 0
         while True:
@@ -73,19 +84,19 @@ class LevelSpider(MasterCrawl, scrapy.Spider):
             if not items:
                 break
             for item in items:
-                yield from self._handle_plp_item(item)
+                yield from self._handle_item(item)
             page +=1
         
-    def _handle_plp_item(self, item):
-        date_string = date.today().strftime("%Y-%m-%d")
+    def _handle_item(self, item):
         url = rules.get_url_from_item(item)
 
 
         data_dict = {
                 'run_id': self.run_id,
                 'site': constants.NAME,
-                'crawl_date': date_string,
+                'crawl_date': self.date_string,
                 'url': url,
+                'country': rules.get_country(url),
                 'portal_itemid': rules.get_id_from_item(item),
                 'product_name': rules.get_name_from_item(item),
                 'gender': rules.get_gender_from_item(item),
@@ -98,20 +109,50 @@ class LevelSpider(MasterCrawl, scrapy.Spider):
                 'price_discount': rules.get_price_discount_from_item(item),
                 'primary_label': rules.get_primary_label_from_item(item),
                 'image_urls': rules.get_image_urls_from_item(item)
-                # add sold out https://www.levelshoes.com/off-white-out-of-office-ooo-sneakers-white-calf-leather-men-low-tops-a8vplk.html
-                # 'is_sold_out': rules.is_sold_out_from_item(item),
+                # add stock_info https://www.levelshoes.com/off-white-out-of-office-ooo-sneakers-white-calf-leather-men-low-tops-a8vplk.html
+                # 'stock': rules.get_stock_from_item(item),
             }
         yield scrapy.Request(
             url, 
             callback=self.parse_pdp, 
-            meta={"item": data_dict}
+            meta={"data_dict": data_dict}
             )
 
     def parse(self, response):
-        yield from self.parse_pdp(response)
+        if rules.is_pdp(response.url):
+            yield from self.parse_pdp(response)
 
     def parse_pdp(self, response):
-        item = response.meta.get('item', {})
-        # add logic here to handle fillng data dict for blanks in response
-        item['text'] = rules.extract_product_details(response)
-        yield item
+            # Fill in any missing fields from meta with lightweight placeholders without overwriting provided values.
+            data_dict = dict(response.meta.get('data_dict', {}))
+            placeholders = {
+                'run_id': lambda: self.run_id,
+                'site': lambda: constants.NAME,
+                'crawl_date': lambda: self.date_string,
+                'url': lambda: response.url,
+                'country': lambda: rules.get_country(response.url),
+                'portal_itemid': lambda: rules.extract_sku(response),
+                'product_name': lambda: rules.extract_product_name(response),
+                'gender': lambda: rules.extract_gender_from_breadcrumbs(response),
+                'brand': lambda: rules.extract_product_brand(response),
+                'category': lambda: rules.extract_category_and_subcategory_from_breadcrumbs(response)[0],
+                'subcategory': lambda: rules.extract_category_and_subcategory_from_breadcrumbs(response)[1],
+                'price': lambda: rules.extract_price(response),
+                'currency': lambda: rules.extract_currency(response),
+                'price_discount': lambda: rules.extract_price_discount(response),
+                'primary_label': lambda: rules.extract_badges(response),
+                'image_urls': lambda: rules.extract_first_image_url(response),
+                'text': lambda: rules.extract_product_details(response),
+                'out_of_stock': lambda: rules.is_out_of_stock(response),
+                'level_category_id': lambda: rules.extract_level_category_id(response)
+            }
+
+            for key, provider in placeholders.items():
+                if data_dict.get(key) is None:
+                    value = provider()
+                    if value is not None:
+                        data_dict[key] = value
+                    else:
+                        data_dict[key] = None
+
+            yield data_dict

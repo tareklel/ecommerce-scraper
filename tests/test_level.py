@@ -9,7 +9,7 @@ def test_get_api_params_for_plp():
     spider = LevelSpider()
     url = "https://www.levelshoes.com/women/bags"
 
-    api, params, headers = spider.get_api_params(url, page_number=3)
+    api, params, headers = spider.get_api_params_plp(url, page_number=3)
 
     assert api == f"{constants.API_BASE_URL}/ae/en/{constants.API_ENDPOINT}"
     assert params["urlPath"] == "bags"
@@ -22,7 +22,7 @@ def test_get_api_params_for_plp():
 def test_get_api_params_raises_for_non_plp():
     spider = LevelSpider()
     with pytest.raises(ValueError):
-        spider.get_api_params("https://www.levelshoes.com/stories/all")
+        spider.get_api_params_plp("https://www.levelshoes.com/stories/all")
 
 
 def test_fetch_plp_via_api_returns_payload(monkeypatch):
@@ -84,7 +84,7 @@ def test_handle_plp_url_processes_products(monkeypatch):
         return []
 
     monkeypatch.setattr(spider, "_fetch_plp_via_api", fake_fetch)
-    monkeypatch.setattr(spider, "_handle_plp_item", fake_handle_item)
+    monkeypatch.setattr(spider, "_handle_item", fake_handle_item)
 
     list(spider.handle_plp_url("https://www.levelshoes.com/women/bags"))
 
@@ -132,14 +132,14 @@ def test_handle_plp_item_builds_request_with_meta():
     spider = LevelSpider()
     item = {
         "action": {"url": "https://www.levelshoes.com/p/sneaker.html"},
-        "id": "SKU123",
         "name": "Sneaker",
         "brandName": "BrandX",
         "analytics": {
+            "item_id": "SKU123",
             "category1": "Shoes",
             "category2": "Sneakers",
             "gender": "men",
-            "originalPrice": 123,
+            "price": 123,
         },
         "originalPrice": "123 AED",
         "discountPercentage": 20,
@@ -147,19 +147,19 @@ def test_handle_plp_item_builds_request_with_meta():
         "imagePreviewGallery": [{"url": "https://cdn.levelshoes.com/img.jpg"}],
     }
 
-    requests_out = list(spider._handle_plp_item(item))
+    requests_out = list(spider._handle_item(item))
     assert len(requests_out) == 1
     req = requests_out[0]
     assert isinstance(req, scrapy.Request)
-    meta_item = req.meta["item"]
+    meta_item = req.meta["data_dict"]
 
     assert meta_item["url"] == "https://www.levelshoes.com/p/sneaker.html"
     assert meta_item["portal_itemid"] == "SKU123"
     assert meta_item["product_name"] == "Sneaker"
     assert meta_item["gender"] == "men"
     assert meta_item["brand"] == "BrandX"
-    assert meta_item["category"] == "Shoes"
-    assert meta_item["subcategory"] == "Sneakers"
+    assert meta_item["category"] == "shoes"
+    assert meta_item["subcategory"] == "sneakers"
     assert meta_item["price"] == 123
     assert meta_item["currency"] == "AED"
     assert meta_item["price_discount"] == 20

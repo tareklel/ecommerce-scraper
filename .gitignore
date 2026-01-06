@@ -13,7 +13,7 @@ farfetch_html_fixtures/
 logs/
 .env
 *.ipynb 
-
+*.html
 *.txt
 
 # Local Terraform state
