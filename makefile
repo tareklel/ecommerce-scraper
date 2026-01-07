@@ -41,7 +41,20 @@ docker-run-ff-dev:
 run-ounass-local:
 	poetry run python3 run_crawler.py ounass --urls $(OUNASS_TEST_URL)
 
+run-ounass-test-upload:
+	AWS_PROFILE=$(AWS_PROFILE) \
+	S3_BUCKET=$(S3_BUCKET) \
+	S3_UPLOAD_ENABLED=true \
+	poetry run python3 run_crawler.py ounass --urls $(OUNASS_TEST_URL)
+
+# level
 run-level-local:
+	poetry run python3 run_crawler.py level --urls $(LEVEL_TEST_URL)
+
+run-level-test-upload:
+	AWS_PROFILE=$(AWS_PROFILE) \
+	S3_BUCKET=$(S3_BUCKET) \
+	S3_UPLOAD_ENABLED=true \
 	poetry run python3 run_crawler.py level --urls $(LEVEL_TEST_URL)
 
 
