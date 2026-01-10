@@ -49,7 +49,9 @@ resource "aws_ecs_task_definition" "scraper" {
       name      = "scraper"
       image     = "${aws_ecr_repository.scraper.repository_url}:${var.image_tag}"
       essential = true
-      command   = var.ecs_command
+      # Use a shell entrypoint so we can chain multiple runs in one task.
+      entryPoint = var.ecs_entrypoint
+      command    = var.ecs_command
       environment = [
         { name = "S3_BUCKET", value = var.price_comparison_bucket },
         { name = "S3_UPLOAD_ENABLED", value = var.s3_upload_enabled }

@@ -58,11 +58,15 @@ variable "ecs_command" {
   description = "Default container command for the task"
   type        = list(string)
   default = [
-    "run_crawler.py",
-    "ounass",
-    "--urls",
-    "https://www.ounass.ae/api/women/designers/burberry/bags"
+    "python3 run_crawler.py ounass --urls https://www.ounass.ae/api/women/designers/burberry/bags && python3 run_crawler.py level --urls https://www.levelshoes.com/women/brands/toteme/bags"
   ]
+}
+
+# Override the image ENTRYPOINT so we can chain multiple commands.
+variable "ecs_entrypoint" {
+  description = "Container entrypoint for ECS (use /bin/sh -c for chained commands)"
+  type        = list(string)
+  default     = ["/bin/sh", "-c"]
 }
 
 # Toggle S3 upload behavior in the pipeline.
