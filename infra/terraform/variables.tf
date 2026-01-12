@@ -58,7 +58,7 @@ variable "ecs_command" {
   description = "Default container command for the task"
   type        = list(string)
   default = [
-    "python3 run_crawler.py ounass --urls https://www.ounass.ae/api/women/designers/burberry/bags && python3 run_crawler.py level --urls https://www.levelshoes.com/women/brands/toteme/bags"
+    "echo 'Set ECS_RUN_COMMAND override for this task'"
   ]
 }
 

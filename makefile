@@ -7,6 +7,12 @@ IMAGE_NAME = ecommerce-scraper
 IMAGE_TAG ?= latest
 # Region should match infra/terraform/variables.tf (var.region).
 AWS_REGION ?= me-central-1
+# Optional: override ECS command at runtime (used by ecs-run).
+ECS_RUN_COMMAND ?=
+# Saved test command (previous Terraform default) for quick reuse.
+ECS_TEST_COMMAND = python3 run_crawler.py ounass --urls https://www.ounass.ae/api/women/designers/burberry/bags && python3 run_crawler.py level --urls https://www.levelshoes.com/women/brands/toteme/bags
+# Script that renders ECS --overrides JSON from ECS_RUN_COMMAND.
+ECS_OVERRIDES_SCRIPT = scripts/ecs_overrides.py
 FF_TEST_URL = https://www.farfetch.com/ae/shopping/women/louis-vuitton-pre-owned/clothing-1/items.aspx
 OUNASS_TEST_URL=https://www.ounass.ae/api/women/designers/burberry/bags
 LEVEL_TEST_URL=https://www.levelshoes.com/women/brands/miu-miu/bags
@@ -107,9 +113,24 @@ ecs-run:
 	TASK_DEF=$$(cd $(TF_DIR) && terraform output -raw ecs_task_definition_arn); \
 	SUBNETS=$$(cd $(TF_DIR) && terraform output -json default_subnet_ids | python3 -c 'import json,sys; print(",".join(json.load(sys.stdin)))'); \
 	SG=$$(cd $(TF_DIR) && terraform output -raw ecs_task_security_group_id); \
-	AWS_PROFILE=$(AWS_PROFILE) aws ecs run-task \
-		--region $(AWS_REGION) \
-		--cluster $$CLUSTER \
-		--task-definition $$TASK_DEF \
-		--launch-type FARGATE \
-		--network-configuration "awsvpcConfiguration={subnets=[$$SUBNETS],securityGroups=[$$SG],assignPublicIp=ENABLED}"
+	OVERRIDES=$$(ECS_RUN_COMMAND="$(ECS_RUN_COMMAND)" python3 $(ECS_OVERRIDES_SCRIPT)); \
+	if [ -n "$$OVERRIDES" ]; then \
+		AWS_PROFILE=$(AWS_PROFILE) aws ecs run-task \
+			--region $(AWS_REGION) \
+			--cluster $$CLUSTER \
+			--task-definition $$TASK_DEF \
+			--launch-type FARGATE \
+			--network-configuration "awsvpcConfiguration={subnets=[$$SUBNETS],securityGroups=[$$SG],assignPublicIp=ENABLED}" \
+			--overrides "$$OVERRIDES"; \
+	else \
+		AWS_PROFILE=$(AWS_PROFILE) aws ecs run-task \
+			--region $(AWS_REGION) \
+			--cluster $$CLUSTER \
+			--task-definition $$TASK_DEF \
+			--launch-type FARGATE \
+			--network-configuration "awsvpcConfiguration={subnets=[$$SUBNETS],securityGroups=[$$SG],assignPublicIp=ENABLED}"; \
+	fi
+
+# Run the saved test command (ounass -> level) via ECS override.
+ecs-run-test: ECS_RUN_COMMAND = $(ECS_TEST_COMMAND)
+ecs-run-test: ecs-run

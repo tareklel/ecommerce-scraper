@@ -153,9 +153,9 @@ def get_data(state):
         'color': safe_get(state, ['pdp', 'color']),
         'price': safe_get(state, ['pdp', 'price']),
         'currency': safe_get(state, ['currency']),
-        'discount': get_discount(state),
-        'sold_out': get_sold_out(state),
+        'price_discount': get_discount(state),
         'primary_label': get_primary_label(state),
-        'image_url': get_image_url(state),
+        'image_urls': get_image_url(state),
+        'out_of_stock': get_sold_out(state),     
     }
     
