@@ -262,7 +262,11 @@ def test_get_data_collects_expected_fields():
             "price": 1500,
             "discountPercent": 20,
             "badge": {"value": "EXCLUSIVE"},
-            "images": [{"oneX": "https://cdn.ounass.ae/path/img.jpg"}]
+            "images": [{"oneX": "https://cdn.ounass.ae/path/img.jpg"}],
+            "contentTabs": [
+                {"tabId": "designDetails", "html": "<p>Leather upper</p>"},
+                {"tabId": "sizeAndFit", "html": "<p>True to size</p>"},
+            ],
         }
     }
 
@@ -277,8 +281,9 @@ def test_get_data_collects_expected_fields():
         "color": "Black",
         "price": 1500,
         "currency": "AED",
-        "discount": 20,
-        "sold_out": False,
+        "price_discount": 20,
         "primary_label": "EXCLUSIVE",
-        "image_url": "cdn.ounass.ae/path/img.jpg",
+        "image_urls": "cdn.ounass.ae/path/img.jpg",
+        "out_of_stock": False,
+        "text": "Design Details: Leather upper, Size & Fit: True to size",
     }

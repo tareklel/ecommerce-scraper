@@ -2,6 +2,8 @@ import json
 import re
 import logging
 from ecommercecrawl.constants.ounass_constants import MAIN_SITE
+from html.parser import HTMLParser
+
 
 def is_plp(response):
     try:
@@ -140,6 +142,35 @@ def get_image_url(state):
         return state['pdp']['images'][0]['oneX'].split('//')[1]
     except Exception:
         return None
+    
+
+class HTMLCleaner(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.text = []
+
+    def handle_data(self, data):
+        self.text.append(data)
+
+    def get_cleaned_text(self):
+        return ''.join(self.text).replace('\n', ' ').replace('\xa0', '')
+
+
+
+def extract_product_details(state):
+    design_details = [x['html'] for x in state['pdp']['contentTabs'] if x['tabId'] == 'designDetails'][0]
+    size_fit = [x['html'] for x in state['pdp']['contentTabs'] if x['tabId'] == 'sizeAndFit'][0]
+
+    cleaner = HTMLCleaner()
+    cleaner.feed(design_details)
+    design_details_cleaned = cleaner.get_cleaned_text()
+
+    cleaner = HTMLCleaner()
+    cleaner.feed(size_fit)
+    size_fit_cleaned = cleaner.get_cleaned_text()
+
+    return f"Design Details: {design_details_cleaned}, Size & Fit: {size_fit_cleaned}"
+
 
 def get_data(state):
     return{
@@ -156,6 +187,7 @@ def get_data(state):
         'price_discount': get_discount(state),
         'primary_label': get_primary_label(state),
         'image_urls': get_image_url(state),
-        'out_of_stock': get_sold_out(state),     
+        'out_of_stock': get_sold_out(state),
+        'text': extract_product_details(state),     
     }
     
