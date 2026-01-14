@@ -7,12 +7,14 @@ IMAGE_NAME = ecommerce-scraper
 IMAGE_TAG ?= latest
 # Region should match infra/terraform/variables.tf (var.region).
 AWS_REGION ?= me-central-1
+
 # Optional: override ECS command at runtime (used by ecs-run).
 ECS_RUN_COMMAND ?=
 # Saved test command (previous Terraform default) for quick reuse.
 ECS_TEST_COMMAND = python3 run_crawler.py ounass --urls https://www.ounass.ae/api/women/designers/burberry/bags && python3 run_crawler.py level --urls https://www.levelshoes.com/women/brands/toteme/bags
 # Script that renders ECS --overrides JSON from ECS_RUN_COMMAND.
 ECS_OVERRIDES_SCRIPT = scripts/ecs_overrides.py
+
 FF_TEST_URL = https://www.farfetch.com/ae/shopping/women/louis-vuitton-pre-owned/clothing-1/items.aspx
 OUNASS_TEST_URL=https://www.ounass.ae/api/women/designers/burberry/bags
 LEVEL_TEST_URL=https://www.levelshoes.com/women/brands/miu-miu/bags
@@ -32,9 +34,9 @@ docker-build:
 	fi
 
 # Force rebuild
-rebuild:
+docker-rebuild:
 	echo "🏗️ Rebuilding linux/amd64 image (no cache)..."; \
-	docker buildx build --platform linux/amd6 --no-cache -t $(IMAGE_NAME):latest .
+	docker buildx build --platform linux/amd64 --no-cache -t $(IMAGE_NAME):latest .
 
 # farfetch 
 run-ff-local:
