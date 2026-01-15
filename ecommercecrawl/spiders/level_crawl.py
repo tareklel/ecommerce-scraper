@@ -96,6 +96,7 @@ class LevelSpider(MasterCrawl, scrapy.Spider):
                 'site': constants.NAME,
                 'crawl_date': self.date_string,
                 'url': url,
+                'language': rules.get_language(url),
                 'country': rules.get_country(url),
                 'portal_itemid': rules.get_id_from_item(item),
                 'product_name': rules.get_name_from_item(item),

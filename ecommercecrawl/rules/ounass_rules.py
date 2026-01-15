@@ -1,7 +1,7 @@
 import json
 import re
 import logging
-from ecommercecrawl.constants.ounass_constants import MAIN_SITE
+from ecommercecrawl.constants.ounass_constants import MAIN_SITE, TLD_LANGUAGE_MAP
 from html.parser import HTMLParser
 
 
@@ -155,7 +155,8 @@ class HTMLCleaner(HTMLParser):
     def get_cleaned_text(self):
         return ''.join(self.text).replace('\n', ' ').replace('\xa0', '')
 
-
+def get_language(url):
+    return TLD_LANGUAGE_MAP.get(url.split('https://')[-1].split('/')[0], None)
 
 def extract_product_details(state):
     design_details = [x['html'] for x in state['pdp']['contentTabs'] if x['tabId'] == 'designDetails'][0]

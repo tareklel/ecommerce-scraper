@@ -6,3 +6,14 @@ OUTPUT_DIR = 'output'
 OUNASS_URLS = 'resources/ounass_urls.csv'
 SOLD_OUT_LABEL = 'OUT OF STOCK'
 PLPSORT = 'newness_ae-asc'
+TLD_LANGUAGE_MAP = {
+    'www.ounass.ae': 'EN',
+    'saudi.ounass.com': 'AR',
+    'kuwait.ounass.com': 'EN',
+    'www.ounass.qa': 'EN',
+    'ar.ounass.ae': 'AR',
+    'ar-kuwait.ounass.com': 'AR',
+    'ar.ounass.qa': 'AR',
+    'ar.ounass.sa': 'AR'
+}
+    

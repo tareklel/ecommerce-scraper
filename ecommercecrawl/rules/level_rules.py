@@ -37,12 +37,16 @@ def get_gender(url: str):
 def get_language_plp(url: str):
     # return language from plp subpath
     if is_plp(url):
-        subdomain = url.split('/')[2].split('.')[0]
-        if '/ar/' in url or 'ar-' in subdomain:
-            return 'ar'
-        return 'en'
+        return get_language(url).lower()
     else:
         raise ValueError(f'URL {url} is not a PLP URL')
+
+def get_language(url: str):
+    # return language from url
+    subdomain = url.split('/')[2].split('.')[0]
+    if '/ar/' in url or 'ar-' in subdomain:
+        return 'AR'
+    return 'EN'
 
 def get_urlpath(url: str):
     # search plp for url path after gender

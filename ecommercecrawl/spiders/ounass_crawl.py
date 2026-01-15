@@ -101,6 +101,7 @@ class OunassSpider(MasterCrawl, scrapy.Spider):
                 'site': constants.NAME,
                 'crawl_date': date_string,
                 'url': response.url,
+                'language': rules.get_language(response.url)
             }
             merged = data_dict | data
             yield merged
