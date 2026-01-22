@@ -1,8 +1,9 @@
 import json
 import re
 import logging
-from ecommercecrawl.constants.ounass_constants import MAIN_SITE, TLD_LANGUAGE_MAP
+from ecommercecrawl.constants.ounass_constants import TLD_LANGUAGE_MAP
 from html.parser import HTMLParser
+from urllib.parse import urlparse
 
 
 def is_plp(response):
@@ -49,7 +50,9 @@ def get_pdps(response):
     all_slugs = slugs + additional_slugs
     unique_slugs = {slug for slug in all_slugs if slug}
     
-    urls = [f'{MAIN_SITE}{slug}.html' for slug in unique_slugs]
+    parsed_url = urlparse(response.url)
+    base_address = f"{parsed_url.scheme}://{parsed_url.netloc}"
+    urls = [f'{base_address}/{slug}.html' for slug in unique_slugs]
     return sorted(urls)
 
 
@@ -153,7 +156,9 @@ class HTMLCleaner(HTMLParser):
         self.text.append(data)
 
     def get_cleaned_text(self):
-        return ''.join(self.text).replace('\n', ' ').replace('\xa0', '')
+        text = ''.join(self.text).replace('\n', ' ')
+        text = text.replace('\xa0', '').replace('\u200f', '')
+        return text
 
 def get_language(url):
     return TLD_LANGUAGE_MAP.get(url.split('https://')[-1].split('/')[0], None)
@@ -170,7 +175,7 @@ def extract_product_details(state):
     cleaner.feed(size_fit)
     size_fit_cleaned = cleaner.get_cleaned_text()
 
-    return f"Design Details: {design_details_cleaned}, Size & Fit: {size_fit_cleaned}"
+    return {"design_details": design_details_cleaned, "size_fit": size_fit_cleaned}
 
 
 def get_data(state):
@@ -180,9 +185,10 @@ def get_data(state):
         'product_name': safe_get(state, ['pdp', 'name']),
         'gender': safe_get(state, ['pdp', 'gender']),
         'brand': safe_get(state, ['pdp', 'designerCategoryName']),
+        'brand_id': safe_get(state, ['pdp', 'designerId']),
         'category': safe_get(state, ['pdp', 'department']),
         'subcategory': safe_get(state, ['pdp', 'class']),
-        'color': safe_get(state, ['pdp', 'color']),
+        'color': safe_get(state, ['pdp', 'colorInEnglish']),
         'price': safe_get(state, ['pdp', 'price']),
         'currency': safe_get(state, ['currency']),
         'price_discount': get_discount(state),

@@ -102,6 +102,7 @@ class LevelSpider(MasterCrawl, scrapy.Spider):
                 'product_name': rules.get_name_from_item(item),
                 'gender': rules.get_gender_from_item(item),
                 'brand': rules.get_brand_from_item(item),
+                'color': rules.get_color_from_item(item),
                 'category':rules.get_category_from_item(item),
                 'subcategory': rules.get_subcategory_from_item(item),
                 'price': rules.get_price_from_item(item),

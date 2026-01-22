@@ -79,8 +79,8 @@ def get_name_from_item(x):
     return None
 
 def get_brand_from_item(x):
-    if isinstance(x, dict) and x.get('brandName'):
-        return x['brandName']
+    if isinstance(x, dict) and x.get('analytics'):
+        return x['analytics']['brand']
     return None
 
 def get_category_from_item(x):
@@ -91,6 +91,11 @@ def get_category_from_item(x):
 def get_gender_from_item(x):
     if isinstance(x, dict) and x.get('analytics'):
         return x['analytics']['gender']
+    return None
+
+def get_color_from_item(item):
+    if isinstance(item, dict) and item.get('color'):
+        return item['color'].lower()
     return None
 
 def get_subcategory_from_item(x):
@@ -128,8 +133,8 @@ def _norm_ws(s: str) -> str:
 
 def extract_product_details(response):
     accordion_nodes = response.xpath(
-        '//div[contains(@class,"accordion-root")]'
-        '[.//button//span[normalize-space()="Product Details"]]'
+    '//div[contains(@class,"accordion-root")]'
+    '[.//button//*[normalize-space()="Product Details" or normalize-space()="تفاصيل المنتج"]]'
     )
     if not accordion_nodes:
         return ""
@@ -150,7 +155,7 @@ def extract_product_details(response):
     if details_text:
         bullets.append(details_text)
 
-    return ' | '.join(bullets)
+    return bullets
 
 
 SKU_REGEX = re.compile(
