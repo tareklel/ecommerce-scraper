@@ -35,6 +35,7 @@ class MasterCrawl(Spider):
         self.output_filepath = None
         if not hasattr(self, 'run_id'):
             self.run_id = MasterCrawl._generate_run_id()
+            self.date = self.run_id.split('T')[0]  # Extract datetime part for manifest
 
     @classmethod
     def from_crawler(cls, crawler, *args, **kwargs):
@@ -47,6 +48,7 @@ class MasterCrawl(Spider):
         
         spider.settings = crawler.settings
         spider.run_id = MasterCrawl._generate_run_id()
+        spider.date = spider.run_id.split('T')[0]  # Extract datetime part for manifest
 
         # Capture entry point arguments for the manifest.
         # This is done here because from_crawler receives all spider arguments.

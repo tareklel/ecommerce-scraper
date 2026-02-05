@@ -6,7 +6,7 @@ from ecommercecrawl.rules import ounass_rules as rules
 from ecommercecrawl.constants.ounass_constants import MAIN_SITE
 
 # Helper to create a mock Scrapy TextResponse object
-def create_mock_response(body_dict, url="http://fake.com"):
+def create_mock_response(body_dict, url=MAIN_SITE):
     """Creates a Scrapy TextResponse object with a JSON body."""
     body = json.dumps(body_dict)
     request = Request(url=url)
@@ -101,7 +101,7 @@ def test_get_pdps_extracts_and_deduplicates_slugs():
             }
         ]
     }
-    response = TextResponse(url="http://test.com", body=json.dumps(mock_data), encoding='utf-8')
+    response = TextResponse(url=MAIN_SITE, body=json.dumps(mock_data), encoding='utf-8')
 
     # Act
     urls = rules.get_pdps(response)
@@ -256,9 +256,10 @@ def test_get_data_collects_expected_fields():
             "name": "Product Name",
             "gender": "MEN",
             "designerCategoryName": "Brand",
+            "designerId": "BRAND123",
             "department": "Shoes",
             "class": "Sneakers",
-            "color": "Black",
+            "colorInEnglish": "Black",
             "price": 1500,
             "discountPercent": 20,
             "badge": {"value": "EXCLUSIVE"},
@@ -276,6 +277,7 @@ def test_get_data_collects_expected_fields():
         "product_name": "Product Name",
         "gender": "MEN",
         "brand": "Brand",
+        "brand_id": "BRAND123",
         "category": "Shoes",
         "subcategory": "Sneakers",
         "color": "Black",
@@ -285,5 +287,5 @@ def test_get_data_collects_expected_fields():
         "primary_label": "EXCLUSIVE",
         "image_urls": "cdn.ounass.ae/path/img.jpg",
         "out_of_stock": False,
-        "text": "Design Details: Leather upper, Size & Fit: True to size",
+        "text": {"design_details": "Leather upper", "size_fit": "True to size"},
     }

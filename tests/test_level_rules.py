@@ -161,7 +161,7 @@ def test_extract_product_details_returns_bullets_and_text():
         body=html,
         encoding="utf-8",
     )
-    assert rules.extract_product_details(response) == "Leather upper | Rubber sole | 100% calf leather Made in Italy"
+    assert rules.extract_product_details(response) == ['Leather upper', 'Rubber sole', '100% calf leather Made in Italy']
 
 
 def test_extract_product_details_returns_empty_when_missing():

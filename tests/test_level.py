@@ -133,13 +133,13 @@ def test_handle_plp_item_builds_request_with_meta():
     item = {
         "action": {"url": "https://www.levelshoes.com/p/sneaker.html"},
         "name": "Sneaker",
-        "brandName": "BrandX",
         "analytics": {
             "item_id": "SKU123",
             "category1": "Shoes",
             "category2": "Sneakers",
             "gender": "men",
             "price": 123,
+            "brand": "BrandX",
         },
         "originalPrice": "123 AED",
         "discountPercentage": 20,

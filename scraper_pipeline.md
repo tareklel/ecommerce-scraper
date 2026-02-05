@@ -3,7 +3,7 @@ flowchart TD
   subgraph A_Scraper_Runtime
     A1[Spider / Spiders] --> A2[Item Pipeline: normalize + content_hash]
     A2 --> A3[products.jsonl.gz]
-    A2 --> A5[manifest.json]
+    A2 --> A5[metadata/manifest.json]
     A1 -. spider_closed .-> A6[Finalize run: flush + counts]
     A6 --> A7[Uploader: retry/backoff]
   end
@@ -11,7 +11,7 @@ flowchart TD
   subgraph B_GCS_Bronze
     B1[(bronze/source/ingest_date/run_id)]
     B2[products.jsonl.gz]
-    B4[manifest.json]
+    B4[metadata/manifest.json]
     B5{{Verify hashes and rowcounts}}
     B6[_SUCCESS]
   end

@@ -15,11 +15,9 @@ def handler(event, context):
     bucket = event["Records"][0]["s3"]["bucket"]["name"]
     key = event["Records"][0]["s3"]["object"]["key"]
 
-    # Get run folder (remove manifest filename)
-    prefix = "/".join(key.split("/")[:-1])
-
-    manifest_key = f"{prefix}/manifest.json"
-    data_key     = f"{prefix}/products.jsonl.gz"
+    # Get run folder (handle manifest in metadata subfolder)
+    manifest_key = key
+    run_prefix = key.split("/metadata/")[0]
 
     # Read manifest
     manifest_content = s3.get_object(Bucket=bucket, Key=manifest_key)['Body'].read().decode('utf-8')
@@ -36,8 +34,7 @@ def handler(event, context):
             'body': json.dumps('Could not determine data filename from manifest.')
         }
 
-    prefix = os.path.dirname(manifest_key)
-    data_key = os.path.join(prefix, data_filename)
+    data_key = f"{run_prefix}/{data_filename}"
 
     try:
         # Read data
@@ -57,7 +54,7 @@ def handler(event, context):
         # ✅ Write _SUCCESS marker
         s3.put_object(
             Bucket=bucket,
-            Key=f"{prefix}/_SUCCESS",
+            Key=f"{run_prefix}/_SUCCESS",
             Body=b""
         )
 
@@ -68,7 +65,7 @@ def handler(event, context):
         try:
             s3.put_object(
                 Bucket=bucket,
-                Key=f"{prefix}/_FAILED",
+                Key=f"{run_prefix}/_FAILED",
                 Body=b""
             )
         except Exception:

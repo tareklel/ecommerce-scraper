@@ -110,6 +110,7 @@ class PostCrawlPipeline:
         self.output_filepath = getattr(spider, 'output_filepath', None)
         self.items_written = getattr(spider, 'items_written', 0)
         self.run_id = spider.run_id
+        self.date = spider.date
         self.crawler_name = spider.name
         self.entry_points = spider.entry_points
         self.stats = self.crawler.stats.get_stats()
@@ -132,7 +133,7 @@ class PostCrawlPipeline:
             return
 
         s3_client = boto3.client('s3')
-        s3_prefix = f"{self.crawler_name}/{self.run_id}"
+        s3_prefix = f"{self.crawler_name}/{self.date}/{self.run_id}"
 
         try:
             for root, _, files in os.walk(self.output_dir):
@@ -187,7 +188,9 @@ class PostCrawlPipeline:
         if samples:
             # Correctly join the path for the sample file
             sample_filename = f"sample_{os.path.basename(self.output_filepath)}"
-            sample_filepath = os.path.join(self.output_dir, sample_filename)
+            metadata_dir = os.path.join(self.output_dir, 'metadata')
+            os.makedirs(metadata_dir, exist_ok=True)
+            sample_filepath = os.path.join(metadata_dir, sample_filename)
             try:
                 with open(sample_filepath, 'w', encoding='utf-8') as f:
                     f.writelines(samples)
@@ -252,7 +255,9 @@ class PostCrawlPipeline:
             }
         }
 
-        manifest_path = os.path.join(self.output_dir, 'manifest.json')
+        metadata_dir = os.path.join(self.output_dir, 'metadata')
+        os.makedirs(metadata_dir, exist_ok=True)
+        manifest_path = os.path.join(metadata_dir, 'manifest.json')
         with open(manifest_path, 'w', encoding='utf-8') as f:
             json.dump(manifest, f, indent=4)
         spider.logger.info(f"Manifest file created at: {manifest_path}")

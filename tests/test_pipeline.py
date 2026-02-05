@@ -142,7 +142,7 @@ def manifest_test_setup(pipeline_setup, tmp_path):
     # Run spider_closed to trigger all post-crawl logic including manifest generation
     pipeline.spider_closed(spider=spider, reason='finished')
 
-    manifest_path = tmp_path / 'manifest.json'
+    manifest_path = tmp_path / 'metadata' / 'manifest.json'
     with open(manifest_path, 'r') as f:
         manifest_data = json.load(f)
 
@@ -244,7 +244,7 @@ class TestManifestPipeline:
         
         with patch('ecommercecrawl.spiders.mastercrawl.MasterCrawl.logger', new_callable=PropertyMock):
             pipeline.spider_closed(spider=spider, reason='finished')
-            manifest_path = tmp_path / 'manifest.json'
+            manifest_path = tmp_path / 'metadata' / 'manifest.json'
             assert not manifest_path.exists()
             spider.logger.info.assert_called_with("No files were saved, so no manifest will be generated.")
 
@@ -283,7 +283,11 @@ class TestPostCrawlPipelineHelpers:
         
         pipeline._sample_output(spider)
         
-        sample_filepath = os.path.join(spider.output_dir, f"sample_{os.path.basename(spider.output_filepath)}")
+        sample_filepath = os.path.join(
+            spider.output_dir,
+            "metadata",
+            f"sample_{os.path.basename(spider.output_filepath)}",
+        )
         
         assert os.path.exists(sample_filepath)
         
@@ -315,10 +319,13 @@ class TestS3Upload:
         pipeline.output_dir = spider.output_dir
         pipeline.crawler_name = spider.name
         pipeline.run_id = spider.run_id
+        pipeline.date = spider.date
 
         # The pipeline_setup fixture already creates 'output.jsonl'.
         # We'll create another file to ensure all files in the directory are uploaded.
-        manifest_path = os.path.join(spider.output_dir, "manifest.json")
+        metadata_dir = os.path.join(spider.output_dir, "metadata")
+        os.makedirs(metadata_dir, exist_ok=True)
+        manifest_path = os.path.join(metadata_dir, "manifest.json")
         with open(manifest_path, "w") as f:
             f.write('{"run_id": "test_run_id"}')
 
@@ -327,7 +334,7 @@ class TestS3Upload:
 
         # 3. Verify
         app_env = os.environ.get('APP_ENV', 'dev')
-        s3_prefix = f"bronze/crawls/{app_env}/{spider.name}/{spider.run_id}"
+        s3_prefix = f"bronze/crawls/{app_env}/{spider.name}/{spider.date}/{spider.run_id}"
         response = s3_client.list_objects_v2(Bucket=s3_bucket, Prefix=s3_prefix)
         
         assert 'Contents' in response, "S3 bucket is empty."
@@ -336,7 +343,7 @@ class TestS3Upload:
         
         # The output.jsonl file is created by the pipeline_setup fixture
         expected_keys = {
-            f"{s3_prefix}/manifest.json",
+            f"{s3_prefix}/metadata/manifest.json",
             f"{s3_prefix}/{os.path.basename(spider.output_filepath)}"
         }
         
