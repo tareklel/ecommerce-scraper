@@ -15,9 +15,16 @@ def handler(event, context):
     bucket = event["Records"][0]["s3"]["bucket"]["name"]
     key = event["Records"][0]["s3"]["object"]["key"]
 
-    # Get run folder (handle manifest in metadata subfolder)
+    # Manifest is stored under bronze/crawls/metadata/...; derive run prefix for data.
     manifest_key = key
-    run_prefix = key.split("/metadata/")[0]
+    manifest_parent = "/".join(key.split("/")[:-1])
+    run_prefix = manifest_parent.replace("/crawls/metadata/", "/crawls/", 1)
+    if run_prefix == manifest_parent:
+        logger.error(f"Unexpected manifest key location: {key}")
+        return {
+            "status": "error",
+            "message": "Manifest key not under bronze/crawls/metadata/"
+        }
 
     # Read manifest
     manifest_content = s3.get_object(Bucket=bucket, Key=manifest_key)['Body'].read().decode('utf-8')
@@ -51,10 +58,10 @@ def handler(event, context):
         if observed_rowcount != manifest["artifacts"]["rows"]:
             raise Exception("Row count mismatch")
 
-        # ✅ Write _SUCCESS marker
+        # ✅ Write _SUCCESS marker (metadata folder)
         s3.put_object(
             Bucket=bucket,
-            Key=f"{run_prefix}/_SUCCESS",
+            Key=f"{manifest_parent}/_SUCCESS",
             Body=b""
         )
 
@@ -65,7 +72,7 @@ def handler(event, context):
         try:
             s3.put_object(
                 Bucket=bucket,
-                Key=f"{run_prefix}/_FAILED",
+                Key=f"{manifest_parent}/_FAILED",
                 Body=b""
             )
         except Exception:

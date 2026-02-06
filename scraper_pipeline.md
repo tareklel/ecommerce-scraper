@@ -9,9 +9,10 @@ flowchart TD
   end
 
   subgraph B_GCS_Bronze
-    B1[(bronze/source/ingest_date/run_id)]
+    B1[(bronze/crawls/app_env/crawler/date/run_id)]
+    B1m[(bronze/crawls/metadata/app_env/crawler/date/run_id)]
     B2[products.jsonl.gz]
-    B4[metadata/manifest.json]
+    B4[manifest.json]
     B5{{Verify hashes and rowcounts}}
     B6[_SUCCESS]
   end
@@ -29,8 +30,9 @@ flowchart TD
   end
 
   A7 --> B1
+  A7 --> B1m
   B1 --> B2
-  B1 --> B4
+  B1m --> B4
   B4 --> B5
   B2 --> B5
   B5 -->|OK| B6

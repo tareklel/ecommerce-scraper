@@ -334,17 +334,23 @@ class TestS3Upload:
 
         # 3. Verify
         app_env = os.environ.get('APP_ENV', 'dev')
-        s3_prefix = f"bronze/crawls/{app_env}/{spider.name}/{spider.date}/{spider.run_id}"
-        response = s3_client.list_objects_v2(Bucket=s3_bucket, Prefix=s3_prefix)
-        
-        assert 'Contents' in response, "S3 bucket is empty."
-        
-        uploaded_keys = {obj['Key'] for obj in response['Contents']}
-        
+        data_prefix = f"bronze/crawls/{app_env}/{spider.name}/{spider.date}/{spider.run_id}"
+        metadata_prefix = f"bronze/crawls/metadata/{app_env}/{spider.name}/{spider.date}/{spider.run_id}"
+
+        data_response = s3_client.list_objects_v2(Bucket=s3_bucket, Prefix=data_prefix)
+        metadata_response = s3_client.list_objects_v2(Bucket=s3_bucket, Prefix=metadata_prefix)
+
+        assert 'Contents' in data_response, "S3 bucket is empty for data prefix."
+        assert 'Contents' in metadata_response, "S3 bucket is empty for metadata prefix."
+
+        uploaded_keys = {obj['Key'] for obj in data_response['Contents']} | {
+            obj['Key'] for obj in metadata_response['Contents']
+        }
+
         # The output.jsonl file is created by the pipeline_setup fixture
         expected_keys = {
-            f"{s3_prefix}/metadata/manifest.json",
-            f"{s3_prefix}/{os.path.basename(spider.output_filepath)}"
+            f"{data_prefix}/{os.path.basename(spider.output_filepath)}",
+            f"{metadata_prefix}/manifest.json"
         }
-        
+
         assert uploaded_keys == expected_keys
