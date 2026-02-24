@@ -1,0 +1,4 @@
+- We are building a luxury clothing price comparison website.
+- This repo manages crawler activity and Lambdas related to crawler activity.
+- After every commit, append a semi-concise summary of what changed to `memory.md`.
+- Write comments to explain intent, assumptions, and non-obvious logic. Keep comments concise and specific.

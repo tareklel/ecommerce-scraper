@@ -31,6 +31,36 @@ resource "aws_iam_role_policy" "bronze_manifest_verifier_policy" {
       {
         Effect = "Allow",
         Action = [
+          "s3:GetBucketLocation",
+          "s3:ListBucket"
+        ],
+        Resource = aws_s3_bucket.price_comparison_bucket.arn
+      },
+      {
+        Effect = "Allow",
+        Action = [
+          "athena:StartQueryExecution",
+          "athena:GetQueryExecution"
+        ],
+        Resource = "*"
+      },
+      {
+        Effect = "Allow",
+        Action = [
+          "glue:GetDatabase",
+          "glue:GetDatabases",
+          "glue:GetTable",
+          "glue:GetTables",
+          "glue:GetPartition",
+          "glue:GetPartitions",
+          "glue:CreatePartition",
+          "glue:BatchCreatePartition"
+        ],
+        Resource = "*"
+      },
+      {
+        Effect = "Allow",
+        Action = [
           "logs:CreateLogGroup",
           "logs:CreateLogStream",
           "logs:PutLogEvents"

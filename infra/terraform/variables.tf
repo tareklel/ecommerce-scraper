@@ -75,3 +75,33 @@ variable "s3_upload_enabled" {
   type        = string
   default     = "true"
 }
+
+variable "athena_table" {
+  description = "Optional Athena table override for bronze partitions (defaults to bronze_<site>_raw)"
+  type        = string
+  default     = ""
+}
+
+variable "athena_workgroup_name" {
+  description = "Athena workgroup name (matches scraper-pipeline Terraform)"
+  type        = string
+  default     = "price-comparison"
+}
+
+variable "athena_data_catalog" {
+  description = "Athena data catalog used by the bronze manifest verifier lambda"
+  type        = string
+  default     = "AwsDataCatalog"
+}
+
+variable "athena_results_prefix" {
+  description = "Prefix inside the data bucket for Athena query results (matches scraper-pipeline Terraform)"
+  type        = string
+  default     = "athena-results/"
+}
+
+variable "glue_database_name" {
+  description = "Glue Data Catalog database name used by dbt (matches scraper-pipeline Terraform)"
+  type        = string
+  default     = "price_comparison"
+}
