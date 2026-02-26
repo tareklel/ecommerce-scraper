@@ -45,6 +45,30 @@ def test_handle_seed_url_success(mock_get, spider):
     assert results == ["item1", "item2"]
 
 
+@patch('ecommercecrawl.spiders.ounass_crawl.requests.get')
+def test_handle_seed_url_skips_duplicate_pdp_url(mock_get, spider):
+    """
+    If the same PDP URL is encountered twice (e.g. seed + PLP discovery),
+    it should only be fetched/parsed once.
+    """
+    url = "https://www.ounass.ae/shop-same-product.html"
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.url = url
+    mock_response.content = b"<html></html>"
+    mock_get.return_value = mock_response
+
+    spider.parse = MagicMock(return_value=iter(["item1"]))
+
+    first = list(spider._handle_seed_url(url))
+    second = list(spider._handle_seed_url(url))
+
+    assert first == ["item1"]
+    assert second == []
+    mock_get.assert_called_once_with(url)
+    spider.parse.assert_called_once()
+
+
 # --- Tests for get_pages ---
 
 @patch('ecommercecrawl.spiders.ounass_crawl.rules.get_max_pages', return_value=3)

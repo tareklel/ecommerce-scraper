@@ -17,7 +17,11 @@ spider_map = {
 def main():
     parser = argparse.ArgumentParser(description="E-commerce scraper CLI.")
     parser.add_argument('spider', choices=list(spider_map.keys()), help='The spider to run.')
-    parser.add_argument('--urls', help='URL to crawl or path to a CSV file with URLs.')
+    parser.add_argument(
+        '--urls',
+        nargs='+',
+        help='One or more URLs to crawl, or a single path to a CSV file with URLs.',
+    )
     parser.add_argument('--env', choices=['dev', 'prod'], default='dev', help='Environment setting (dev or prod).')
     parser.add_argument('--limit', type=int, help='Limit the number of pages to crawl.')
 
@@ -46,11 +50,10 @@ def main():
     spider_kwargs = {}
 
     if args.urls:
-        if os.path.isfile(args.urls):
-            spider_kwargs['urlpath'] = args.urls
+        if len(args.urls) == 1 and os.path.isfile(args.urls[0]):
+            spider_kwargs['urlpath'] = args.urls[0]
         else:
-            # It's a single URL, pass it as start_urls
-            spider_kwargs['urls'] = [args.urls]
+            spider_kwargs['urls'] = args.urls
 
     if args.limit:
         spider_kwargs['limit'] = args.limit

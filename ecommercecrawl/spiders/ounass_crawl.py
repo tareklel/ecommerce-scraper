@@ -17,17 +17,33 @@ class OunassSpider(MasterCrawl, scrapy.Spider):
         self.urlpath = urlpath
         self.start_urls = urls or []
         self.limit = limit
+        # Ounass uses requests.get + direct parse recursion, so Scrapy's dupefilter
+        # does not protect us from re-visiting the same URL.
+        self._seen_fetch_urls = set()
     
     def _handle_seed_url(self, url):
         """
         Override MasterCrawl._handle_seed_url so that the initial responses
         are fetched via `requests` instead of Scrapy's downloader.
         """
+        if url in self._seen_fetch_urls:
+            self.logger.info(f"Skipping duplicate Ounass URL: {url}")
+            return
+
         try:
             r = requests.get(url)
             r.raise_for_status()
+            final_url = r.url or url
+            if final_url in self._seen_fetch_urls:
+                # Redirect aliases can reintroduce the same PDP via a different URL.
+                self._seen_fetch_urls.add(url)
+                self.logger.info(f"Skipping duplicate Ounass URL after redirect: {final_url}")
+                return
+
+            self._seen_fetch_urls.add(url)
+            self._seen_fetch_urls.add(final_url)
             scrapy_response = HtmlResponse(
-                url=r.url,
+                url=final_url,
                 body=r.content,
                 encoding='utf-8'
             )
