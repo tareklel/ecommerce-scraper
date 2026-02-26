@@ -5,6 +5,12 @@ from ecommercecrawl.constants.ounass_constants import TLD_LANGUAGE_MAP
 from html.parser import HTMLParser
 from urllib.parse import urlparse
 
+SOLD_OUT_LABELS_NORMALIZED = {
+    "out of stock",
+    "sold out",
+    "نفدت الكمية",
+}
+
 
 def is_plp(response):
     try:
@@ -122,11 +128,49 @@ def safe_get(data, keys, default=None):
             return default
     return data
 
-def get_sold_out(state):
-    try:
-        return state['pdp']['badge']['value'] == 'OUT OF STOCK'
-    except Exception:
+def _normalize_text(value):
+    if not isinstance(value, str):
         return None
+    # Collapse whitespace and normalize casing for label comparisons.
+    return " ".join(value.split()).strip().casefold()
+
+
+def _parse_stock_status_value(value):
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        normalized = _normalize_text(value)
+        if normalized is None:
+            return None
+        if normalized in {"in stock", "available", "instock"}:
+            return False
+        if normalized in SOLD_OUT_LABELS_NORMALIZED | {"outofstock"}:
+            return True
+    return None
+
+
+def get_sold_out(state):
+    # Prefer explicit stock flags/status fields if Ounass provides them.
+    for path in (
+        ['pdp', 'isOutOfStock'],
+        ['pdp', 'outOfStock'],
+        ['pdp', 'isSoldOut'],
+        ['pdp', 'stockStatus'],
+        ['pdp', 'stock_status'],
+        ['pdp', 'availability'],
+    ):
+        parsed = _parse_stock_status_value(safe_get(state, path))
+        if parsed is not None:
+            return parsed
+
+    # Fallback to badge text. Missing badge means "not sold out" by default.
+    badge_value = safe_get(state, ['pdp', 'badge', 'value'])
+    normalized_badge = _normalize_text(badge_value)
+    if normalized_badge is None:
+        return False
+    return normalized_badge in SOLD_OUT_LABELS_NORMALIZED
     
 def get_discount(state):
     try:

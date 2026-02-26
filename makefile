@@ -16,7 +16,7 @@ ECS_TEST_COMMAND = python3 run_crawler.py ounass --urls https://www.ounass.ae/ap
 ECS_OVERRIDES_SCRIPT = scripts/ecs_overrides.py
 
 FF_TEST_URL = https://www.farfetch.com/ae/shopping/women/louis-vuitton-pre-owned/clothing-1/items.aspx
-OUNASS_TEST_URL=https://www.ounass.ae/api/women/designers/burberry/bags
+OUNASS_TEST_URL ?= https://www.ounass.ae/api/women/designers/burberry/bags
 LEVEL_TEST_URL ?= https://www.levelshoes.com/women/brands/miu-miu/bags
 TF_DIR = infra/terraform
 

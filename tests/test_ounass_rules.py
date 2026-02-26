@@ -212,14 +212,14 @@ def test_get_sold_out_recognizes_badge_string():
     assert rules.get_sold_out(state) is True
 
 
-def test_get_sold_out_handles_non_matching_badge():
+def test_get_sold_out_returns_false_for_missing_badge_value():
     state = {"pdp": {"badge": {}}}
-    assert rules.get_sold_out(state) is None
+    assert rules.get_sold_out(state) is False
 
 
-def test_get_sold_out_returns_none_for_missing_badge():
+def test_get_sold_out_returns_false_for_missing_badge():
     state = {"pdp": {}}
-    assert rules.get_sold_out(state) is None
+    assert rules.get_sold_out(state) is False
 
 
 def test_get_discount_returns_value_or_none():
