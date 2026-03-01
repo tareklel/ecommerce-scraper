@@ -18,6 +18,10 @@ ECS_OVERRIDES_SCRIPT = scripts/ecs_overrides.py
 FF_TEST_URL = https://www.farfetch.com/ae/shopping/women/louis-vuitton-pre-owned/clothing-1/items.aspx
 OUNASS_TEST_URL ?= https://www.ounass.ae/api/women/designers/burberry/bags
 LEVEL_TEST_URL ?= https://www.levelshoes.com/women/brands/miu-miu/bags
+IMAGE_DOWNLOADER_INPUT_JSONL ?= resources/image_download_test_jobs.jsonl
+IMAGE_DOWNLOADER_OUTPUT_DIR ?= output/images
+IMAGE_DOWNLOADER_MAX_WORKERS ?= 10
+IMAGE_DOWNLOADER_TIMEOUT_SECONDS ?= 20
 TF_DIR = infra/terraform
 
 pytest-local:
@@ -70,6 +74,14 @@ run-level-test-upload:
 	S3_BUCKET=$(S3_BUCKET) \
 	S3_UPLOAD_ENABLED=true \
 	poetry run python3 run_crawler.py level --urls $(LEVEL_TEST_URL)
+
+# image downloader
+run-image-downloader-local:
+	poetry run python3 run_image_downloader.py \
+		--input-jsonl $(IMAGE_DOWNLOADER_INPUT_JSONL) \
+		--output-dir $(IMAGE_DOWNLOADER_OUTPUT_DIR) \
+		--max-workers $(IMAGE_DOWNLOADER_MAX_WORKERS) \
+		--timeout-seconds $(IMAGE_DOWNLOADER_TIMEOUT_SECONDS)
 
 
 # terraform

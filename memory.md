@@ -15,3 +15,12 @@
 - Skips duplicate URLs both before fetch and after redirects (handles alias URLs resolving to the same PDP).
 - Added a regression test proving duplicate PDP URLs are only fetched/parsed once.
 - Updated `run_crawler.py` so `--urls` accepts multiple inline URLs (`nargs='+'`) while preserving single-file CSV path behavior.
+
+## 2026-03-01 - Add image downloader runner, blob contract docs, and smoke fixtures
+- Added `run_image_downloader.py` CLI with two input modes: JSONL batch or inline single-job, plus argument validation and per-run result output.
+- Added `ecommercecrawl/image_downloader.py` download pipeline with site normalization, scheme-less URL handling, per-run dedupe, structured result blobs, and status/reason reporting.
+- Introduced result blob schema `image_download_result_v1` including job/request/storage/transfer/error/details fields.
+- Added docs for long-term reference: `docs/image_downloader_blob_contract.md` and linked it from `README.MD`.
+- Added fixtures: `resources/image_download_test_jobs.jsonl` (mixed scenario checks) and `resources/image_download_smoke_100.jsonl` (100-row smoke input).
+- Added tests for downloader logic and CLI mode validation in `tests/test_image_downloader.py` and `tests/test_run_image_downloader.py`.
+- Updated `makefile` with local image-downloader run target and configurable input/output/worker/timeout variables.

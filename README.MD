@@ -14,6 +14,8 @@ The project is organized to separate the crawling logic from the data extraction
 
 -   `tests/`: This directory contains all the tests for the project. It includes unit tests for the data extraction logic and integration tests that use HTML fixtures to simulate real-world scraping scenarios.
 
+-   `docs/image_downloader_blob_contract.md`: JSONL result blob contract for the image downloader pipeline.
+
 ## Spiders
 
 -   **`farfetch_crawl`**: Crawls `farfetch.com`, extracts product data from product detail pages (PDPs), and follows pagination to discover more products.
