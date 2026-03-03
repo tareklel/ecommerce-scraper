@@ -228,6 +228,26 @@ class TestManifestPipeline:
         assert expected_verification['file_size_bytes'] == artifacts.get('file_size_bytes', 0)
         assert expected_verification['hashes'] == artifacts.get('hashes', {}).get('sha256', '')
 
+    def test_quality_report_is_generated_on_spider_close(self, manifest_test_setup):
+        """Quality checks should run automatically and write metadata/quality_report.json."""
+        tmp_path = manifest_test_setup['tmp_path']
+        quality_report_path = tmp_path / 'metadata' / 'quality_report.json'
+        assert quality_report_path.exists()
+
+        with open(quality_report_path, 'r') as f:
+            report_data = json.load(f)
+
+        assert report_data['status'] in {'pass', 'fail_quality', 'error'}
+        assert report_data['rule_set'] == 'default'
+        assert report_data['input_jsonl_path'] == 'output.jsonl'
+
+    def test_manifest_includes_quality_gate_summary(self, manifest_test_setup):
+        """Manifest should include quality gate summary block for downstream visibility."""
+        manifest_data = manifest_test_setup['manifest_data']
+        assert 'quality_gate' in manifest_data
+        assert manifest_data['quality_gate']['status'] in {'pass', 'fail_quality', 'error'}
+        assert manifest_data['quality_gate']['report_path'].endswith('metadata/quality_report.json')
+
     def test_generate_manifest_no_output(self, tmp_path):
         """
         Tests that no manifest is generated if no items are written.

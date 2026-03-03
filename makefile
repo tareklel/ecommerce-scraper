@@ -22,6 +22,11 @@ IMAGE_DOWNLOADER_INPUT_JSONL ?= resources/image_download_test_jobs.jsonl
 IMAGE_DOWNLOADER_OUTPUT_DIR ?= output/images
 IMAGE_DOWNLOADER_MAX_WORKERS ?= 10
 IMAGE_DOWNLOADER_TIMEOUT_SECONDS ?= 20
+QUALITY_GATE_INPUT_JSONL ?= output/2026/02/26/2026-02-26T13-51-38-133/metadata/sample_ounass.jsonl
+QUALITY_GATE_BLANK_THRESHOLD ?= 0.8
+QUALITY_GATE_MIN_ROWS_FOR_BLANK_CHECK ?= 20
+QUALITY_GATE_EXCEPTIONS_FILE ?= resources/quality_gate_exclusions.json
+QUALITY_GATE_EXTRA_ARGS ?=
 TF_DIR = infra/terraform
 
 pytest-local:
@@ -65,6 +70,19 @@ run-ounass-test-upload:
 	S3_UPLOAD_ENABLED=true \
 	poetry run python3 run_crawler.py ounass --urls $(OUNASS_TEST_URL)
 
+# ounass (intentional fail_quality smoke test + upload)
+# This keeps upload enabled but forces quality gate failure so Lambda should emit _FAIL_QUALITY
+# and not emit _SUCCESS.
+run-ounass-test-upload-faulty-quality:
+	AWS_PROFILE=$(AWS_PROFILE) \
+	S3_BUCKET=$(S3_BUCKET) \
+	S3_UPLOAD_ENABLED=true \
+	QUALITY_GATE_ENABLED=true \
+	QUALITY_GATE_MIN_ROWS_FOR_BLANK_CHECK=1 \
+	QUALITY_GATE_BLANK_THRESHOLD=0 \
+	QUALITY_GATE_EXCEPTIONS_FILE= \
+	poetry run python3 run_crawler.py ounass --urls $(OUNASS_TEST_URL)
+
 # level
 run-level-local:
 	poetry run python3 run_crawler.py level --urls $(LEVEL_TEST_URL)
@@ -82,6 +100,15 @@ run-image-downloader-local:
 		--output-dir $(IMAGE_DOWNLOADER_OUTPUT_DIR) \
 		--max-workers $(IMAGE_DOWNLOADER_MAX_WORKERS) \
 		--timeout-seconds $(IMAGE_DOWNLOADER_TIMEOUT_SECONDS)
+
+# quality gate
+run-quality-gate-local:
+	poetry run python3 run_quality_gate.py \
+		--input-jsonl $(QUALITY_GATE_INPUT_JSONL) \
+		--blank-threshold $(QUALITY_GATE_BLANK_THRESHOLD) \
+		--min-rows-for-blank-check $(QUALITY_GATE_MIN_ROWS_FOR_BLANK_CHECK) \
+		$(if $(QUALITY_GATE_EXCEPTIONS_FILE),--blank-field-exceptions-file $(QUALITY_GATE_EXCEPTIONS_FILE),) \
+		$(QUALITY_GATE_EXTRA_ARGS)
 
 
 # terraform

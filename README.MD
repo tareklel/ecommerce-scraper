@@ -16,6 +16,8 @@ The project is organized to separate the crawling logic from the data extraction
 
 -   `docs/image_downloader_blob_contract.md`: JSONL result blob contract for the image downloader pipeline.
 
+-   `docs/fail_quality_contract.md`: local fail-quality rule contract and parameters for crawler output validation.
+
 ## Spiders
 
 -   **`farfetch_crawl`**: Crawls `farfetch.com`, extracts product data from product detail pages (PDPs), and follows pagination to discover more products.

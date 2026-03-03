@@ -94,3 +94,12 @@ LOG_LEVEL = "DEBUG"
 # See https://docs.scrapy.org/en/latest/topics/autothrottle.html
 FILES_STORE = 'output'
 S3_BUCKET = os.getenv("S3_BUCKET")
+
+# Quality gate (executed automatically in PostCrawlPipeline on spider close)
+QUALITY_GATE_ENABLED = os.getenv("QUALITY_GATE_ENABLED", "true")
+QUALITY_GATE_BLANK_THRESHOLD = os.getenv("QUALITY_GATE_BLANK_THRESHOLD", "0.2")
+QUALITY_GATE_MIN_ROWS_FOR_BLANK_CHECK = os.getenv("QUALITY_GATE_MIN_ROWS_FOR_BLANK_CHECK", "20")
+QUALITY_GATE_EXCEPTIONS_FILE = os.getenv(
+    "QUALITY_GATE_EXCEPTIONS_FILE",
+    "resources/quality_gate_exclusions.json",
+)

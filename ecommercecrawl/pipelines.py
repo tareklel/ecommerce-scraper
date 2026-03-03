@@ -10,11 +10,17 @@ import os
 import json
 import hashlib
 from datetime import datetime, timezone
+from pathlib import Path
 from scrapy import signals
 import gzip
 import shutil
 import boto3
 from botocore.exceptions import NoCredentialsError
+from ecommercecrawl.quality_gate import QualityGateParams
+from ecommercecrawl.quality_gate import evaluate_fail_quality
+from ecommercecrawl.quality_gate import load_blank_field_exceptions
+from ecommercecrawl.quality_gate import load_jsonl_rows
+from ecommercecrawl.quality_gate import RULE_SET_ID
 
 
 class EcommercecrawlPipeline:
@@ -92,6 +98,7 @@ class PostCrawlPipeline:
         self.items_written = 0
         self.stats = None
         self.crawler = None
+        self.quality_gate_report = None
 
     @classmethod
     def from_crawler(cls, crawler):
@@ -115,11 +122,121 @@ class PostCrawlPipeline:
         self.entry_points = spider.entry_points
         self.stats = self.crawler.stats.get_stats()
         self._sample_output(spider)
+        self._run_quality_gate(spider)
         self._gzip_output(spider)
         self._generate_manifest(spider, reason)
         # upload to S3 if in prod environment or S3 upload is enabled
         if os.environ.get('APP_ENV') == 'prod' or os.environ.get('S3_UPLOAD_ENABLED') == 'true':
             self._upload_to_s3(spider)
+
+    def _get_setting(self, key, default):
+        """Safely read Scrapy settings while tolerating mocked settings in tests."""
+        try:
+            settings = getattr(self.crawler, "settings", None)
+            if settings is None:
+                return default
+            value = settings.get(key, default)
+        except Exception:
+            return default
+
+        if value is None:
+            return default
+
+        # Ignore mock objects or unsupported types and use fallback.
+        if not isinstance(value, (str, int, float, bool)):
+            return default
+        return value
+
+    @staticmethod
+    def _to_bool(value, default=False):
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+        if isinstance(value, (int, float)):
+            return value != 0
+        return default
+
+    @staticmethod
+    def _project_scoped_path(path):
+        """
+        Keep report paths project-scoped for readability.
+        If outside project root, fall back to filename only.
+        """
+        input_path = Path(path).resolve()
+        project_root = Path.cwd().resolve()
+        try:
+            return input_path.relative_to(project_root).as_posix()
+        except ValueError:
+            return input_path.name
+
+    def _run_quality_gate(self, spider):
+        """Run fail-quality checks after scraping and persist report under metadata."""
+        enabled = self._to_bool(self._get_setting("QUALITY_GATE_ENABLED", True), default=True)
+        if not enabled:
+            spider.logger.info("Quality gate disabled, skipping.")
+            return
+
+        if not self.output_filepath or not os.path.exists(self.output_filepath):
+            spider.logger.info("Output file not found, skipping quality gate.")
+            return
+
+        threshold_raw = self._get_setting("QUALITY_GATE_BLANK_THRESHOLD", 0.8)
+        min_rows_raw = self._get_setting("QUALITY_GATE_MIN_ROWS_FOR_BLANK_CHECK", 20)
+        exceptions_file = self._get_setting("QUALITY_GATE_EXCEPTIONS_FILE", "")
+
+        try:
+            params = QualityGateParams(
+                blank_threshold=float(threshold_raw),
+                min_rows_for_blank_check=int(min_rows_raw),
+            )
+        except (TypeError, ValueError):
+            spider.logger.error(
+                "Invalid quality gate params. threshold=%s min_rows=%s. Using defaults.",
+                threshold_raw,
+                min_rows_raw,
+            )
+            params = QualityGateParams()
+
+        metadata_dir = os.path.join(self.output_dir, "metadata")
+        os.makedirs(metadata_dir, exist_ok=True)
+        quality_report_path = os.path.join(metadata_dir, "quality_report.json")
+
+        try:
+            rows = load_jsonl_rows(self.output_filepath)
+            exceptions = load_blank_field_exceptions(
+                exceptions_file=exceptions_file or None,
+            )
+            report = evaluate_fail_quality(
+                rows,
+                params=params,
+                blank_field_exceptions={k: sorted(v) for k, v in exceptions.items()},
+            )
+            report["input_jsonl_path"] = self._project_scoped_path(self.output_filepath)
+        except Exception as e:
+            spider.logger.error("Quality gate failed to execute: %s", e)
+            report = {
+                "status": "error",
+                "rule_set": RULE_SET_ID,
+                "reason": "quality_gate_execution_error",
+                "message": str(e),
+                "input_jsonl_path": self._project_scoped_path(self.output_filepath),
+                "violations_count": None,
+            }
+
+        with open(quality_report_path, "w", encoding="utf-8") as f:
+            json.dump(report, f, ensure_ascii=False, indent=2)
+
+        self.quality_gate_report = report
+        spider.quality_gate_report = report
+        spider.quality_gate_status = report.get("status")
+        self.crawler.stats.set_value("quality_gate/status", report.get("status"))
+        self.crawler.stats.set_value("quality_gate/violations_count", report.get("violations_count"))
+        spider.logger.info(
+            "Quality gate completed with status=%s report=%s",
+            report.get("status"),
+            quality_report_path,
+        )
 
     def _upload_to_s3(self, spider):
         """Uploads the output directory to an S3 bucket."""
@@ -256,6 +373,14 @@ class PostCrawlPipeline:
             "stats": self._build_manifest_stats(stats),
             "artifacts": self._build_manifest_artifacts()
         }
+
+        if self.quality_gate_report:
+            manifest["quality_gate"] = {
+                "status": self.quality_gate_report.get("status"),
+                "reason": self.quality_gate_report.get("reason"),
+                "violations_count": self.quality_gate_report.get("violations_count"),
+                "report_path": os.path.join(self.output_dir, "metadata", "quality_report.json"),
+            }
 
         # add manifest bronze_verification
         manifest["bronze_verification"] = {
