@@ -17,6 +17,9 @@ athena = boto3.client("athena")
 
 BRONZE_METADATA_PREFIX = "bronze/crawls/metadata/"
 BRONZE_DATA_PREFIX = "bronze/crawls/"
+MARKER_SUCCESS = "_SUCCESS"
+MARKER_FAILED = "_FAILED"
+MARKER_FAIL_QUALITY = "_FAIL_QUALITY"
 
 
 def _s3_key_from_record(record):
@@ -135,62 +138,111 @@ def _verify_manifest_and_write_success(bucket, key):
             "message": "Manifest key not under bronze/crawls/metadata/"
         }
 
-    # Read manifest
-    manifest_content = s3.get_object(Bucket=bucket, Key=manifest_key)["Body"].read().decode("utf-8")
-    manifest = json.loads(manifest_content)
-
-    # Extract the filename from the manifest
-    artifacts = manifest.get("artifacts", {})
-    data_filename = os.path.basename(artifacts.get("file_path", ""))
-
-    if not data_filename:
-        logger.error("Could not determine data filename from manifest.")
-        return {
-            "statusCode": 400,
-            "body": json.dumps("Could not determine data filename from manifest.")
-        }
-
-    data_key = f"{run_prefix}/{data_filename}"
+    verification_ok = False
+    verification_error = None
+    quality_gate_status = None
+    quality_gate_reason = None
+    markers_written = []
 
     try:
+        # Read manifest
+        manifest_content = s3.get_object(Bucket=bucket, Key=manifest_key)["Body"].read().decode("utf-8")
+        manifest = json.loads(manifest_content)
+
+        quality_gate = manifest.get("quality_gate", {}) if isinstance(manifest, dict) else {}
+        if isinstance(quality_gate, dict):
+            quality_gate_status = quality_gate.get("status")
+            quality_gate_reason = quality_gate.get("reason")
+
+        # Extract the filename from the manifest
+        artifacts = manifest.get("artifacts", {}) if isinstance(manifest, dict) else {}
+        data_filename = os.path.basename(artifacts.get("file_path", ""))
+        if not data_filename:
+            raise ValueError("Could not determine data filename from manifest.")
+
+        data_key = f"{run_prefix}/{data_filename}"
+
         # Read data
         data = s3.get_object(Bucket=bucket, Key=data_key)["Body"].read()
 
         # Hash check
         calculated_hash = hashlib.sha256(data).hexdigest()
-        if calculated_hash != manifest["artifacts"]["hashes"]["sha256"]:
-            raise Exception("Hash mismatch")
+        expected_hash = manifest["artifacts"]["hashes"]["sha256"]
+        if calculated_hash != expected_hash:
+            raise ValueError("Hash mismatch")
 
         raw = gzip.decompress(data)
         # Row count check
         observed_rowcount = len(raw.splitlines())
-        if observed_rowcount != manifest["artifacts"]["rows"]:
-            raise Exception("Row count mismatch")
+        expected_rows = manifest["artifacts"]["rows"]
+        if observed_rowcount != expected_rows:
+            raise ValueError("Row count mismatch")
 
-        # Write _SUCCESS marker (metadata folder); S3 notification will trigger partition registration.
-        s3.put_object(
-            Bucket=bucket,
-            Key=f"{manifest_parent}/_SUCCESS",
-            Body=b""
-        )
-
-        return {"status": "ok", "action": "verify_manifest", "manifest_key": key}
+        verification_ok = True
     except Exception as e:
+        verification_error = str(e)
         logger.exception("Error verifying manifest or data file")
-        # attempt to write a failure marker so downstream processes can detect the failure
+
+    quality_gate_ok = quality_gate_status == "pass"
+
+    # Write quality marker independently from technical verification failures.
+    if not quality_gate_ok:
         try:
             s3.put_object(
                 Bucket=bucket,
-                Key=f"{manifest_parent}/_FAILED",
-                Body=b""
+                Key=f"{manifest_parent}/{MARKER_FAIL_QUALITY}",
+                Body=json.dumps(
+                    {
+                        "quality_gate_status": quality_gate_status,
+                        "quality_gate_reason": quality_gate_reason,
+                        "manifest_key": manifest_key,
+                    }
+                ).encode("utf-8"),
             )
+            markers_written.append(MARKER_FAIL_QUALITY)
         except Exception:
-            logger.exception("Failed to write _FAILED marker")
+            logger.exception("Failed to write %s marker", MARKER_FAIL_QUALITY)
+
+    if not verification_ok:
+        # Technical verification failure marker (hash/rowcount/manifest parsing).
+        try:
+            s3.put_object(
+                Bucket=bucket,
+                Key=f"{manifest_parent}/{MARKER_FAILED}",
+                Body=b"",
+            )
+            markers_written.append(MARKER_FAILED)
+        except Exception:
+            logger.exception("Failed to write %s marker", MARKER_FAILED)
+
+    if verification_ok and quality_gate_ok:
+        # Emit _SUCCESS only when both verification and quality gate pass.
+        s3.put_object(
+            Bucket=bucket,
+            Key=f"{manifest_parent}/{MARKER_SUCCESS}",
+            Body=b"",
+        )
+        markers_written.append(MARKER_SUCCESS)
         return {
-            "status": "error",
+            "status": "ok",
             "action": "verify_manifest",
-            "message": str(e)
+            "manifest_key": key,
+            "quality_gate_status": quality_gate_status,
+            "verification_ok": verification_ok,
+            "markers_written": markers_written,
         }
+
+    return {
+        "status": "error",
+        "action": "verify_manifest",
+        "manifest_key": key,
+        "quality_gate_status": quality_gate_status,
+        "quality_gate_ok": quality_gate_ok,
+        "quality_gate_reason": quality_gate_reason,
+        "verification_ok": verification_ok,
+        "message": verification_error or "Quality gate status is not pass",
+        "markers_written": markers_written,
+    }
 
 def handler(event, context):
     records = event.get("Records", [])

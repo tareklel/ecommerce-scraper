@@ -24,3 +24,12 @@
 - Added fixtures: `resources/image_download_test_jobs.jsonl` (mixed scenario checks) and `resources/image_download_smoke_100.jsonl` (100-row smoke input).
 - Added tests for downloader logic and CLI mode validation in `tests/test_image_downloader.py` and `tests/test_run_image_downloader.py`.
 - Updated `makefile` with local image-downloader run target and configurable input/output/worker/timeout variables.
+
+## 2026-03-03 - Add automatic quality gate and lambda quality-aware success markers
+- Added stateless quality gate core (`ecommercecrawl/quality_gate.py`) and local adapter (`run_quality_gate.py`) with configurable blank-threshold checks and per-site exclusions.
+- Wired quality checks into `PostCrawlPipeline` so each crawl auto-generates `metadata/quality_report.json` and includes a `quality_gate` summary in `metadata/manifest.json`.
+- Added default quality exclusions config (`resources/quality_gate_exclusions.json`) and default settings/make variables for quality gate execution.
+- Added docs for fail-quality contract (`docs/fail_quality_contract.md`) and updated tests covering quality core, adapter, and pipeline integration.
+- Updated bronze manifest verifier lambda so `_SUCCESS` is emitted only when both verification and quality gate pass.
+- Added independent `_FAIL_QUALITY` marker emission when quality is not pass; `_FAILED` remains for verification failures and can co-exist with `_FAIL_QUALITY`.
+- Added lambda unit tests for marker behavior across success, quality-only fail, and dual-fail scenarios.
