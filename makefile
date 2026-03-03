@@ -22,6 +22,13 @@ IMAGE_DOWNLOADER_INPUT_JSONL ?= resources/image_download_test_jobs.jsonl
 IMAGE_DOWNLOADER_OUTPUT_DIR ?= output/images
 IMAGE_DOWNLOADER_MAX_WORKERS ?= 10
 IMAGE_DOWNLOADER_TIMEOUT_SECONDS ?= 20
+BACKFILL_INPUT_GZ ?=
+BACKFILL_JOBS_OUTPUT_JSONL ?= output/backfill/image_jobs.jsonl
+BACKFILL_SITE_OVERRIDE ?=
+BACKFILL_NO_DEDUPE ?= false
+BACKFILL_IMAGE_OUTPUT_DIR ?= output/images_backfill
+BACKFILL_MAX_WORKERS ?= 10
+BACKFILL_TIMEOUT_SECONDS ?= 20
 QUALITY_GATE_INPUT_JSONL ?= output/2026/02/26/2026-02-26T13-51-38-133/metadata/sample_ounass.jsonl
 QUALITY_GATE_BLANK_THRESHOLD ?= 0.8
 QUALITY_GATE_MIN_ROWS_FOR_BLANK_CHECK ?= 20
@@ -100,6 +107,24 @@ run-image-downloader-local:
 		--output-dir $(IMAGE_DOWNLOADER_OUTPUT_DIR) \
 		--max-workers $(IMAGE_DOWNLOADER_MAX_WORKERS) \
 		--timeout-seconds $(IMAGE_DOWNLOADER_TIMEOUT_SECONDS)
+
+# backfill from crawler jsonl.gz -> jobs -> downloaded images
+build-image-backfill-jobs:
+	@test -n "$(BACKFILL_INPUT_GZ)" || (echo "Set BACKFILL_INPUT_GZ=/path/to/file.jsonl.gz" && exit 1)
+	poetry run python3 scripts/backfill/build_image_jobs_from_gz.py \
+		--input-gz "$(BACKFILL_INPUT_GZ)" \
+		--output-jsonl "$(BACKFILL_JOBS_OUTPUT_JSONL)" \
+		$(if $(BACKFILL_SITE_OVERRIDE),--site-override "$(BACKFILL_SITE_OVERRIDE)",) \
+		$(if $(filter true,$(BACKFILL_NO_DEDUPE)),--no-dedupe,)
+
+run-image-backfill-from-jobs-local:
+	poetry run python3 run_image_downloader.py \
+		--input-jsonl "$(BACKFILL_JOBS_OUTPUT_JSONL)" \
+		--output-dir "$(BACKFILL_IMAGE_OUTPUT_DIR)" \
+		--max-workers $(BACKFILL_MAX_WORKERS) \
+		--timeout-seconds $(BACKFILL_TIMEOUT_SECONDS)
+
+run-image-backfill-local: build-image-backfill-jobs run-image-backfill-from-jobs-local
 
 # quality gate
 run-quality-gate-local:
