@@ -14,6 +14,7 @@ TLD_LANGUAGE_MAP = {
     'ar.ounass.ae': 'AR',
     'ar-kuwait.ounass.com': 'AR',
     'ar.ounass.qa': 'AR',
-    'ar.ounass.sa': 'AR'
+    'ar.ounass.sa': 'AR',
+    'en-saudi.ounass.com': 'EN'
 }
     
