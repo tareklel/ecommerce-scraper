@@ -95,6 +95,12 @@ LOG_LEVEL = "DEBUG"
 FILES_STORE = 'output'
 S3_BUCKET = os.getenv("S3_BUCKET")
 
+# Ounass spider currently fetches via requests (outside Scrapy downloader),
+# so throttle controls are spider-specific and env-tunable.
+OUNASS_REQUEST_DELAY_SECONDS = os.getenv("OUNASS_REQUEST_DELAY_SECONDS", "0.2")
+OUNASS_REQUEST_JITTER_SECONDS = os.getenv("OUNASS_REQUEST_JITTER_SECONDS", "0.1")
+OUNASS_REQUEST_TIMEOUT_SECONDS = os.getenv("OUNASS_REQUEST_TIMEOUT_SECONDS", "20")
+
 # Quality gate (executed automatically in PostCrawlPipeline on spider close)
 QUALITY_GATE_ENABLED = os.getenv("QUALITY_GATE_ENABLED", "true")
 QUALITY_GATE_BLANK_THRESHOLD = os.getenv("QUALITY_GATE_BLANK_THRESHOLD", "0.2")

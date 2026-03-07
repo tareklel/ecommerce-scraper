@@ -33,3 +33,8 @@
 - Updated bronze manifest verifier lambda so `_SUCCESS` is emitted only when both verification and quality gate pass.
 - Added independent `_FAIL_QUALITY` marker emission when quality is not pass; `_FAILED` remains for verification failures and can co-exist with `_FAIL_QUALITY`.
 - Added lambda unit tests for marker behavior across success, quality-only fail, and dual-fail scenarios.
+
+## 2026-03-07 - Ounass language and request pacing updates
+- Added `en-saudi.ounass.com -> EN` in `ecommercecrawl/constants/ounass_constants.py` so Ounass EN Saudi PDP URLs populate `language` correctly.
+- Added Ounass-specific request tuning settings in `ecommercecrawl/settings.py`: `OUNASS_REQUEST_DELAY_SECONDS`, `OUNASS_REQUEST_JITTER_SECONDS`, `OUNASS_REQUEST_TIMEOUT_SECONDS`.
+- Updated `ecommercecrawl/spiders/ounass_crawl.py` to apply per-request sleep (`delay + jitter`) and request timeout for `requests.get(...)` calls used by Ounass seed/PLP/PDP fetch flow.

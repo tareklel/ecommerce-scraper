@@ -5,7 +5,8 @@ from ecommercecrawl.rules import ounass_rules as rules
 from ecommercecrawl.constants import ounass_constants as constants
 from scrapy.http import HtmlResponse
 import requests
-import os
+import random
+import time
 
 class OunassSpider(MasterCrawl, scrapy.Spider):
     name = constants.NAME
@@ -20,6 +21,12 @@ class OunassSpider(MasterCrawl, scrapy.Spider):
         # Ounass uses requests.get + direct parse recursion, so Scrapy's dupefilter
         # does not protect us from re-visiting the same URL.
         self._seen_fetch_urls = set()
+
+    def _get_request_tuning(self):
+        delay = float(self.settings.get("OUNASS_REQUEST_DELAY_SECONDS", "0.2"))
+        jitter = float(self.settings.get("OUNASS_REQUEST_JITTER_SECONDS", "0.1"))
+        timeout = int(float(self.settings.get("OUNASS_REQUEST_TIMEOUT_SECONDS", "20")))
+        return max(0.0, delay), max(0.0, jitter), max(1, timeout)
     
     def _handle_seed_url(self, url):
         """
@@ -31,7 +38,12 @@ class OunassSpider(MasterCrawl, scrapy.Spider):
             return
 
         try:
-            r = requests.get(url)
+            delay, jitter, timeout = self._get_request_tuning()
+            sleep_seconds = delay + (random.uniform(0, jitter) if jitter > 0 else 0.0)
+            if sleep_seconds > 0:
+                time.sleep(sleep_seconds)
+
+            r = requests.get(url, timeout=timeout)
             r.raise_for_status()
             final_url = r.url or url
             if final_url in self._seen_fetch_urls:
