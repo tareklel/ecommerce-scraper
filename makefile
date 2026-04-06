@@ -1,3 +1,5 @@
+SHELL := /bin/bash
+
 # load variables form .env file
 include .env
 export $(shell sed 's/=.*//' .env)
@@ -6,7 +8,7 @@ IMAGE_NAME = ecommerce-scraper
 # Use this for ECR tagging/pushing; keep in sync with Terraform image_tag when needed.
 IMAGE_TAG ?= latest
 # Region should match infra/terraform/variables.tf (var.region).
-AWS_REGION ?= me-central-1
+AWS_REGION ?= eu-central-1
 
 # Optional: override ECS command at runtime (used by ecs-run).
 ECS_RUN_COMMAND ?=
@@ -158,16 +160,17 @@ aws-login:
 
 # Log Docker into ECR (uses Terraform output for the registry URL).
 ecr-login:
-	@ECR_URL=$$(cd $(TF_DIR) && terraform output -raw ecr_repository_url); \
-	REGISTRY=$$(echo $$ECR_URL | cut -d/ -f1); \
+	@set -o pipefail; \
+	ACCOUNT_ID=$$(AWS_PROFILE=$(AWS_PROFILE) aws sts get-caller-identity --query Account --output text); \
+	REGISTRY=$$ACCOUNT_ID.dkr.ecr.$(AWS_REGION).amazonaws.com; \
 	AWS_PROFILE=$(AWS_PROFILE) aws ecr get-login-password --region $(AWS_REGION) \
 		| docker login --username AWS --password-stdin $$REGISTRY
 
-# Tag + push the local image into ECR (does not run the task).
-ecr-push: docker-build ecr-login
-	@ECR_URL=$$(cd $(TF_DIR) && terraform output -raw ecr_repository_url); \
-	docker tag $(IMAGE_NAME):latest $$ECR_URL:$(IMAGE_TAG); \
-	docker push $$ECR_URL:$(IMAGE_TAG)
+# Tag + push a freshly rebuilt local image into ECR (does not run the task).
+ecr-push: docker-rebuild ecr-login
+	 @ECR_URL=$$(cd $(TF_DIR) && AWS_PROFILE=$(AWS_PROFILE) terraform output -raw ecr_repository_url); \
+	 docker tag $(IMAGE_NAME):latest $$ECR_URL:$(IMAGE_TAG); \
+	 docker push $$ECR_URL:$(IMAGE_TAG)
 
 # --------------------------------
 # ECS run (manual test invocation)
@@ -175,10 +178,10 @@ ecr-push: docker-build ecr-login
 
 # Run one Fargate task using outputs from Terraform.
 ecs-run:
-	@CLUSTER=$$(cd $(TF_DIR) && terraform output -raw ecs_cluster_name); \
-	TASK_DEF=$$(cd $(TF_DIR) && terraform output -raw ecs_task_definition_arn); \
-	SUBNETS=$$(cd $(TF_DIR) && terraform output -json default_subnet_ids | python3 -c 'import json,sys; print(",".join(json.load(sys.stdin)))'); \
-	SG=$$(cd $(TF_DIR) && terraform output -raw ecs_task_security_group_id); \
+	@CLUSTER=$$(cd $(TF_DIR) && AWS_PROFILE=$(AWS_PROFILE) terraform output -raw ecs_cluster_name); \
+	TASK_DEF=$$(cd $(TF_DIR) && AWS_PROFILE=$(AWS_PROFILE) terraform output -raw ecs_task_definition_arn); \
+	SUBNETS=$$(cd $(TF_DIR) && AWS_PROFILE=$(AWS_PROFILE) terraform output -json default_subnet_ids | python3 -c 'import json,sys; print(",".join(json.load(sys.stdin)))'); \
+	SG=$$(cd $(TF_DIR) && AWS_PROFILE=$(AWS_PROFILE) terraform output -raw ecs_task_security_group_id); \
 	OVERRIDES=$$(ECS_RUN_COMMAND="$(ECS_RUN_COMMAND)" python3 $(ECS_OVERRIDES_SCRIPT)); \
 	if [ -n "$$OVERRIDES" ]; then \
 		AWS_PROFILE=$(AWS_PROFILE) aws ecs run-task \

@@ -38,3 +38,10 @@
 - Added `en-saudi.ounass.com -> EN` in `ecommercecrawl/constants/ounass_constants.py` so Ounass EN Saudi PDP URLs populate `language` correctly.
 - Added Ounass-specific request tuning settings in `ecommercecrawl/settings.py`: `OUNASS_REQUEST_DELAY_SECONDS`, `OUNASS_REQUEST_JITTER_SECONDS`, `OUNASS_REQUEST_TIMEOUT_SECONDS`.
 - Updated `ecommercecrawl/spiders/ounass_crawl.py` to apply per-request sleep (`delay + jitter`) and request timeout for `requests.get(...)` calls used by Ounass seed/PLP/PDP fetch flow.
+
+## 2026-04-06 - EU region migration and deployment hardening
+- Switched scraper Terraform and Make defaults from `me-central-1` to `eu-central-1`, including a Frankfurt-specific Terraform backend key and default scraper bucket name.
+- Made ECS and Lambda IAM role names region-scoped so the EU stack can coexist with the MENA stack in the same AWS account without global IAM name collisions.
+- Changed `ecr-push` to rebuild before push, and updated Make AWS/Terraform calls to stay on the configured `AWS_PROFILE`.
+- Reworked `ecr-login` to derive the ECR registry from STS account identity instead of Terraform output, which fixed Docker login for the EU registry.
+- Made Ounass request tuning fall back to built-in defaults when the spider is instantiated outside Scrapy's `from_crawler()` path, and aligned Ounass tests with the explicit request timeout behavior.

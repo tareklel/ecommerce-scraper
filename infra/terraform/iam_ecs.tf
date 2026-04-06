@@ -6,7 +6,7 @@
 
 # ECS Task Execution Role (managed policy includes ECR + CloudWatch Logs).
 resource "aws_iam_role" "ecs_task_execution" {
-  name = "${var.ecs_name}-execution-role"
+  name = "${var.ecs_name}-${var.region}-execution-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17",
@@ -25,7 +25,7 @@ resource "aws_iam_role_policy_attachment" "ecs_task_execution" {
 
 # ECS Task Role (app permissions only; no infrastructure privileges).
 resource "aws_iam_role" "ecs_task" {
-  name = "${var.ecs_name}-task-role"
+  name = "${var.ecs_name}-${var.region}-task-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17",

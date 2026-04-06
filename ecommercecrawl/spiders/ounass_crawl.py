@@ -23,9 +23,15 @@ class OunassSpider(MasterCrawl, scrapy.Spider):
         self._seen_fetch_urls = set()
 
     def _get_request_tuning(self):
-        delay = float(self.settings.get("OUNASS_REQUEST_DELAY_SECONDS", "0.2"))
-        jitter = float(self.settings.get("OUNASS_REQUEST_JITTER_SECONDS", "0.1"))
-        timeout = int(float(self.settings.get("OUNASS_REQUEST_TIMEOUT_SECONDS", "20")))
+        settings = getattr(self, "settings", None)
+        if settings is None:
+            # Direct unit tests can instantiate the spider without Scrapy's
+            # from_crawler hook, so fall back to the runtime defaults.
+            return 0.2, 0.1, 20
+
+        delay = float(settings.get("OUNASS_REQUEST_DELAY_SECONDS", "0.2"))
+        jitter = float(settings.get("OUNASS_REQUEST_JITTER_SECONDS", "0.1"))
+        timeout = int(float(settings.get("OUNASS_REQUEST_TIMEOUT_SECONDS", "20")))
         return max(0.0, delay), max(0.0, jitter), max(1, timeout)
     
     def _handle_seed_url(self, url):

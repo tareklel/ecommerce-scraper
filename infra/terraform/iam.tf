@@ -1,6 +1,6 @@
 # IAM Role for Lambda
 resource "aws_iam_role" "bronze_manifest_verifier_role" {
-  name = "bronze_manifest_verifier_role"
+  name = "bronze_manifest_verifier_role_${var.region}"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17",

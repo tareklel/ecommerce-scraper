@@ -40,7 +40,7 @@ def test_handle_seed_url_success(mock_get, spider):
     results = list(spider._handle_seed_url(url))
 
     # Assert
-    mock_get.assert_called_once_with(url)
+    mock_get.assert_called_once_with(url, timeout=20)
     spider.parse.assert_called_once()
     assert results == ["item1", "item2"]
 
@@ -65,7 +65,7 @@ def test_handle_seed_url_skips_duplicate_pdp_url(mock_get, spider):
 
     assert first == ["item1"]
     assert second == []
-    mock_get.assert_called_once_with(url)
+    mock_get.assert_called_once_with(url, timeout=20)
     spider.parse.assert_called_once()
 
 
