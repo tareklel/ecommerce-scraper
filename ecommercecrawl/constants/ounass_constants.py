@@ -5,7 +5,8 @@ OUTPUT_DIR = 'output'
 # ounass_IMAGE_BASE_DIR = f'{OUTPUT_DIR}/images/ounass'
 OUNASS_URLS = 'resources/ounass_urls.csv'
 SOLD_OUT_LABEL = 'OUT OF STOCK'
-PLPSORT = 'newness_ae-asc'
+PLPSORT_KEY = 'fh_sort_by'
+PLPSORT = '-newness_ae'
 TLD_LANGUAGE_MAP = {
     'www.ounass.ae': 'EN',
     'saudi.ounass.com': 'AR',

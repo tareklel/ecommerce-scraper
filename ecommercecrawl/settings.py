@@ -2,6 +2,15 @@ import os
 
 
 ENV = os.getenv("APP_ENV", "dev").lower()
+
+
+def _env_bool(name, default):
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 BOT_NAME = 'ecommercecrawl'
 FARFETCH_URLS_PATH = "resources/farfetch_urls.csv"
 OUNASS_URLS_PATH = "resources/ounass_urls.csv"
@@ -68,8 +77,27 @@ COOKIES_ENABLED = True
 # Enable or disable downloader middlewares
 # See https://docs.scrapy.org/en/latest/topics/downloader-middleware.html
 DOWNLOADER_MIDDLEWARES = {
-        'ecommercecrawl.middlewares.RetryAfterMiddleware': 550,  # after default RetryMiddleware (543)
-    }
+    'ecommercecrawl.middlewares.RetryAfterMiddleware': 550,  # after default RetryMiddleware (543)
+    "scrapy_zyte_api.ScrapyZyteAPIDownloaderMiddleware": 1000,
+}
+
+# Zyte API is opt-in per request through meta["zyte_api"]; transparent mode
+# remains disabled so non-Ounass spiders keep using normal Scrapy downloads.
+DOWNLOAD_HANDLERS = {
+    "http": "scrapy_zyte_api.ScrapyZyteAPIDownloadHandler",
+    "https": "scrapy_zyte_api.ScrapyZyteAPIDownloadHandler",
+}
+SPIDER_MIDDLEWARES = {
+    "scrapy_zyte_api.ScrapyZyteAPISpiderMiddleware": 100,
+}
+REQUEST_FINGERPRINTER_CLASS = "scrapy_zyte_api.ScrapyZyteAPIRequestFingerprinter"
+TWISTED_REACTOR = "twisted.internet.asyncioreactor.AsyncioSelectorReactor"
+ZYTE_API_KEY = os.getenv("ZYTE_API_KEY")
+ZYTE_API_TRANSPARENT_MODE = False
+ZYTE_API_EXPERIMENTAL_COOKIES_ENABLED = _env_bool(
+    "ZYTE_API_EXPERIMENTAL_COOKIES_ENABLED",
+    True,
+)
 
 # Enable or disable extensions
 # See https://docs.scrapy.org/en/latest/topics/extensions.html
@@ -95,8 +123,24 @@ LOG_LEVEL = "DEBUG"
 FILES_STORE = 'output'
 S3_BUCKET = os.getenv("S3_BUCKET")
 
-# Ounass spider currently fetches via requests (outside Scrapy downloader),
-# so throttle controls are spider-specific and env-tunable.
+# Crawler API routing. Ounass defaults to "auto": API for every hostname
+# unless the hostname is explicitly listed in OUNASS_REQUESTS_TLDS.
+CRAWLER_API_SERVICE = os.getenv("CRAWLER_API_SERVICE", "zyte").lower()
+CRAWLER_API_ZYTE_GEOLOCATION = os.getenv("CRAWLER_API_ZYTE_GEOLOCATION")
+OUNASS_FETCH_BACKEND = os.getenv("OUNASS_FETCH_BACKEND", "auto").lower()
+# Ounass hostnames allowed to stay on normal requests in auto mode.
+# Empty list means all Ounass hostnames use the configured crawler API.
+OUNASS_REQUESTS_TLDS = []
+OUNASS_CRAWLER_API_PLP_REQUEST_TYPE = os.getenv(
+    "OUNASS_CRAWLER_API_PLP_REQUEST_TYPE",
+    "http_response",
+)
+OUNASS_CRAWLER_API_PDP_REQUEST_TYPE = os.getenv(
+    "OUNASS_CRAWLER_API_PDP_REQUEST_TYPE",
+    "rendered_html",
+)
+
+# Used only when Ounass falls back to requests mode.
 OUNASS_REQUEST_DELAY_SECONDS = os.getenv("OUNASS_REQUEST_DELAY_SECONDS", "0.2")
 OUNASS_REQUEST_JITTER_SECONDS = os.getenv("OUNASS_REQUEST_JITTER_SECONDS", "0.1")
 OUNASS_REQUEST_TIMEOUT_SECONDS = os.getenv("OUNASS_REQUEST_TIMEOUT_SECONDS", "20")

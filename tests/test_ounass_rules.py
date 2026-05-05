@@ -50,13 +50,13 @@ def test_get_max_pages_raises_error_if_key_missing():
 # --- Tests for is_first_page ---
 
 def test_is_first_page_true_for_page_zero():
-    """Should return True when currentPage is 0."""
-    response = create_mock_response({"pagination": {"currentPage": 0}})
+    """Should return True when the Ounass payload page is 0."""
+    response = create_mock_response({"page": 0})
     assert rules.is_first_page(response) is True
 
 def test_is_first_page_false_for_other_pages():
-    """Should return False when currentPage is not 0."""
-    response = create_mock_response({"pagination": {"currentPage": 1}})
+    """Should return False when the Ounass payload page is not 0."""
+    response = create_mock_response({"page": 1})
     assert rules.is_first_page(response) is False
 
 def test_is_first_page_raises_error_if_key_missing():

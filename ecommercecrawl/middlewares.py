@@ -4,7 +4,6 @@ from urllib.parse import urlparse
 from scrapy.downloadermiddlewares.retry import RetryMiddleware
 from scrapy.utils.response import response_status_message
 from twisted.internet.task import deferLater
-from twisted.internet import reactor
 
 
 def _sleep(seconds):
@@ -12,6 +11,9 @@ def _sleep(seconds):
     Async sleep for 'seconds' using Twisted reactor.
     Unlike time.sleep(), this won’t block the entire Scrapy engine.
     """
+    # Import lazily so Scrapy can install the configured asyncio reactor first.
+    from twisted.internet import reactor
+
     return deferLater(reactor, seconds, lambda: None)
 
 

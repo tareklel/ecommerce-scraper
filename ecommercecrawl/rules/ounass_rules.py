@@ -26,7 +26,7 @@ def get_max_pages(response):
 
 
 def is_first_page(response):
-    return json.loads(response.text)['pagination']['currentPage'] == 0
+    return json.loads(response.text)['page'] == 0
 
 def get_pdps(response):
     """

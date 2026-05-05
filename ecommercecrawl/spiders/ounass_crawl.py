@@ -1,12 +1,25 @@
 import scrapy
 from datetime import date
+import random
+import time
+from urllib.parse import urlparse
+
+import requests
 from ecommercecrawl.spiders.mastercrawl import MasterCrawl
 from ecommercecrawl.rules import ounass_rules as rules
 from ecommercecrawl.constants import ounass_constants as constants
+from ecommercecrawl.crawler_api import (
+    REQUEST_TYPE_HTTP_RESPONSE,
+    REQUEST_TYPE_RENDERED_HTML,
+    build_crawler_api_request,
+)
 from scrapy.http import HtmlResponse
-import requests
-import random
-import time
+
+
+FETCH_BACKEND_AUTO = "auto"
+FETCH_BACKEND_API = "api"
+FETCH_BACKEND_REQUESTS = "requests"
+
 
 class OunassSpider(MasterCrawl, scrapy.Spider):
     name = constants.NAME
@@ -18,31 +31,102 @@ class OunassSpider(MasterCrawl, scrapy.Spider):
         self.urlpath = urlpath
         self.start_urls = urls or []
         self.limit = limit
-        # Ounass uses requests.get + direct parse recursion, so Scrapy's dupefilter
-        # does not protect us from re-visiting the same URL.
+        # Ounass can bypass Scrapy's downloader in requests mode, so keep
+        # explicit URL-level dedupe for both fetch backends.
         self._seen_fetch_urls = set()
 
-    def _get_request_tuning(self):
+    def _get_setting(self, name, default):
         settings = getattr(self, "settings", None)
         if settings is None:
-            # Direct unit tests can instantiate the spider without Scrapy's
-            # from_crawler hook, so fall back to the runtime defaults.
-            return 0.2, 0.1, 20
+            return default
+        return settings.get(name, default)
 
-        delay = float(settings.get("OUNASS_REQUEST_DELAY_SECONDS", "0.2"))
-        jitter = float(settings.get("OUNASS_REQUEST_JITTER_SECONDS", "0.1"))
-        timeout = int(float(settings.get("OUNASS_REQUEST_TIMEOUT_SECONDS", "20")))
+    def _get_fetch_backend(self):
+        backend = str(
+            self._get_setting("OUNASS_FETCH_BACKEND", FETCH_BACKEND_AUTO)
+        ).strip().lower()
+        if backend not in {FETCH_BACKEND_AUTO, FETCH_BACKEND_API, FETCH_BACKEND_REQUESTS}:
+            raise ValueError(f"Unsupported Ounass fetch backend: {backend}")
+        return backend
+
+    def _get_requests_tlds(self):
+        """
+        Hostnames allowed to use normal requests in auto mode.
+
+        `OUNASS_REQUESTS_TLDS` in settings is the source of truth. If it is
+        missing or empty, auto mode sends every Ounass hostname to the API.
+        """
+        configured = self._get_setting("OUNASS_REQUESTS_TLDS", [])
+        if configured is None:
+            configured = []
+        elif isinstance(configured, str):
+            configured = configured.split(",")
+        return {
+            str(hostname).strip().lower()
+            for hostname in configured
+            if str(hostname).strip()
+        }
+
+    def _should_use_requests_for_url(self, url):
+        """
+        Auto mode is API-first because Ounass crawling is strict.
+
+        Only hostnames explicitly listed in OUNASS_REQUESTS_TLDS stay on
+        normal requests; the default empty list means API for every hostname.
+        """
+        hostname = (urlparse(url).hostname or "").lower()
+        return hostname in self._get_requests_tlds()
+
+    def _get_fetch_backend_for_url(self, url):
+        backend = self._get_fetch_backend()
+        if backend != FETCH_BACKEND_AUTO:
+            return backend
+        if self._should_use_requests_for_url(url):
+            return FETCH_BACKEND_REQUESTS
+        return FETCH_BACKEND_API
+
+    def _get_crawler_api_request_type(self, url):
+        if url.split("?", 1)[0].endswith(".html"):
+            return self._get_setting(
+                "OUNASS_CRAWLER_API_PDP_REQUEST_TYPE",
+                REQUEST_TYPE_RENDERED_HTML,
+            )
+        return self._get_setting(
+            "OUNASS_CRAWLER_API_PLP_REQUEST_TYPE",
+            REQUEST_TYPE_HTTP_RESPONSE,
+        )
+
+    def _get_request_tuning(self):
+        delay = float(self._get_setting("OUNASS_REQUEST_DELAY_SECONDS", "0.2"))
+        jitter = float(self._get_setting("OUNASS_REQUEST_JITTER_SECONDS", "0.1"))
+        timeout = int(float(self._get_setting("OUNASS_REQUEST_TIMEOUT_SECONDS", "20")))
         return max(0.0, delay), max(0.0, jitter), max(1, timeout)
-    
+
     def _handle_seed_url(self, url):
         """
-        Override MasterCrawl._handle_seed_url so that the initial responses
-        are fetched via `requests` instead of Scrapy's downloader.
+        Schedule an Ounass URL through the configured fetch backend.
+
+        API mode keeps the provider-specific request details in crawler_api;
+        requests mode preserves the old synchronous fallback path.
         """
         if url in self._seen_fetch_urls:
             self.logger.info(f"Skipping duplicate Ounass URL: {url}")
             return
 
+        backend = self._get_fetch_backend_for_url(url)
+        if backend == FETCH_BACKEND_API:
+            self._seen_fetch_urls.add(url)
+            yield build_crawler_api_request(
+                url=url,
+                callback=self.parse,
+                settings=getattr(self, "settings", None),
+                request_type=self._get_crawler_api_request_type(url),
+            )
+            return
+
+        yield from self._handle_seed_url_via_requests(url)
+
+    def _handle_seed_url_via_requests(self, url):
         try:
             delay, jitter, timeout = self._get_request_tuning()
             sleep_seconds = delay + (random.uniform(0, jitter) if jitter > 0 else 0.0)
@@ -79,7 +163,7 @@ class OunassSpider(MasterCrawl, scrapy.Spider):
             # If the URL is not sorted, we want to get all pages, even if it's just one
             if constants.PLPSORT not in response.url:
                 return [
-                    response.url.split("?")[0] + f"?sortBy={constants.PLPSORT}&p={p}"
+                    response.url.split("?")[0] + f"?{constants.PLPSORT_KEY}={constants.PLPSORT}&p={p}"
                     for p in range(total_pages)
                 ]
 
@@ -89,7 +173,7 @@ class OunassSpider(MasterCrawl, scrapy.Spider):
             else:
                 # Assuming the first page is p=0, so we get pages 1 to N-1
                 return [
-                    response.url.split("?")[0] + f"?sortBy={constants.PLPSORT}&p={p + 1}"
+                    response.url.split("?")[0] + f"?{constants.PLPSORT_KEY}={constants.PLPSORT}&p={p + 1}"
                     for p in range(total_pages - 1)
                 ]
 

@@ -45,3 +45,10 @@
 - Changed `ecr-push` to rebuild before push, and updated Make AWS/Terraform calls to stay on the configured `AWS_PROFILE`.
 - Reworked `ecr-login` to derive the ECR registry from STS account identity instead of Terraform output, which fixed Docker login for the EU registry.
 - Made Ounass request tuning fall back to built-in defaults when the spider is instantiated outside Scrapy's `from_crawler()` path, and aligned Ounass tests with the explicit request timeout behavior.
+
+## 2026-05-05 - Add API-first Ounass crawler API routing
+- Added a generic `ecommercecrawl/crawler_api` layer with Zyte as the current provider and request-type mapping for raw HTTP responses vs rendered HTML.
+- Wired `scrapy-zyte-api` into Scrapy settings with opt-in request metadata and disabled transparent mode for non-Ounass traffic.
+- Refactored Ounass seed handling to support `auto`, `api`, and `requests` fetch backends; `auto` now uses API by default unless the hostname is in `OUNASS_REQUESTS_TLDS`.
+- Added `PLPSORT_KEY`-based Ounass pagination and updated first-page parsing to use the current top-level `page` payload field.
+- Expanded Ounass and crawler API tests for API/request routing, pagination URL generation, and updated PLP page payload behavior.
