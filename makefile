@@ -51,8 +51,14 @@ docker-build:
 		echo "✅ Image exists — skipping build."; \
 	fi
 
+# Remove unused Docker resources before expensive rebuilds to avoid local disk exhaustion.
+docker-prune:
+	echo "🧹 Pruning unused Docker images, containers, networks, and build cache..."; \
+	docker system prune -af; \
+	docker builder prune -af
+
 # Force rebuild
-docker-rebuild:
+docker-rebuild: docker-prune
 	echo "🏗️ Rebuilding linux/amd64 image (no cache)..."; \
 	docker buildx build --platform linux/amd64 --no-cache -t $(IMAGE_NAME):latest .
 
@@ -101,6 +107,13 @@ run-level-test-upload:
 	S3_BUCKET=$(S3_BUCKET) \
 	S3_UPLOAD_ENABLED=true \
 	poetry run python3 run_crawler.py level --urls $(LEVEL_TEST_URL)
+
+# Run any local command with variables from .env loaded by this Makefile.
+# Usage:
+#   make run-with-env COMMAND="poetry run python3 run_crawler.py level --env dev --urls-source s3://price-comparison-bucket/resources/crawl-lists/test_level_sa_urls_20260508.csv"
+run-with-env:
+	@test -n "$(COMMAND)" || (echo 'Set COMMAND="your command". Example: make run-with-env COMMAND="poetry run python3 run_crawler.py level --env dev --urls-source s3://price-comparison-bucket/resources/crawl-lists/test_level_sa_urls_20260508.csv"' && exit 1)
+	$(COMMAND)
 
 # image downloader
 run-image-downloader-local:

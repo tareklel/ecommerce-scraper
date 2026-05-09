@@ -54,7 +54,7 @@ class MasterCrawl(Spider):
         # This is done here because from_crawler receives all spider arguments.
         spider.entry_points = {
             key: value for key, value in kwargs.items()
-            if key in ['start_urls', 'url', 'urls', 'urlpath', 'urls_file']
+            if key in ['start_urls', 'url', 'urls', 'urlpath', 'urls_file', 'urls_source']
         }
         
         # Connect the generate_manifest method to the spider_closed signal

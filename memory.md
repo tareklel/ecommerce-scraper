@@ -52,3 +52,10 @@
 - Refactored Ounass seed handling to support `auto`, `api`, and `requests` fetch backends; `auto` now uses API by default unless the hostname is in `OUNASS_REQUESTS_TLDS`.
 - Added `PLPSORT_KEY`-based Ounass pagination and updated first-page parsing to use the current top-level `page` payload field.
 - Expanded Ounass and crawler API tests for API/request routing, pagination URL generation, and updated PLP page payload behavior.
+
+## 2026-05-09 - Add cloud URL sources and local env command helper
+- Added `--urls-source` to `run_crawler.py` for local or `s3://` CSV seed lists, preserving existing inline `--urls` and CSV path behavior.
+- Recorded `urls_source` in crawler entry-point metadata so manifests identify externally supplied seed lists.
+- Made Zyte Scrapy handlers conditional on `ZYTE_API_KEY` or `ZYTE_API_ENABLED=true`, keeping non-Zyte local runs on normal HTTP handlers.
+- Added Make helpers for Docker prune-before-rebuild and `run-with-env` to execute arbitrary local commands with `.env` exported.
+- Added tests covering URL-source parsing/loading, CLI handoff, and conditional Zyte settings.

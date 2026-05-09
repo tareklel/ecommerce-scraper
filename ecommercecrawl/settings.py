@@ -78,26 +78,32 @@ COOKIES_ENABLED = True
 # See https://docs.scrapy.org/en/latest/topics/downloader-middleware.html
 DOWNLOADER_MIDDLEWARES = {
     'ecommercecrawl.middlewares.RetryAfterMiddleware': 550,  # after default RetryMiddleware (543)
-    "scrapy_zyte_api.ScrapyZyteAPIDownloaderMiddleware": 1000,
 }
 
-# Zyte API is opt-in per request through meta["zyte_api"]; transparent mode
-# remains disabled so non-Ounass spiders keep using normal Scrapy downloads.
-DOWNLOAD_HANDLERS = {
-    "http": "scrapy_zyte_api.ScrapyZyteAPIDownloadHandler",
-    "https": "scrapy_zyte_api.ScrapyZyteAPIDownloadHandler",
-}
-SPIDER_MIDDLEWARES = {
-    "scrapy_zyte_api.ScrapyZyteAPISpiderMiddleware": 100,
-}
-REQUEST_FINGERPRINTER_CLASS = "scrapy_zyte_api.ScrapyZyteAPIRequestFingerprinter"
 TWISTED_REACTOR = "twisted.internet.asyncioreactor.AsyncioSelectorReactor"
 ZYTE_API_KEY = os.getenv("ZYTE_API_KEY")
+ZYTE_API_ENABLED = _env_bool("ZYTE_API_ENABLED", bool(ZYTE_API_KEY))
 ZYTE_API_TRANSPARENT_MODE = False
 ZYTE_API_EXPERIMENTAL_COOKIES_ENABLED = _env_bool(
     "ZYTE_API_EXPERIMENTAL_COOKIES_ENABLED",
     True,
 )
+DOWNLOAD_HANDLERS = {}
+SPIDER_MIDDLEWARES = {}
+REQUEST_FINGERPRINTER_CLASS = "scrapy.utils.request.RequestFingerprinter"
+
+if ZYTE_API_ENABLED:
+    # Register Zyte only when configured so non-Zyte local runs keep Scrapy's
+    # default HTTP handlers and do not require Zyte authentication.
+    DOWNLOADER_MIDDLEWARES["scrapy_zyte_api.ScrapyZyteAPIDownloaderMiddleware"] = 1000
+    DOWNLOAD_HANDLERS = {
+        "http": "scrapy_zyte_api.ScrapyZyteAPIDownloadHandler",
+        "https": "scrapy_zyte_api.ScrapyZyteAPIDownloadHandler",
+    }
+    SPIDER_MIDDLEWARES = {
+        "scrapy_zyte_api.ScrapyZyteAPISpiderMiddleware": 100,
+    }
+    REQUEST_FINGERPRINTER_CLASS = "scrapy_zyte_api.ScrapyZyteAPIRequestFingerprinter"
 
 # Enable or disable extensions
 # See https://docs.scrapy.org/en/latest/topics/extensions.html
