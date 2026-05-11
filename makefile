@@ -1,14 +1,24 @@
 SHELL := /bin/bash
 
-# load variables form .env file
+# Load local, non-secret Make config from .env. Runtime secrets are fetched from
+# AWS Secrets Manager below so .env can stay out of Docker images and git.
+ifneq (,$(wildcard .env))
 include .env
-export $(shell sed 's/=.*//' .env)
+export $(shell sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p' .env)
+endif
 
 IMAGE_NAME = ecommerce-scraper
 # Use this for ECR tagging/pushing; keep in sync with Terraform image_tag when needed.
 IMAGE_TAG ?= latest
 # Region should match infra/terraform/variables.tf (var.region).
 AWS_REGION ?= eu-central-1
+# One JSON Secrets Manager secret is the source of truth for crawler secrets.
+AWS_SECRET_ENV_NAME ?= ecommerce-scraper/env
+AWS_SECRET_EXPORTS_SCRIPT = scripts/secret_json_to_exports.py
+# Recipes that execute crawler code locally call this first so users do not need
+# a separate "with secrets" command. ECS receives the same values via Terraform.
+LOAD_AWS_SECRET_ENV = set -o pipefail; eval "$$(AWS_PROFILE=$(AWS_PROFILE) aws secretsmanager get-secret-value --region $(AWS_REGION) --secret-id $(AWS_SECRET_ENV_NAME) --query SecretString --output text | python3 $(AWS_SECRET_EXPORTS_SCRIPT))"
+DOCKER_SECRET_ENV_FLAGS = --env ZYTE_API_KEY --env ZYTE_API_ENABLED --env CRAWLER_API_ZYTE_GEOLOCATION --env OXY_LABS_USERNAME --env OXY_LABS_PASSWORD --env OXY_PROXY --env OXY_COUNTRY
 
 # Optional: override ECS command at runtime (used by ecs-run).
 ECS_RUN_COMMAND ?=
@@ -18,7 +28,7 @@ ECS_TEST_COMMAND = python3 run_crawler.py ounass --urls https://www.ounass.ae/ap
 ECS_OVERRIDES_SCRIPT = scripts/ecs_overrides.py
 
 FF_TEST_URL = https://www.farfetch.com/ae/shopping/women/louis-vuitton-pre-owned/clothing-1/items.aspx
-OUNASS_TEST_URL ?= https://www.ounass.ae/api/women/designers/burberry/bags
+OUNASS_TEST_URL ?= https://saudi.ounass.com/api/women/designers/ami/bags
 LEVEL_TEST_URL ?= https://www.levelshoes.com/women/brands/miu-miu/bags
 IMAGE_DOWNLOADER_INPUT_JSONL ?= resources/image_download_test_jobs.jsonl
 IMAGE_DOWNLOADER_OUTPUT_DIR ?= output/images
@@ -64,22 +74,27 @@ docker-rebuild: docker-prune
 
 # farfetch 
 run-ff-local:
+	$(LOAD_AWS_SECRET_ENV); \
 	poetry run python3 run_crawler.py farfetch --urls $(FF_TEST_URL)
 
 run-ff-test-upload:
+	$(LOAD_AWS_SECRET_ENV); \
 	AWS_PROFILE=$(AWS_PROFILE) \
 	S3_BUCKET=$(S3_BUCKET) \
 	S3_UPLOAD_ENABLED=true \
 	poetry run python3 run_crawler.py farfetch --urls $(FF_TEST_URL)
 
 docker-run-ff-dev:
-	docker run --rm -v $(PWD)/output:/app/output $(IMAGE_NAME):latest run_crawler.py farfetch --urls $(FF_TEST_URL) --env dev
+	$(LOAD_AWS_SECRET_ENV); \
+	docker run --rm $(DOCKER_SECRET_ENV_FLAGS) -v $(PWD)/output:/app/output $(IMAGE_NAME):latest run_crawler.py farfetch --urls $(FF_TEST_URL) --env dev
 
 # ounass
 run-ounass-local:
+	$(LOAD_AWS_SECRET_ENV); \
 	poetry run python3 run_crawler.py ounass --urls $(OUNASS_TEST_URL)
 
 run-ounass-test-upload:
+	$(LOAD_AWS_SECRET_ENV); \
 	AWS_PROFILE=$(AWS_PROFILE) \
 	S3_BUCKET=$(S3_BUCKET) \
 	S3_UPLOAD_ENABLED=true \
@@ -89,6 +104,7 @@ run-ounass-test-upload:
 # This keeps upload enabled but forces quality gate failure so Lambda should emit _FAIL_QUALITY
 # and not emit _SUCCESS.
 run-ounass-test-upload-faulty-quality:
+	$(LOAD_AWS_SECRET_ENV); \
 	AWS_PROFILE=$(AWS_PROFILE) \
 	S3_BUCKET=$(S3_BUCKET) \
 	S3_UPLOAD_ENABLED=true \
@@ -100,19 +116,22 @@ run-ounass-test-upload-faulty-quality:
 
 # level
 run-level-local:
+	$(LOAD_AWS_SECRET_ENV); \
 	poetry run python3 run_crawler.py level --urls $(LEVEL_TEST_URL)
 
 run-level-test-upload:
+	$(LOAD_AWS_SECRET_ENV); \
 	AWS_PROFILE=$(AWS_PROFILE) \
 	S3_BUCKET=$(S3_BUCKET) \
 	S3_UPLOAD_ENABLED=true \
 	poetry run python3 run_crawler.py level --urls $(LEVEL_TEST_URL)
 
-# Run any local command with variables from .env loaded by this Makefile.
+# Run any local command with .env plus AWS Secrets Manager values loaded.
 # Usage:
 #   make run-with-env COMMAND="poetry run python3 run_crawler.py level --env dev --urls-source s3://price-comparison-bucket/resources/crawl-lists/test_level_sa_urls_20260508.csv"
 run-with-env:
 	@test -n "$(COMMAND)" || (echo 'Set COMMAND="your command". Example: make run-with-env COMMAND="poetry run python3 run_crawler.py level --env dev --urls-source s3://price-comparison-bucket/resources/crawl-lists/test_level_sa_urls_20260508.csv"' && exit 1)
+	$(LOAD_AWS_SECRET_ENV); \
 	$(COMMAND)
 
 # image downloader
@@ -167,6 +186,27 @@ tf-destroy:
 
 aws-login:
 	aws sso login --profile $(AWS_PROFILE) --region $(AWS_REGION)
+
+# Update one key in the remote JSON secret without putting the value in .env or
+# Terraform state. Existing JSON keys are preserved.
+# Usage: make secrets-put KEY=ZYTE_API_KEY
+secrets-put:
+	@test -n "$(KEY)" || (echo "Set KEY, for example: make secrets-put KEY=ZYTE_API_KEY" && exit 1)
+	@set -e; \
+	read -rsp "$(KEY): " SECRET_VALUE; echo; \
+	test -n "$$SECRET_VALUE" || (echo "$(KEY) cannot be empty" && exit 1); \
+	EXISTING_SECRET=$$(AWS_PROFILE=$(AWS_PROFILE) aws secretsmanager get-secret-value --region $(AWS_REGION) --secret-id $(AWS_SECRET_ENV_NAME) --query SecretString --output text 2>/dev/null || printf '{}'); \
+	SECRET_JSON=$$(EXISTING_SECRET="$$EXISTING_SECRET" SECRET_KEY="$(KEY)" SECRET_VALUE="$$SECRET_VALUE" python3 -c 'import json, os; values = json.loads(os.environ.get("EXISTING_SECRET") or "{}"); values[os.environ["SECRET_KEY"]] = os.environ["SECRET_VALUE"]; print(json.dumps(values, separators=(",", ":")))'); \
+	AWS_PROFILE=$(AWS_PROFILE) aws secretsmanager put-secret-value --region $(AWS_REGION) --secret-id $(AWS_SECRET_ENV_NAME) --secret-string "$$SECRET_JSON" >/dev/null || (echo "Secret $(AWS_SECRET_ENV_NAME) does not exist yet. Run make tf-apply first, or import the existing AWS secret into Terraform." && exit 1); \
+	echo "Updated $(KEY) in $(AWS_SECRET_ENV_NAME)."
+
+# Show which keys exist in the remote JSON secret without printing values.
+secrets-list:
+	@AWS_PROFILE=$(AWS_PROFILE) aws secretsmanager get-secret-value \
+		--region $(AWS_REGION) \
+		--secret-id $(AWS_SECRET_ENV_NAME) \
+		--query SecretString \
+		--output text | python3 -c 'import json,sys; print("\n".join(sorted(json.load(sys.stdin).keys())))'
 # -----------------------------
 # ECR image push (manual start)
 # -----------------------------

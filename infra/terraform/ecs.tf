@@ -56,6 +56,12 @@ resource "aws_ecs_task_definition" "scraper" {
         { name = "S3_BUCKET", value = var.price_comparison_bucket },
         { name = "S3_UPLOAD_ENABLED", value = var.s3_upload_enabled }
       ]
+      secrets = [
+        for key in var.ecs_secret_env_keys : {
+          name      = key
+          valueFrom = "${aws_secretsmanager_secret.scraper_env.arn}:${key}::"
+        }
+      ]
       logConfiguration = {
         logDriver = "awslogs"
         options = {

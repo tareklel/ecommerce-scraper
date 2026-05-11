@@ -2,6 +2,9 @@
 .gitignore
 .DS_Store
 .env
+.env.*
+env
+env.*
 .venv
 .vscode
 __pycache__

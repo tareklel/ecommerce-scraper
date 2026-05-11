@@ -134,8 +134,10 @@ def manifest_test_setup(pipeline_setup, tmp_path):
         'downloader/request_count': 200,
         'log_count/ERROR': 5,
         'downloader/response_status_count/200': 190,
+        'downloader/response_status_count/403': 3,
         'downloader/response_status_count/404': 5,
         'downloader/response_status_count/500': 5,
+        'downloader/response_status_count/599': 1,
     }
     mock_crawler.stats.get_stats.return_value = stats_dict
 
@@ -184,9 +186,10 @@ class TestManifestPipeline:
             "errors_count": 5,
             "status_code_counts": {
                 "200": 190,
-                "301": 0,
+                "403": 3,
                 "404": 5,
-                "500": 5
+                "500": 5,
+                "599": 1
             }
         }
         assert manifest_data['stats'] == expected_stats

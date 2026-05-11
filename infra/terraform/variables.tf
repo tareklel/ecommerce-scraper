@@ -76,6 +76,20 @@ variable "s3_upload_enabled" {
   default     = "true"
 }
 
+variable "scraper_env_secret_name" {
+  description = "Secrets Manager JSON secret that stores crawler runtime secrets"
+  type        = string
+  default     = "ecommerce-scraper/env"
+}
+
+variable "ecs_secret_env_keys" {
+  description = "JSON keys from scraper_env_secret_name to expose as ECS container environment variables"
+  type        = list(string)
+  default = [
+    "ZYTE_API_KEY"
+  ]
+}
+
 variable "athena_table" {
   description = "Optional Athena table override for bronze partitions (defaults to bronze_<site>_raw)"
   type        = string

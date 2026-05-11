@@ -12,6 +12,9 @@ farfetch_html_fixtures/
 /.venv
 logs/
 .env
+.env.*
+env
+env.*
 *.ipynb 
 *.html
 *.txt

@@ -399,16 +399,18 @@ class PostCrawlPipeline:
 
     def _build_manifest_stats(self, stats):
         """Builds the stats dictionary for the manifest."""
+        status_code_prefix = 'downloader/response_status_count/'
+        status_code_counts = {
+            key.removeprefix(status_code_prefix): value
+            for key, value in stats.items()
+            if key.startswith(status_code_prefix)
+        }
+
         return {
             "items_scraped": self.items_written,
             "requests_made": stats.get('downloader/request_count', 0),
             "errors_count": stats.get('log_count/ERROR', 0),
-            "status_code_counts": {
-                "200": stats.get('downloader/response_status_count/200', 0),
-                "301": stats.get('downloader/response_status_count/301', 0),
-                "404": stats.get('downloader/response_status_count/404', 0),
-                "500": stats.get('downloader/response_status_count/500', 0)
-            },
+            "status_code_counts": status_code_counts,
         }
 
     def _build_manifest_artifacts(self):

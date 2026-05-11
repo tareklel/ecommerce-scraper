@@ -59,3 +59,9 @@
 - Made Zyte Scrapy handlers conditional on `ZYTE_API_KEY` or `ZYTE_API_ENABLED=true`, keeping non-Zyte local runs on normal HTTP handlers.
 - Added Make helpers for Docker prune-before-rebuild and `run-with-env` to execute arbitrary local commands with `.env` exported.
 - Added tests covering URL-source parsing/loading, CLI handoff, and conditional Zyte settings.
+
+## 2026-05-11 - Add Secrets Manager runtime env wiring and dynamic status counts
+- Added Terraform wiring for one JSON Secrets Manager secret (`ecommerce-scraper/env`) and ECS task secret injection for allowlisted runtime env keys.
+- Added Make helpers to fetch remote secret keys for local crawler runs, list secret keys without values, and update a single remote secret key without storing values in `.env` or Terraform state.
+- Added ignore coverage for `.env`/`env` variants and a JSON-to-shell export helper for safe local secret hydration.
+- Changed manifest status-code counts to include all observed Scrapy response status counters dynamically, including important statuses such as `403`.
