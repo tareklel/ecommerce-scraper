@@ -60,6 +60,20 @@
 - Added Make helpers for Docker prune-before-rebuild and `run-with-env` to execute arbitrary local commands with `.env` exported.
 - Added tests covering URL-source parsing/loading, CLI handoff, and conditional Zyte settings.
 
+## 2026-05-15 - `172af17` - Add Athena-driven image download pipeline
+- Added `run_image_pipeline.py` ECS orchestrator: queries `stg_product_image_download_status` for pending/error images via Athena, runs downloads, writes `bronze/images/download_status/dt={dt}/data.jsonl.gz` partition, registers Glue partition, writes `_SUCCESS`/`_FAILED` marker to `bronze/images/download_status/meta/{dt}/`.
+- Extended `ecommercecrawl/image_downloader.py` with `storage_mode` (`local | s3 | both`), S3 blob upload via boto3, updated blob path from `silver/` to `bronze/images/by-hash/`, dropped `by-primary` pointer keys.
+- Added `scripts/image_quality_checker.py` ECS job: reads status partition, fetches blobs from S3, validates with Pillow (format, min 10px dimensions, SHA256 integrity), writes `bronze/images/raw/dt={dt}/` partition.
+- Added `lambda/image_pipeline_trigger/handler.py`: S3 shim triggered by `_SUCCESS` marker, extracts `dt` from key, calls `ecs.run_task()` with `--dt` command override to launch quality checker.
+- Added `infra/terraform/glue.tf` with two external tables: `image_download_status` and `raw_image`.
+- Extended `infra/terraform/ecs.tf` with `image-pipeline` and `image-quality-checker` Fargate task definitions.
+- Extended `infra/terraform/iam_ecs.tf` with dedicated IAM role for image pipeline tasks (S3 `bronze/images/*`, Athena, Glue).
+- Extended `infra/terraform/iam.tf` with IAM role for trigger Lambda (`ecs:RunTask`, `iam:PassRole`).
+- Extended `infra/terraform/lambda.tf` with `image_pipeline_trigger` Lambda and S3 notification on `bronze/images/download_status/meta/**/_SUCCESS`.
+- Added Makefile targets `run-image-pipeline-local` and `ecs-run-image-pipeline` with `IMAGE_PIPELINE_LIMIT` for dry runs.
+- Added `.claude/settings.json` with project permission allowlist for terraform/poetry commands.
+- Dry run order: `make tf-apply` → `make run-image-pipeline-local IMAGE_PIPELINE_LIMIT=5` → `make ecr-push && make ecs-run-image-pipeline IMAGE_PIPELINE_LIMIT=10`.
+
 ## 2026-05-11 - Add Secrets Manager runtime env wiring and dynamic status counts
 - Added Terraform wiring for one JSON Secrets Manager secret (`ecommerce-scraper/env`) and ECS task secret injection for allowlisted runtime env keys.
 - Added Make helpers to fetch remote secret keys for local crawler runs, list secret keys without values, and update a single remote secret key without storing values in `.env` or Terraform state.
