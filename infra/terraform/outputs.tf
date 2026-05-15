@@ -33,3 +33,7 @@ output "ecs_task_security_group_id" {
 output "default_subnet_ids" {
   value = data.aws_subnets.default.ids
 }
+
+output "ecs_image_pipeline_task_definition_arn" {
+  value = aws_ecs_task_definition.image_pipeline.arn
+}

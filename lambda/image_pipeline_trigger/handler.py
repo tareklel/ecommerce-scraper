@@ -1,0 +1,93 @@
+import json
+import logging
+import os
+import urllib.parse
+
+import boto3
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+ecs = boto3.client("ecs")
+
+ECS_CLUSTER          = os.environ["ECS_CLUSTER"]
+ECS_TASK_DEFINITION  = os.environ["ECS_TASK_DEFINITION"]
+ECS_CONTAINER_NAME   = os.environ.get("ECS_CONTAINER_NAME", "image-quality-checker")
+ECS_SUBNET_IDS       = os.environ["ECS_SUBNET_IDS"].split(",")
+ECS_SECURITY_GROUP   = os.environ["ECS_SECURITY_GROUP_ID"]
+ATHENA_DATABASE      = os.environ["ATHENA_DATABASE"]
+ATHENA_WORKGROUP     = os.environ.get("ATHENA_WORKGROUP", "primary")
+ATHENA_OUTPUT_LOC    = os.environ["ATHENA_OUTPUT_LOCATION"]
+
+# Expected key pattern: bronze/images/download_status/meta/{dt}/_SUCCESS
+_META_PREFIX = "bronze/images/download_status/meta/"
+
+
+def _extract_dt(key: str) -> str:
+    if not key.startswith(_META_PREFIX):
+        raise ValueError(f"Unexpected key: {key}")
+    # key = bronze/images/download_status/meta/2026-05-15/_SUCCESS
+    remainder = key[len(_META_PREFIX):]       # "2026-05-15/_SUCCESS"
+    dt = remainder.split("/")[0]
+    if not dt:
+        raise ValueError(f"Could not extract dt from key: {key}")
+    return dt
+
+
+def _trigger_quality_checker(dt: str) -> dict:
+    command = [
+        "python", "scripts/image_quality_checker.py",
+        "--dt", dt,
+        "--athena-database", ATHENA_DATABASE,
+        "--athena-workgroup", ATHENA_WORKGROUP,
+        "--athena-output-loc", ATHENA_OUTPUT_LOC,
+    ]
+    response = ecs.run_task(
+        cluster=ECS_CLUSTER,
+        taskDefinition=ECS_TASK_DEFINITION,
+        launchType="FARGATE",
+        networkConfiguration={
+            "awsvpcConfiguration": {
+                "subnets": ECS_SUBNET_IDS,
+                "securityGroups": [ECS_SECURITY_GROUP],
+                "assignPublicIp": "ENABLED",
+            }
+        },
+        overrides={
+            "containerOverrides": [{
+                "name": ECS_CONTAINER_NAME,
+                "command": command,
+            }]
+        },
+    )
+    task_arns = [t["taskArn"] for t in response.get("tasks", [])]
+    failures = response.get("failures", [])
+    logger.info("Triggered image_quality_checker dt=%s tasks=%s failures=%s", dt, task_arns, failures)
+    return {"task_arns": task_arns, "failures": failures}
+
+
+def handler(event, context):
+    records = event.get("Records", [])
+    if not records:
+        return {"status": "ignored", "message": "No Records in event"}
+
+    results = []
+    for record in records:
+        key = urllib.parse.unquote_plus(record["s3"]["object"]["key"])
+
+        if not key.endswith("_SUCCESS"):
+            logger.info("Ignoring non-_SUCCESS key: %s", key)
+            results.append({"status": "ignored", "key": key})
+            continue
+
+        try:
+            dt = _extract_dt(key)
+        except ValueError as e:
+            logger.error("Could not extract dt from key %s: %s", key, e)
+            results.append({"status": "error", "key": key, "message": str(e)})
+            continue
+
+        result = _trigger_quality_checker(dt)
+        results.append({"status": "ok", "dt": dt, **result})
+
+    return {"status": "ok", "results": results}

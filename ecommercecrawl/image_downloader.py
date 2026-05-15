@@ -5,9 +5,10 @@ import logging
 import os
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Literal, Optional, Tuple
 from urllib.parse import urlparse
 
+import boto3
 import requests
 
 from ecommercecrawl.constants import farfetch_constants
@@ -146,11 +147,7 @@ def build_output_path(
 
 
 def build_canonical_blob_key(content_sha256: str, ext: str) -> str:
-    return f"silver/images/by-hash/{content_sha256}{ext}"
-
-
-def build_primary_key_pointer_key(site: str, primary_key: str, content_sha256: str, ext: str) -> str:
-    return f"silver/images/by-primary/{site}/{primary_key}/{content_sha256}{ext}"
+    return f"bronze/images/by-hash/{content_sha256}{ext}"
 
 
 def _result_blob(
@@ -166,7 +163,6 @@ def _result_blob(
     normalized_image_url: Optional[str] = None,
     output_path: Optional[str] = None,
     canonical_blob_key: Optional[str] = None,
-    primary_key_pointer_key: Optional[str] = None,
     bytes_written: Optional[int] = None,
     content_sha256: Optional[str] = None,
     content_type: Optional[str] = None,
@@ -196,7 +192,6 @@ def _result_blob(
         "storage": {
             "output_path": output_path,
             "canonical_blob_key": canonical_blob_key,
-            "primary_key_pointer_key": primary_key_pointer_key,
         },
         "transfer": {
             "bytes": bytes_written,
@@ -295,11 +290,18 @@ def extract_jobs_from_jsonl(path: str, site_override: Optional[str] = None) -> L
     return jobs
 
 
+def _upload_blob(s3_client, local_path: str, bucket: str, key: str) -> None:
+    s3_client.upload_file(local_path, bucket, key)
+
+
 def download_one_job(
     job: dict,
     output_dir: str,
     download_run_id: str,
     timeout_seconds: int = 20,
+    storage_mode: Literal["local", "s3", "both"] = "local",
+    s3_client=None,
+    s3_bucket: Optional[str] = None,
 ) -> dict:
     try:
         site = normalize_site(job["site"])
@@ -354,12 +356,6 @@ def download_one_job(
         content_sha256 = hashlib.sha256(content).hexdigest()
         content_ext = extension_from_content_type(content_type) or output_ext
         canonical_blob_key = build_canonical_blob_key(content_sha256=content_sha256, ext=content_ext)
-        primary_pointer_key = build_primary_key_pointer_key(
-            site=site,
-            primary_key=primary_key,
-            content_sha256=content_sha256,
-            ext=content_ext,
-        )
 
         with open(output_path, "wb") as f:
             f.write(content)
@@ -378,6 +374,28 @@ def download_one_job(
             error=e,
         )
 
+    if storage_mode in ("s3", "both") and s3_client and s3_bucket:
+        try:
+            _upload_blob(s3_client, output_path, s3_bucket, canonical_blob_key)
+        except Exception as e:
+            return _result_blob(
+                status=STATUS_ERROR,
+                reason="s3_upload_failed",
+                download_run_id=download_run_id,
+                job_id=job_id,
+                site=site,
+                primary_key=primary_key,
+                source_run_id=source_run_id,
+                image_url=job["image_url"],
+                normalized_image_url=normalized_url,
+                input_source=input_source,
+                canonical_blob_key=canonical_blob_key,
+                error=e,
+            )
+        if storage_mode == "s3":
+            os.remove(output_path)
+            output_path = None
+
     return _result_blob(
         status=STATUS_OK,
         reason="downloaded",
@@ -391,7 +409,6 @@ def download_one_job(
         input_source=input_source,
         output_path=output_path,
         canonical_blob_key=canonical_blob_key,
-        primary_key_pointer_key=primary_pointer_key,
         bytes_written=len(content),
         content_sha256=content_sha256,
         content_type=content_type,
@@ -405,8 +422,11 @@ def download_jobs(
     max_workers: int = 10,
     timeout_seconds: int = 20,
     download_run_id: Optional[str] = None,
+    storage_mode: Literal["local", "s3", "both"] = "local",
+    s3_bucket: Optional[str] = None,
 ) -> List[dict]:
     run_id = download_run_id or generate_run_id()
+    s3_client = boto3.client("s3") if storage_mode in ("s3", "both") and s3_bucket else None
     results: List[dict] = []
     deduped: List[dict] = []
     seen_job_ids = set()
@@ -456,6 +476,9 @@ def download_jobs(
                 output_dir=output_dir,
                 download_run_id=run_id,
                 timeout_seconds=timeout_seconds,
+                storage_mode=storage_mode,
+                s3_client=s3_client,
+                s3_bucket=s3_bucket,
             )
             for job in deduped
         ]

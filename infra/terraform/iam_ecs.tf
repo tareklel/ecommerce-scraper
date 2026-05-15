@@ -57,6 +57,91 @@ resource "aws_iam_role" "ecs_task" {
   })
 }
 
+# --------------------------------------------------------
+# IAM task role for image pipeline + quality checker
+# --------------------------------------------------------
+
+resource "aws_iam_role" "ecs_task_image_pipeline" {
+  name = "${var.ecs_name}-${var.region}-image-pipeline-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [{
+      Effect    = "Allow",
+      Principal = { Service = "ecs-tasks.amazonaws.com" },
+      Action    = "sts:AssumeRole"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "ecs_task_image_pipeline_s3" {
+  name = "${var.ecs_name}-image-pipeline-s3-policy"
+  role = aws_iam_role.ecs_task_image_pipeline.id
+
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect = "Allow",
+        Action = ["s3:GetObject", "s3:PutObject"],
+        Resource = "${aws_s3_bucket.price_comparison_bucket.arn}/bronze/images/*"
+      },
+      {
+        Effect   = "Allow",
+        Action   = ["s3:GetObject"],
+        Resource = "${aws_s3_bucket.price_comparison_bucket.arn}/bronze/crawls/*"
+      },
+      {
+        Effect   = "Allow",
+        Action   = ["s3:ListBucket"],
+        Resource = aws_s3_bucket.price_comparison_bucket.arn
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy" "ecs_task_image_pipeline_athena" {
+  name = "${var.ecs_name}-image-pipeline-athena-policy"
+  role = aws_iam_role.ecs_task_image_pipeline.id
+
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect = "Allow",
+        Action = [
+          "athena:StartQueryExecution",
+          "athena:GetQueryExecution",
+          "athena:GetQueryResults"
+        ],
+        Resource = "arn:aws:athena:${var.region}:*:workgroup/${var.athena_workgroup_name}"
+      },
+      {
+        Effect = "Allow",
+        Action = [
+          "glue:GetTable",
+          "glue:GetPartitions",
+          "glue:BatchCreatePartition",
+          "glue:CreatePartition"
+        ],
+        Resource = [
+          "arn:aws:glue:${var.region}:*:catalog",
+          "arn:aws:glue:${var.region}:*:database/${var.glue_database_name}",
+          "arn:aws:glue:${var.region}:*:table/${var.glue_database_name}/*"
+        ]
+      },
+      {
+        Effect   = "Allow",
+        Action   = ["s3:GetObject", "s3:PutObject", "s3:ListBucket"],
+        Resource = [
+          "${aws_s3_bucket.price_comparison_bucket.arn}/${var.athena_results_prefix}*",
+          aws_s3_bucket.price_comparison_bucket.arn
+        ]
+      }
+    ]
+  })
+}
+
 # S3 access for the scraper output (bucket + objects).
 resource "aws_iam_role_policy" "ecs_task_s3" {
   name = "${var.ecs_name}-s3-policy"

@@ -80,8 +80,7 @@ def test_download_one_job_writes_file(monkeypatch, tmp_path):
     output_path = Path(result["storage"]["output_path"])
     assert output_path.exists()
     assert output_path.read_bytes() == b"image-bytes"
-    assert result["storage"]["canonical_blob_key"].startswith("silver/images/by-hash/")
-    assert result["storage"]["primary_key_pointer_key"].startswith("silver/images/by-primary/")
+    assert result["storage"]["canonical_blob_key"].startswith("bronze/images/by-hash/")
     assert result["transfer"]["bytes"] == len(b"image-bytes")
     assert result["job"]["primary_key"] == "ABC123_level-shoes"
 

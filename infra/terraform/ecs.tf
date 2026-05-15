@@ -73,3 +73,74 @@ resource "aws_ecs_task_definition" "scraper" {
     }
   ])
 }
+
+# -------------------------------------------------------
+# Image pipeline task — run_image_pipeline.py
+# -------------------------------------------------------
+
+resource "aws_ecs_task_definition" "image_pipeline" {
+  family                   = "${var.ecs_name}-image-pipeline"
+  requires_compatibilities = ["FARGATE"]
+  network_mode             = "awsvpc"
+  cpu                      = var.ecs_cpu
+  memory                   = var.ecs_memory
+  execution_role_arn       = aws_iam_role.ecs_task_execution.arn
+  task_role_arn            = aws_iam_role.ecs_task_image_pipeline.arn
+
+  container_definitions = jsonencode([
+    {
+      name       = "image-pipeline"
+      image      = "${aws_ecr_repository.scraper.repository_url}:${var.image_tag}"
+      essential  = true
+      entryPoint = ["/bin/sh", "-c"]
+      command    = ["python run_image_pipeline.py --athena-database ${var.glue_database_name} --athena-workgroup ${var.athena_workgroup_name} --athena-output-loc s3://${var.price_comparison_bucket}/${var.athena_results_prefix} --storage-mode s3"]
+      environment = [
+        { name = "S3_BUCKET", value = var.price_comparison_bucket }
+      ]
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          awslogs-group         = aws_cloudwatch_log_group.ecs_scraper.name
+          awslogs-region        = var.region
+          awslogs-stream-prefix = "image-pipeline"
+        }
+      }
+    }
+  ])
+}
+
+# -------------------------------------------------------
+# Image quality checker task — scripts/image_quality_checker.py
+# -------------------------------------------------------
+
+resource "aws_ecs_task_definition" "image_quality_checker" {
+  family                   = "${var.ecs_name}-image-quality-checker"
+  requires_compatibilities = ["FARGATE"]
+  network_mode             = "awsvpc"
+  cpu                      = var.ecs_cpu
+  memory                   = var.ecs_memory
+  execution_role_arn       = aws_iam_role.ecs_task_execution.arn
+  task_role_arn            = aws_iam_role.ecs_task_image_pipeline.arn
+
+  container_definitions = jsonencode([
+    {
+      name       = "image-quality-checker"
+      image      = "${aws_ecr_repository.scraper.repository_url}:${var.image_tag}"
+      essential  = true
+      entryPoint = ["/bin/sh", "-c"]
+      # dt is passed as a command override at runtime via ECS RunTask
+      command    = ["python scripts/image_quality_checker.py --athena-database ${var.glue_database_name} --athena-workgroup ${var.athena_workgroup_name} --athena-output-loc s3://${var.price_comparison_bucket}/${var.athena_results_prefix}"]
+      environment = [
+        { name = "S3_BUCKET", value = var.price_comparison_bucket }
+      ]
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          awslogs-group         = aws_cloudwatch_log_group.ecs_scraper.name
+          awslogs-region        = var.region
+          awslogs-stream-prefix = "image-quality-checker"
+        }
+      }
+    }
+  ])
+}

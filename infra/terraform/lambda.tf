@@ -69,5 +69,61 @@ resource "aws_s3_bucket_notification" "bronze_notifications" {
     filter_suffix = "_SUCCESS"
   }
 
-  depends_on = [aws_lambda_permission.allow_s3_invoke_verifier]
+  lambda_function {
+    lambda_function_arn = aws_lambda_function.image_pipeline_trigger.arn
+    events              = ["s3:ObjectCreated:*"]
+
+    # Trigger quality checker when image pipeline writes _SUCCESS marker.
+    filter_prefix = "bronze/images/download_status/meta/"
+    filter_suffix = "_SUCCESS"
+  }
+
+  depends_on = [
+    aws_lambda_permission.allow_s3_invoke_verifier,
+    aws_lambda_permission.allow_s3_invoke_image_trigger,
+  ]
+}
+
+
+# -------------------------------------------------------
+# image_pipeline_trigger Lambda
+# -------------------------------------------------------
+
+data "archive_file" "image_pipeline_trigger_zip" {
+  type        = "zip"
+  source_dir  = "${path.root}/../../lambda/image_pipeline_trigger"
+  output_path = "${path.module}/.terraform/tmp/image_pipeline_trigger.zip"
+}
+
+resource "aws_lambda_function" "image_pipeline_trigger" {
+  function_name = "image_pipeline_trigger"
+
+  role    = aws_iam_role.image_pipeline_trigger_role.arn
+  handler = "handler.handler"
+  runtime = "python3.11"
+  timeout = 30
+
+  filename         = data.archive_file.image_pipeline_trigger_zip.output_path
+  source_code_hash = data.archive_file.image_pipeline_trigger_zip.output_base64sha256
+
+  environment {
+    variables = {
+      ECS_CLUSTER           = aws_ecs_cluster.scraper.name
+      ECS_TASK_DEFINITION   = aws_ecs_task_definition.image_quality_checker.family
+      ECS_CONTAINER_NAME    = "image-quality-checker"
+      ECS_SUBNET_IDS        = join(",", data.aws_subnets.default.ids)
+      ECS_SECURITY_GROUP_ID = aws_security_group.ecs_task.id
+      ATHENA_DATABASE       = var.glue_database_name
+      ATHENA_WORKGROUP      = var.athena_workgroup_name
+      ATHENA_OUTPUT_LOCATION = "s3://${var.price_comparison_bucket}/${var.athena_results_prefix}"
+    }
+  }
+}
+
+resource "aws_lambda_permission" "allow_s3_invoke_image_trigger" {
+  statement_id  = "AllowS3InvokeImageTrigger"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.image_pipeline_trigger.function_name
+  principal     = "s3.amazonaws.com"
+  source_arn    = aws_s3_bucket.price_comparison_bucket.arn
 }
