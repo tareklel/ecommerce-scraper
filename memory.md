@@ -74,6 +74,16 @@
 - Added `.claude/settings.json` with project permission allowlist for terraform/poetry commands.
 - Dry run order: `make tf-apply` → `make run-image-pipeline-local IMAGE_PIPELINE_LIMIT=5` → `make ecr-push && make ecs-run-image-pipeline IMAGE_PIPELINE_LIMIT=10`.
 
+## 2026-05-18 - `8d4b38a` - Fix image pipeline: per-run paths, Glue API, IAM, ECS command bugs
+- Renamed S3 paths and Glue tables: `download_status` → `download_log`, `raw` → `validated`, `raw_image` → `image_validated`, `image_download_status` → `image_download_log`.
+- Added `run_id` subdirectory to data and marker S3 paths (`dt={dt}/run={run_id}/`) so multiple runs on the same day no longer overwrite each other.
+- Replaced Athena DDL partition registration (`ALTER TABLE ... ADD PARTITION`) with direct `glue.create_partition()` in both scripts — eliminates silent failures from missing `--athena-output-loc`.
+- Added `--run-id` arg to `image_quality_checker.py`; Lambda now extracts both `dt` and `run_id` from `_SUCCESS` key and passes them to the quality checker.
+- Fixed Lambda command override: was passing `["python", "script.py", ...]` list to a task with `entryPoint=["/bin/sh", "-c"]`, causing only `python` to run with no script. Now passes a single shell string.
+- Fixed `ecs-run-image-pipeline` makefile override: was wrapping command in redundant `/bin/sh -c` (task definition already has entryPoint), causing container to exit 0 with no output.
+- Added `s3:GetBucketLocation` to image pipeline IAM role (Athena needs it to verify output bucket) and `price_comparison_dbt/*` read grant (Athena scans dbt model partitions for `stg_product_image_download_status`).
+- Added `run-quality-checker-local DT=... RUN_ID=...` makefile target for local testing.
+
 ## 2026-05-11 - Add Secrets Manager runtime env wiring and dynamic status counts
 - Added Terraform wiring for one JSON Secrets Manager secret (`ecommerce-scraper/env`) and ECS task secret injection for allowlisted runtime env keys.
 - Added Make helpers to fetch remote secret keys for local crawler runs, list secret keys without values, and update a single remote secret key without storing values in `.env` or Terraform state.
