@@ -16,7 +16,7 @@ from ecommercecrawl.image_downloader import download_jobs, generate_run_id
 logger = logging.getLogger(__name__)
 
 S3_BUCKET = os.environ.get("S3_BUCKET", "price-comparison-bucket-eu-central-1")
-STATUS_PARTITION_PREFIX = "bronze/images/download_status"
+STATUS_PARTITION_PREFIX = "bronze/images/download_log"
 MARKER_SUCCESS = "_SUCCESS"
 MARKER_FAILED = "_FAILED"
 
@@ -109,8 +109,8 @@ def _build_status_rows(results, dt, run_id):
     return rows
 
 
-def _write_status_partition(s3, bucket, dt, status_rows):
-    key = f"{STATUS_PARTITION_PREFIX}/dt={dt}/data.jsonl.gz"
+def _write_status_partition(s3, bucket, dt, run_id, status_rows):
+    key = f"{STATUS_PARTITION_PREFIX}/dt={dt}/run={run_id}/data.jsonl.gz"
     buf = io.BytesIO()
     with gzip.GzipFile(fileobj=buf, mode="wb") as gz:
         for row in status_rows:
@@ -121,16 +121,32 @@ def _write_status_partition(s3, bucket, dt, status_rows):
     return key
 
 
-def _register_glue_partition(athena, database, table, dt, bucket, workgroup, output_location, timeout_seconds):
+def _register_glue_partition(glue, database, table, dt, bucket):
     location = f"s3://{bucket}/{STATUS_PARTITION_PREFIX}/dt={dt}/"
-    sql = f"ALTER TABLE {table} ADD IF NOT EXISTS PARTITION (dt='{dt}') LOCATION '{location}'"
-    execution_id = _start_athena_query(athena, database, sql, output_location, workgroup)
-    _wait_athena(athena, execution_id, timeout_seconds=timeout_seconds)
-    logger.info("Registered Glue partition dt=%s for table %s", dt, table)
+    try:
+        glue.create_partition(
+            DatabaseName=database,
+            TableName=table,
+            PartitionInput={
+                "Values": [dt],
+                "StorageDescriptor": {
+                    "Location": location,
+                    "InputFormat": "org.apache.hadoop.mapred.TextInputFormat",
+                    "OutputFormat": "org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat",
+                    "SerdeInfo": {
+                        "SerializationLibrary": "org.openx.data.jsonserde.JsonSerDe",
+                        "Parameters": {"serialization.format": "1"},
+                    },
+                },
+            },
+        )
+        logger.info("Registered Glue partition dt=%s for table %s", dt, table)
+    except glue.exceptions.AlreadyExistsException:
+        logger.info("Glue partition dt=%s already exists for table %s", dt, table)
 
 
-def _write_marker(s3, bucket, dt, marker):
-    key = f"{STATUS_PARTITION_PREFIX}/meta/{dt}/{marker}"
+def _write_marker(s3, bucket, dt, run_id, marker):
+    key = f"{STATUS_PARTITION_PREFIX}/meta/{dt}/{run_id}/{marker}"
     s3.put_object(Bucket=bucket, Key=key, Body=b"")
     logger.info("Wrote marker s3://%s/%s", bucket, key)
 
@@ -145,8 +161,8 @@ def main():
     parser.add_argument("--athena-database", required=True, help="Glue/Athena database name.")
     parser.add_argument("--athena-table", default="stg_product_image_download_status",
                         help="Image catalog table or view name.")
-    parser.add_argument("--athena-status-table", default="image_download_status",
-                        help="Download status table name (used for pending query + partition registration).")
+    parser.add_argument("--athena-status-table", default="image_download_log",
+                        help="Download log table name (used for pending query + partition registration).")
     parser.add_argument("--athena-output-loc", default=None,
                         help="s3://... prefix for Athena query result CSVs.")
     parser.add_argument("--athena-workgroup", default="primary", help="Athena workgroup.")
@@ -176,6 +192,7 @@ def main():
 
     athena = boto3.client("athena")
     s3 = boto3.client("s3")
+    glue = boto3.client("glue")
 
     logger.info("Starting image pipeline run_id=%s dt=%s bucket=%s", run_id, dt, bucket)
 
@@ -228,27 +245,15 @@ def main():
 
     # 4. Write status partition to S3
     status_rows = _build_status_rows(results, dt, run_id)
-    _write_status_partition(s3, bucket, dt, status_rows)
+    _write_status_partition(s3, bucket, dt, run_id, status_rows)
 
     # 5. Register Glue partition
-    try:
-        _register_glue_partition(
-            athena=athena,
-            database=args.athena_database,
-            table=args.athena_status_table,
-            dt=dt,
-            bucket=bucket,
-            workgroup=args.athena_workgroup,
-            output_location=args.athena_output_loc,
-            timeout_seconds=args.athena_timeout,
-        )
-    except Exception as e:
-        logger.warning("Glue partition registration failed (non-fatal): %s", e)
+    _register_glue_partition(glue, args.athena_database, args.athena_status_table, dt, bucket)
 
     # 6. Write marker
     all_ok = counts.get("error", 0) == 0
     marker = MARKER_SUCCESS if all_ok else MARKER_FAILED
-    _write_marker(s3, bucket, dt, marker)
+    _write_marker(s3, bucket, dt, run_id, marker)
 
     summary = ", ".join(f"{k}={v}" for k, v in sorted(counts.items()))
     print(f"run_id={run_id} dt={dt} results={summary} marker={marker}")

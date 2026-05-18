@@ -15,33 +15,31 @@ ECS_TASK_DEFINITION  = os.environ["ECS_TASK_DEFINITION"]
 ECS_CONTAINER_NAME   = os.environ.get("ECS_CONTAINER_NAME", "image-quality-checker")
 ECS_SUBNET_IDS       = os.environ["ECS_SUBNET_IDS"].split(",")
 ECS_SECURITY_GROUP   = os.environ["ECS_SECURITY_GROUP_ID"]
-ATHENA_DATABASE      = os.environ["ATHENA_DATABASE"]
-ATHENA_WORKGROUP     = os.environ.get("ATHENA_WORKGROUP", "primary")
-ATHENA_OUTPUT_LOC    = os.environ["ATHENA_OUTPUT_LOCATION"]
+GLUE_DATABASE        = os.environ["GLUE_DATABASE"]
 
-# Expected key pattern: bronze/images/download_status/meta/{dt}/_SUCCESS
-_META_PREFIX = "bronze/images/download_status/meta/"
+# Expected key pattern: bronze/images/download_log/meta/{dt}/{run_id}/_SUCCESS
+_META_PREFIX = "bronze/images/download_log/meta/"
 
 
-def _extract_dt(key: str) -> str:
+def _extract_dt_run_id(key: str) -> tuple:
     if not key.startswith(_META_PREFIX):
         raise ValueError(f"Unexpected key: {key}")
-    # key = bronze/images/download_status/meta/2026-05-15/_SUCCESS
-    remainder = key[len(_META_PREFIX):]       # "2026-05-15/_SUCCESS"
-    dt = remainder.split("/")[0]
-    if not dt:
-        raise ValueError(f"Could not extract dt from key: {key}")
-    return dt
+    # key = bronze/images/download_log/meta/2026-05-15/2026-05-15T07-53-07-848/_SUCCESS
+    remainder = key[len(_META_PREFIX):]       # "2026-05-15/2026-05-15T07-53-07-848/_SUCCESS"
+    parts = remainder.split("/")
+    if len(parts) < 3:
+        raise ValueError(f"Could not extract dt/run_id from key: {key}")
+    return parts[0], parts[1]  # dt, run_id
 
 
-def _trigger_quality_checker(dt: str) -> dict:
-    command = [
-        "python", "scripts/image_quality_checker.py",
-        "--dt", dt,
-        "--athena-database", ATHENA_DATABASE,
-        "--athena-workgroup", ATHENA_WORKGROUP,
-        "--athena-output-loc", ATHENA_OUTPUT_LOC,
-    ]
+def _trigger_quality_checker(dt: str, run_id: str) -> dict:
+    cmd = (
+        f"python scripts/image_quality_checker.py"
+        f" --dt {dt}"
+        f" --run-id {run_id}"
+        f" --glue-database {GLUE_DATABASE}"
+    )
+    command = [cmd]
     response = ecs.run_task(
         cluster=ECS_CLUSTER,
         taskDefinition=ECS_TASK_DEFINITION,
@@ -81,13 +79,13 @@ def handler(event, context):
             continue
 
         try:
-            dt = _extract_dt(key)
+            dt, run_id = _extract_dt_run_id(key)
         except ValueError as e:
-            logger.error("Could not extract dt from key %s: %s", key, e)
+            logger.error("Could not extract dt/run_id from key %s: %s", key, e)
             results.append({"status": "error", "key": key, "message": str(e)})
             continue
 
-        result = _trigger_quality_checker(dt)
-        results.append({"status": "ok", "dt": dt, **result})
+        result = _trigger_quality_checker(dt, run_id)
+        results.append({"status": "ok", "dt": dt, "run_id": run_id, **result})
 
     return {"status": "ok", "results": results}

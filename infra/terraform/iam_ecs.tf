@@ -93,6 +93,11 @@ resource "aws_iam_role_policy" "ecs_task_image_pipeline_s3" {
       },
       {
         Effect   = "Allow",
+        Action   = ["s3:GetObject"],
+        Resource = "${aws_s3_bucket.price_comparison_bucket.arn}/price_comparison_dbt/*"
+      },
+      {
+        Effect   = "Allow",
         Action   = ["s3:ListBucket"],
         Resource = aws_s3_bucket.price_comparison_bucket.arn
       }
@@ -132,7 +137,7 @@ resource "aws_iam_role_policy" "ecs_task_image_pipeline_athena" {
       },
       {
         Effect   = "Allow",
-        Action   = ["s3:GetObject", "s3:PutObject", "s3:ListBucket"],
+        Action   = ["s3:GetObject", "s3:PutObject", "s3:ListBucket", "s3:GetBucketLocation"],
         Resource = [
           "${aws_s3_bucket.price_comparison_bucket.arn}/${var.athena_results_prefix}*",
           aws_s3_bucket.price_comparison_bucket.arn

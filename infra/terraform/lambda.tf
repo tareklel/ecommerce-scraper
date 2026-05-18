@@ -74,7 +74,7 @@ resource "aws_s3_bucket_notification" "bronze_notifications" {
     events              = ["s3:ObjectCreated:*"]
 
     # Trigger quality checker when image pipeline writes _SUCCESS marker.
-    filter_prefix = "bronze/images/download_status/meta/"
+    filter_prefix = "bronze/images/download_log/meta/"
     filter_suffix = "_SUCCESS"
   }
 
@@ -113,9 +113,7 @@ resource "aws_lambda_function" "image_pipeline_trigger" {
       ECS_CONTAINER_NAME    = "image-quality-checker"
       ECS_SUBNET_IDS        = join(",", data.aws_subnets.default.ids)
       ECS_SECURITY_GROUP_ID = aws_security_group.ecs_task.id
-      ATHENA_DATABASE       = var.glue_database_name
-      ATHENA_WORKGROUP      = var.athena_workgroup_name
-      ATHENA_OUTPUT_LOCATION = "s3://${var.price_comparison_bucket}/${var.athena_results_prefix}"
+      GLUE_DATABASE         = var.glue_database_name
     }
   }
 }

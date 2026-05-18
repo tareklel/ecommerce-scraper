@@ -279,7 +279,7 @@ ecs-run-image-pipeline:
 		--task-definition $$TASK_DEF \
 		--launch-type FARGATE \
 		--network-configuration "awsvpcConfiguration={subnets=[$$SUBNETS],securityGroups=[$$SG],assignPublicIp=ENABLED}" \
-		--overrides "{\"containerOverrides\":[{\"name\":\"image-pipeline\",\"command\":[\"/bin/sh\",\"-c\",\"$$CMD\"]}]}"
+		--overrides "{\"containerOverrides\":[{\"name\":\"image-pipeline\",\"command\":[\"$$CMD\"]}]}"
 
 # Run image pipeline locally (no Docker, no ECS — fastest for testing).
 # make run-image-pipeline-local
@@ -295,3 +295,15 @@ run-image-pipeline-local:
 		--storage-mode s3 \
 		--log-level $(IMAGE_PIPELINE_LOG_LEVEL) \
 		$(if $(IMAGE_PIPELINE_LIMIT),--limit $(IMAGE_PIPELINE_LIMIT),)
+
+# Run quality checker locally for a given date partition.
+# make run-quality-checker-local DT=2026-05-18
+run-quality-checker-local:
+	$(LOAD_AWS_SECRET_ENV); \
+	AWS_PROFILE=$(AWS_PROFILE) \
+	S3_BUCKET=$(S3_BUCKET) \
+	poetry run python scripts/image_quality_checker.py \
+		--dt $(DT) \
+		--run-id $(RUN_ID) \
+		--glue-database $(IMAGE_PIPELINE_ATHENA_DATABASE) \
+		--log-level $(IMAGE_PIPELINE_LOG_LEVEL)
