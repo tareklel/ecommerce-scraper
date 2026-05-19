@@ -1,5 +1,7 @@
 # Ticket: Production Trigger for `run_image_pipeline.py`
 
+**Status: draft — not reviewed**
+
 ## Goal
 
 Define and implement how `run_image_pipeline.py` is triggered in production —
