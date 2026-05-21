@@ -357,8 +357,8 @@ class TestS3Upload:
 
         # 3. Verify
         app_env = os.environ.get('APP_ENV', 'dev')
-        data_prefix = f"bronze/crawls/{app_env}/{spider.name}/{spider.date}/{spider.run_id}"
-        metadata_prefix = f"bronze/crawls/metadata/{app_env}/{spider.name}/{spider.date}/{spider.run_id}"
+        data_prefix = f"bronze/{app_env}/crawls/{spider.name}/{spider.date}/{spider.run_id}"
+        metadata_prefix = f"bronze/{app_env}/crawls/metadata/{spider.name}/{spider.date}/{spider.run_id}"
 
         data_response = s3_client.list_objects_v2(Bucket=s3_bucket, Prefix=data_prefix)
         metadata_response = s3_client.list_objects_v2(Bucket=s3_bucket, Prefix=metadata_prefix)

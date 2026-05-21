@@ -12,11 +12,11 @@ from datetime import datetime, timezone
 import boto3
 
 from ecommercecrawl.image_downloader import download_jobs, generate_run_id
+from ecommercecrawl import env_config
 
 logger = logging.getLogger(__name__)
 
 S3_BUCKET = os.environ.get("S3_BUCKET", "price-comparison-bucket-eu-central-1")
-STATUS_PARTITION_PREFIX = "bronze/images/download_log"
 MARKER_SUCCESS = "_SUCCESS"
 MARKER_FAILED = "_FAILED"
 
@@ -65,22 +65,23 @@ def _read_athena_csv(s3, result_uri):
     return list(reader)
 
 
-def _query_pending_images(athena, s3, database, table, output_location, workgroup,
-                          status_table, limit, timeout_seconds):
+def _query_pending_images(athena, s3, bronze_database, qualified_catalog_table,
+                          qualified_status_table, output_location, workgroup,
+                          limit, timeout_seconds):
     limit_clause = f"LIMIT {limit}" if limit else ""
     sql = f"""
 SELECT c.site, c.primary_key, c.url
-FROM {table} c
+FROM {qualified_catalog_table} c
 LEFT JOIN (
     SELECT site, primary_key, status,
            ROW_NUMBER() OVER (PARTITION BY site, primary_key ORDER BY dt DESC) AS rn
-    FROM {status_table}
+    FROM {qualified_status_table}
 ) s ON c.site = s.site AND c.primary_key = s.primary_key AND s.rn = 1
 WHERE s.status IS NULL OR s.status = 'error'
 {limit_clause}
 """.strip()
     logger.info("Running Athena query:\n%s", sql)
-    execution_id = _start_athena_query(athena, database, sql, output_location, workgroup)
+    execution_id = _start_athena_query(athena, bronze_database, sql, output_location, workgroup)
     result_uri = _wait_athena(athena, execution_id, timeout_seconds=timeout_seconds)
     rows = _read_athena_csv(s3, result_uri)
     logger.info("Athena returned %d pending images", len(rows))
@@ -109,8 +110,8 @@ def _build_status_rows(results, dt, run_id):
     return rows
 
 
-def _write_status_partition(s3, bucket, dt, run_id, status_rows):
-    key = f"{STATUS_PARTITION_PREFIX}/dt={dt}/run={run_id}/data.jsonl.gz"
+def _write_status_partition(s3, bucket, status_prefix, dt, run_id, status_rows):
+    key = f"{status_prefix}/dt={dt}/run={run_id}/data.jsonl.gz"
     buf = io.BytesIO()
     with gzip.GzipFile(fileobj=buf, mode="wb") as gz:
         for row in status_rows:
@@ -121,8 +122,8 @@ def _write_status_partition(s3, bucket, dt, run_id, status_rows):
     return key
 
 
-def _register_glue_partition(glue, database, table, dt, bucket):
-    location = f"s3://{bucket}/{STATUS_PARTITION_PREFIX}/dt={dt}/"
+def _register_glue_partition(glue, database, table, status_prefix, dt, bucket):
+    location = f"s3://{bucket}/{status_prefix}/dt={dt}/"
     try:
         glue.create_partition(
             DatabaseName=database,
@@ -145,8 +146,8 @@ def _register_glue_partition(glue, database, table, dt, bucket):
         logger.info("Glue partition dt=%s already exists for table %s", dt, table)
 
 
-def _write_marker(s3, bucket, dt, run_id, marker):
-    key = f"{STATUS_PARTITION_PREFIX}/meta/{dt}/{run_id}/{marker}"
+def _write_marker(s3, bucket, status_prefix, dt, run_id, marker):
+    key = f"{status_prefix}/meta/{dt}/{run_id}/{marker}"
     s3.put_object(Bucket=bucket, Key=key, Body=b"")
     logger.info("Wrote marker s3://%s/%s", bucket, key)
 
@@ -157,15 +158,16 @@ def _write_marker(s3, bucket, dt, run_id, marker):
 
 def main():
     parser = argparse.ArgumentParser(description="Image download pipeline — Athena-driven.")
+    parser.add_argument("--app-env", default="dev",
+                        help="Environment to run against: dev or prod. Defaults to dev.")
     parser.add_argument("--run-id", default=None, help="Trace ID for this batch (auto-generated if omitted).")
-    parser.add_argument("--athena-database", required=True, help="Glue/Athena database name.")
-    parser.add_argument("--athena-table", default="stg_product_image_download_status",
-                        help="Image catalog table or view name.")
+    parser.add_argument("--athena-table", default=None,
+                        help="Override image catalog table name (default taken from environments.yaml).")
     parser.add_argument("--athena-status-table", default="image_download_log",
-                        help="Download log table name (used for pending query + partition registration).")
+                        help="Download log table name.")
     parser.add_argument("--athena-output-loc", default=None,
                         help="s3://... prefix for Athena query result CSVs.")
-    parser.add_argument("--athena-workgroup", default="primary", help="Athena workgroup.")
+    parser.add_argument("--athena-workgroup", default="price-comparison", help="Athena workgroup.")
     parser.add_argument("--athena-timeout", type=int, default=120,
                         help="Seconds to wait for each Athena query.")
     parser.add_argument("--storage-mode", choices=["local", "s3", "both"], default="s3",
@@ -186,6 +188,16 @@ def main():
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
 
+    config = env_config.load(args.app_env)
+    dbt_database = config["dbt_database"]
+    bronze_database = config["bronze_database"]
+    bronze_prefix = env_config.bronze_key_prefix(config)
+    status_prefix = f"{bronze_prefix}images/download_log"
+
+    catalog_table = args.athena_table or config["image_catalog_table"]
+    qualified_catalog = f"{dbt_database}.{catalog_table}"
+    qualified_status = f"{bronze_database}.{args.athena_status_table}"
+
     run_id = args.run_id or generate_run_id()
     dt = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     bucket = S3_BUCKET
@@ -194,18 +206,21 @@ def main():
     s3 = boto3.client("s3")
     glue = boto3.client("glue")
 
-    logger.info("Starting image pipeline run_id=%s dt=%s bucket=%s", run_id, dt, bucket)
+    logger.info(
+        "Starting image pipeline app_env=%s run_id=%s dt=%s bucket=%s",
+        args.app_env, run_id, dt, bucket,
+    )
 
     # 1. Query Athena for pending images
     try:
         rows = _query_pending_images(
             athena=athena,
             s3=s3,
-            database=args.athena_database,
-            table=args.athena_table,
+            bronze_database=bronze_database,
+            qualified_catalog_table=qualified_catalog,
+            qualified_status_table=qualified_status,
             output_location=args.athena_output_loc,
             workgroup=args.athena_workgroup,
-            status_table=args.athena_status_table,
             limit=args.limit,
             timeout_seconds=args.athena_timeout,
         )
@@ -245,15 +260,15 @@ def main():
 
     # 4. Write status partition to S3
     status_rows = _build_status_rows(results, dt, run_id)
-    _write_status_partition(s3, bucket, dt, run_id, status_rows)
+    _write_status_partition(s3, bucket, status_prefix, dt, run_id, status_rows)
 
     # 5. Register Glue partition
-    _register_glue_partition(glue, args.athena_database, args.athena_status_table, dt, bucket)
+    _register_glue_partition(glue, bronze_database, args.athena_status_table, status_prefix, dt, bucket)
 
     # 6. Write marker
     all_ok = counts.get("error", 0) == 0
     marker = MARKER_SUCCESS if all_ok else MARKER_FAILED
-    _write_marker(s3, bucket, dt, run_id, marker)
+    _write_marker(s3, bucket, status_prefix, dt, run_id, marker)
 
     summary = ", ".join(f"{k}={v}" for k, v in sorted(counts.items()))
     print(f"run_id={run_id} dt={dt} results={summary} marker={marker}")

@@ -252,11 +252,14 @@ class PostCrawlPipeline:
         s3_client = boto3.client('s3')
         s3_prefix = f"{self.crawler_name}/{self.date}/{self.run_id}"
 
+        app_env = os.environ.get('APP_ENV', 'dev')
+        if app_env not in ('dev', 'prod'):
+            raise ValueError(f"APP_ENV must be 'dev' or 'prod', got '{app_env}'")
+
         try:
             for root, _, files in os.walk(self.output_dir):
                 for filename in files:
                     local_path = os.path.join(root, filename)
-                    app_env = os.environ.get('APP_ENV', 'dev')
                     rel_path = os.path.relpath(local_path, self.output_dir)
                     rel_parts = rel_path.split(os.sep)
 
@@ -265,9 +268,9 @@ class PostCrawlPipeline:
                         if not rel_path:
                             spider.logger.warning(f"Skipping unexpected metadata path: {local_path}")
                             continue
-                        s3_key = os.path.join('bronze', 'crawls', 'metadata', app_env, s3_prefix, rel_path)
+                        s3_key = os.path.join('bronze', app_env, 'crawls', 'metadata', s3_prefix, rel_path)
                     else:
-                        s3_key = os.path.join('bronze', 'crawls', app_env, s3_prefix, rel_path)
+                        s3_key = os.path.join('bronze', app_env, 'crawls', s3_prefix, rel_path)
 
                     spider.logger.info(f"Uploading {local_path} to s3://{s3_bucket}/{s3_key}")
                     s3_client.upload_file(local_path, s3_bucket, s3_key)

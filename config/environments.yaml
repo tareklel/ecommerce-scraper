@@ -1,0 +1,21 @@
+dev:
+  dbt_database: price_comparison_dev
+  bronze_database: price_comparison_dev
+  bronze_s3_prefix: s3://price-comparison-bucket-eu-central-1/bronze/dev/
+  dbt_s3_prefix: s3://price-comparison-bucket-eu-central-1/dbt/dev/
+  recrawl_seed_prefix: s3://price-comparison-bucket-eu-central-1/recrawl-seeds/dev/
+  image_catalog_table: silver_product_image_download_status
+  serving_table: gold_product_serving_latest
+  recrawl_level_shoes_table: gold_pdp_recrawl_level_shoes_daily
+  recrawl_ounass_table: gold_pdp_recrawl_ounass_daily
+
+prod:
+  dbt_database: price_comparison_prod
+  bronze_database: price_comparison_prod
+  bronze_s3_prefix: s3://price-comparison-bucket-eu-central-1/bronze/prod/
+  dbt_s3_prefix: s3://price-comparison-bucket-eu-central-1/dbt/prod/
+  recrawl_seed_prefix: s3://price-comparison-bucket-eu-central-1/recrawl-seeds/prod/
+  image_catalog_table: silver_product_image_download_status
+  serving_table: gold_product_serving_latest
+  recrawl_level_shoes_table: gold_pdp_recrawl_level_shoes_daily
+  recrawl_ounass_table: gold_pdp_recrawl_ounass_daily

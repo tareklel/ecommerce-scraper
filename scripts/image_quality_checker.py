@@ -3,10 +3,10 @@ image_quality_checker.py
 
 Triggered by _SUCCESS marker written by run_image_pipeline.py.
 Reads the download status partition for a given dt, validates each ok image
-from S3, and appends passing rows to the raw_image Athena table.
+from S3, and appends passing rows to the image_validated Athena table.
 
 Usage:
-  python scripts/image_quality_checker.py --dt 2026-05-15 --athena-database price_comparison
+  python scripts/image_quality_checker.py --dt 2026-05-15 --run-id <run_id> --app-env dev
 """
 import argparse
 import gzip
@@ -16,16 +16,15 @@ import json
 import logging
 import os
 from collections import Counter
-from datetime import datetime, timezone
 
 import boto3
 from PIL import Image, UnidentifiedImageError
 
+from ecommercecrawl import env_config
+
 logger = logging.getLogger(__name__)
 
 S3_BUCKET = os.environ.get("S3_BUCKET", "price-comparison-bucket-eu-central-1")
-STATUS_PREFIX = "bronze/images/download_log"
-VALIDATED_PREFIX = "bronze/images/validated"
 MIN_DIMENSION = 10  # reject images smaller than 10px in either dimension
 
 
@@ -33,8 +32,8 @@ MIN_DIMENSION = 10  # reject images smaller than 10px in either dimension
 # S3 helpers
 # ---------------------------------------------------------------------------
 
-def _read_status_partition(s3, bucket, dt, run_id):
-    key = f"{STATUS_PREFIX}/dt={dt}/run={run_id}/data.jsonl.gz"
+def _read_status_partition(s3, bucket, status_prefix, dt, run_id):
+    key = f"{status_prefix}/dt={dt}/run={run_id}/data.jsonl.gz"
     logger.info("Reading status partition s3://%s/%s", bucket, key)
     body = s3.get_object(Bucket=bucket, Key=key)["Body"].read()
     rows = []
@@ -50,8 +49,8 @@ def _fetch_blob(s3, bucket, s3_blob_key):
     return s3.get_object(Bucket=bucket, Key=s3_blob_key)["Body"].read()
 
 
-def _write_validated_partition(s3, bucket, dt, run_id, rows):
-    key = f"{VALIDATED_PREFIX}/dt={dt}/run={run_id}/data.jsonl.gz"
+def _write_validated_partition(s3, bucket, validated_prefix, dt, run_id, rows):
+    key = f"{validated_prefix}/dt={dt}/run={run_id}/data.jsonl.gz"
     buf = io.BytesIO()
     with gzip.GzipFile(fileobj=buf, mode="wb") as gz:
         for row in rows:
@@ -65,8 +64,8 @@ def _write_validated_partition(s3, bucket, dt, run_id, rows):
 # Glue helpers
 # ---------------------------------------------------------------------------
 
-def _register_glue_partition(glue, database, table, dt, bucket):
-    location = f"s3://{bucket}/{VALIDATED_PREFIX}/dt={dt}/"
+def _register_glue_partition(glue, database, table, validated_prefix, dt, bucket):
+    location = f"s3://{bucket}/{validated_prefix}/dt={dt}/"
     try:
         glue.create_partition(
             DatabaseName=database,
@@ -124,8 +123,10 @@ def main():
     parser = argparse.ArgumentParser(description="Validate downloaded images and write image_validated partition.")
     parser.add_argument("--dt", required=True, help="Partition date (YYYY-MM-DD) to process.")
     parser.add_argument("--run-id", required=True, help="Run ID from the pipeline run to validate.")
-    parser.add_argument("--glue-database", required=True, help="Glue database name.")
-    parser.add_argument("--glue-validated-table", default="image_validated", help="Validated image Glue table name.")
+    parser.add_argument("--app-env", default="dev",
+                        help="Environment to run against: dev or prod. Defaults to dev.")
+    parser.add_argument("--glue-validated-table", default="image_validated",
+                        help="Validated image Glue table name.")
     parser.add_argument("--log-level", default="INFO")
     args = parser.parse_args()
 
@@ -134,14 +135,20 @@ def main():
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
 
+    config = env_config.load(args.app_env)
+    bronze_database = config["bronze_database"]
+    bronze_prefix = env_config.bronze_key_prefix(config)
+    status_prefix = f"{bronze_prefix}images/download_log"
+    validated_prefix = f"{bronze_prefix}images/validated"
+
     bucket = S3_BUCKET
     s3 = boto3.client("s3")
     glue = boto3.client("glue")
 
-    logger.info("Starting quality check for dt=%s", args.dt)
+    logger.info("Starting quality check app_env=%s dt=%s", args.app_env, args.dt)
 
     # 1. Read status partition
-    status_rows = _read_status_partition(s3, bucket, args.dt, args.run_id)
+    status_rows = _read_status_partition(s3, bucket, status_prefix, args.dt, args.run_id)
     ok_rows = [r for r in status_rows if r.get("status") == "ok" and r.get("s3_blob_key")]
     logger.info("Status partition: %d total rows, %d ok to validate", len(status_rows), len(ok_rows))
 
@@ -191,10 +198,10 @@ def main():
         return
 
     # 3. Write validated partition
-    _write_validated_partition(s3, bucket, args.dt, args.run_id, raw_rows)
+    _write_validated_partition(s3, bucket, validated_prefix, args.dt, args.run_id, raw_rows)
 
     # 4. Register Glue partition
-    _register_glue_partition(glue, args.glue_database, args.glue_validated_table, args.dt, bucket)
+    _register_glue_partition(glue, bronze_database, args.glue_validated_table, validated_prefix, args.dt, bucket)
 
     summary = ", ".join(f"{k}={v}" for k, v in sorted(counts.items()))
     print(f"dt={args.dt} {summary} validated_rows={len(raw_rows)}")

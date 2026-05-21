@@ -259,27 +259,18 @@ ecs-run:
 ecs-run-test: ECS_RUN_COMMAND = $(ECS_TEST_COMMAND)
 ecs-run-test: ecs-run
 
-# Image pipeline vars
-IMAGE_PIPELINE_ATHENA_DATABASE ?= price_comparison
+# Image pipeline vars — default to dev; prod requires an explicit override or use the -prod targets.
+IMAGE_PIPELINE_APP_ENV ?= dev
 IMAGE_PIPELINE_LIMIT ?=
 IMAGE_PIPELINE_LOG_LEVEL ?= INFO
 
-# Run image pipeline via ECS.
-# make ecs-run-image-pipeline
-# make ecs-run-image-pipeline IMAGE_PIPELINE_LIMIT=10
-ecs-run-image-pipeline:
-	@CLUSTER=$$(cd $(TF_DIR) && AWS_PROFILE=$(AWS_PROFILE) terraform output -raw ecs_cluster_name); \
-	TASK_DEF=$$(cd $(TF_DIR) && AWS_PROFILE=$(AWS_PROFILE) terraform output -raw ecs_image_pipeline_task_definition_arn); \
-	SUBNETS=$$(cd $(TF_DIR) && AWS_PROFILE=$(AWS_PROFILE) terraform output -json default_subnet_ids | python3 -c 'import json,sys; print(",".join(json.load(sys.stdin)))'); \
-	SG=$$(cd $(TF_DIR) && AWS_PROFILE=$(AWS_PROFILE) terraform output -raw ecs_task_security_group_id); \
-	CMD="python run_image_pipeline.py --athena-database $(IMAGE_PIPELINE_ATHENA_DATABASE) --athena-workgroup price-comparison --athena-output-loc s3://$(S3_BUCKET)/athena-results/ --storage-mode s3 --log-level $(IMAGE_PIPELINE_LOG_LEVEL)$(if $(IMAGE_PIPELINE_LIMIT), --limit $(IMAGE_PIPELINE_LIMIT),)"; \
-	AWS_PROFILE=$(AWS_PROFILE) aws ecs run-task \
-		--region $(AWS_REGION) \
-		--cluster $$CLUSTER \
-		--task-definition $$TASK_DEF \
-		--launch-type FARGATE \
-		--network-configuration "awsvpcConfiguration={subnets=[$$SUBNETS],securityGroups=[$$SG],assignPublicIp=ENABLED}" \
-		--overrides "{\"containerOverrides\":[{\"name\":\"image-pipeline\",\"command\":[\"$$CMD\"]}]}"
+_IMAGE_PIPELINE_CMD = python run_image_pipeline.py \
+	--app-env $(IMAGE_PIPELINE_APP_ENV) \
+	--athena-workgroup price-comparison \
+	--athena-output-loc s3://$(S3_BUCKET)/athena-results/ \
+	--storage-mode s3 \
+	--log-level $(IMAGE_PIPELINE_LOG_LEVEL) \
+	$(if $(IMAGE_PIPELINE_LIMIT),--limit $(IMAGE_PIPELINE_LIMIT),)
 
 # Run image pipeline locally (no Docker, no ECS — fastest for testing).
 # make run-image-pipeline-local
@@ -288,16 +279,30 @@ run-image-pipeline-local:
 	$(LOAD_AWS_SECRET_ENV); \
 	AWS_PROFILE=$(AWS_PROFILE) \
 	S3_BUCKET=$(S3_BUCKET) \
-	poetry run python run_image_pipeline.py \
-		--athena-database $(IMAGE_PIPELINE_ATHENA_DATABASE) \
-		--athena-workgroup price-comparison \
-		--athena-output-loc s3://$(S3_BUCKET)/athena-results/ \
-		--storage-mode s3 \
-		--log-level $(IMAGE_PIPELINE_LOG_LEVEL) \
-		$(if $(IMAGE_PIPELINE_LIMIT),--limit $(IMAGE_PIPELINE_LIMIT),)
+	poetry run $(_IMAGE_PIPELINE_CMD)
+
+_ecs-run-image-pipeline:
+	@CLUSTER=$$(cd $(TF_DIR) && AWS_PROFILE=$(AWS_PROFILE) terraform output -raw ecs_cluster_name); \
+	TASK_DEF=$$(cd $(TF_DIR) && AWS_PROFILE=$(AWS_PROFILE) terraform output -raw ecs_image_pipeline_task_definition_arn); \
+	SUBNETS=$$(cd $(TF_DIR) && AWS_PROFILE=$(AWS_PROFILE) terraform output -json default_subnet_ids | python3 -c 'import json,sys; print(",".join(json.load(sys.stdin)))'); \
+	SG=$$(cd $(TF_DIR) && AWS_PROFILE=$(AWS_PROFILE) terraform output -raw ecs_task_security_group_id); \
+	CMD="$(_IMAGE_PIPELINE_CMD)"; \
+	AWS_PROFILE=$(AWS_PROFILE) aws ecs run-task \
+		--region $(AWS_REGION) \
+		--cluster $$CLUSTER \
+		--task-definition $$TASK_DEF \
+		--launch-type FARGATE \
+		--network-configuration "awsvpcConfiguration={subnets=[$$SUBNETS],securityGroups=[$$SG],assignPublicIp=ENABLED}" \
+		--overrides "{\"containerOverrides\":[{\"name\":\"image-pipeline\",\"command\":[\"$$CMD\"]}]}"
+
+ecs-run-image-pipeline-dev: IMAGE_PIPELINE_APP_ENV = dev
+ecs-run-image-pipeline-dev: _ecs-run-image-pipeline
+
+ecs-run-image-pipeline-prod: IMAGE_PIPELINE_APP_ENV = prod
+ecs-run-image-pipeline-prod: _ecs-run-image-pipeline
 
 # Run quality checker locally for a given date partition.
-# make run-quality-checker-local DT=2026-05-18
+# make run-quality-checker-local DT=2026-05-21 RUN_ID=<run_id>
 run-quality-checker-local:
 	$(LOAD_AWS_SECRET_ENV); \
 	AWS_PROFILE=$(AWS_PROFILE) \
@@ -305,5 +310,5 @@ run-quality-checker-local:
 	poetry run python scripts/image_quality_checker.py \
 		--dt $(DT) \
 		--run-id $(RUN_ID) \
-		--glue-database $(IMAGE_PIPELINE_ATHENA_DATABASE) \
+		--app-env $(IMAGE_PIPELINE_APP_ENV) \
 		--log-level $(IMAGE_PIPELINE_LOG_LEVEL)
