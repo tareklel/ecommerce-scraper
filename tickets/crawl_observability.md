@@ -14,10 +14,10 @@ without opening individual S3 directories.
 ## Current S3 Layout
 
 ```
-bronze/crawls/{env}/{site}/{dt}/{run_id}/
+bronze/{env}/crawls/{site}/{dt}/{run_id}/
   {site}.jsonl.gz                        ← crawl data — Athena reads this today
 
-bronze/crawls/metadata/{env}/{site}/{dt}/{run_id}/
+bronze/{env}/crawls/metadata/{site}/{dt}/{run_id}/
   manifest.json
   quality_report.json
   _SUCCESS  |  _FAILED  |  _FAIL_QUALITY  ← markers block Athena from reading this dir
@@ -31,18 +31,18 @@ pointed at `metadata/` because it would try to parse `_SUCCESS` as JSON.
 ## Proposed S3 Layout
 
 ```
-bronze/crawls/{env}/{site}/{dt}/{run_id}/
+bronze/{env}/crawls/{site}/{dt}/{run_id}/
   {site}.jsonl.gz                        ← unchanged
 
-bronze/crawls/metadata/{env}/{site}/{dt}/{run_id}/
+bronze/{env}/crawls/metadata/{site}/{dt}/{run_id}/
   manifest.json                          ← Athena-readable once markers removed
   quality_report.json
 
-bronze/crawls/markers/{env}/{site}/{dt}/{run_id}/
+bronze/{env}/crawls/markers/{site}/{dt}/{run_id}/
   _SUCCESS  |  _FAILED  |  _FAIL_QUALITY ← forked to own dir
 ```
 
-Markers move to `bronze/crawls/markers/`. The `metadata/` directory becomes
+Markers move to `bronze/{env}/crawls/markers/`. The `metadata/` directory becomes
 Athena-readable with no other changes to the crawl writer.
 
 ---
@@ -64,12 +64,12 @@ that only exist in one type (e.g. `json_extract_scalar(raw_json, '$.run_id') IS 
 Lambda writes each file to its own top-level dir:
 
 ```
-bronze/crawls/manifests/{env}/{site}/{dt}/{run_id}/data.json
-bronze/crawls/quality_reports/{env}/{site}/{dt}/{run_id}/data.json
+bronze/{env}/crawls/manifests/{site}/{dt}/{run_id}/data.json
+bronze/{env}/crawls/quality_reports/{site}/{dt}/{run_id}/data.json
 ```
 
-`crawl_manifest_raw` points at `bronze/crawls/manifests/`. Clean, one schema per table.
-Future `crawl_quality_raw` table points at `bronze/crawls/quality_reports/`.
+`crawl_manifest_raw` points at `bronze/{env}/crawls/manifests/`. Clean, one schema per table.
+Future `crawl_quality_raw` table points at `bronze/{env}/crawls/quality_reports/`.
 
 **Pros:** Clean separation. Each table has one schema.  
 **Cons:** Small Lambda change — write to new paths in addition to (or instead of) `metadata/`.
@@ -121,7 +121,7 @@ ROW FORMAT SERDE 'org.openx.data.jsonserde.JsonSerDe'
 WITH SERDEPROPERTIES ('serialization.format' = '1')
 STORED AS INPUTFORMAT 'org.apache.hadoop.mapred.TextInputFormat'
 OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'
-LOCATION 's3://price-comparison-bucket-eu-central-1/bronze/crawls/manifests/'
+LOCATION 's3://price-comparison-bucket-eu-central-1/bronze/{env}/crawls/manifests/'
 TBLPROPERTIES ('classification' = 'json');
 ```
 
@@ -147,11 +147,11 @@ from {{ source('bronze', 'crawl_manifest_raw') }}
 ## Lambda Changes (`lambda/bronze_manifest_verifier/handler.py`)
 
 1. **Write markers to new path:**
-   `bronze/crawls/markers/{env}/{site}/{dt}/{run_id}/_SUCCESS`
-   instead of `bronze/crawls/metadata/{env}/{site}/{dt}/{run_id}/_SUCCESS`
+   `bronze/{env}/crawls/markers/{site}/{dt}/{run_id}/_SUCCESS`
+   instead of `bronze/{env}/crawls/metadata/{site}/{dt}/{run_id}/_SUCCESS`
 
 2. **Write manifest to dedicated dir:**
-   `bronze/crawls/manifests/{env}/{site}/{dt}/{run_id}/data.json`
+   `bronze/{env}/crawls/manifests/{site}/{dt}/{run_id}/data.json`
    (in addition to or replacing the existing metadata path write)
 
 3. **Append verification block to manifest before writing:**
@@ -162,7 +162,7 @@ from {{ source('bronze', 'crawl_manifest_raw') }}
    (or direct `glue.create_partition()` — use Glue API directly, same as image pipeline fix)
 
 5. **S3 notification filter update** in Terraform:
-   Lambda trigger filter changes from `bronze/crawls/metadata/` to `bronze/crawls/markers/`
+   Lambda trigger filter changes from `bronze/{env}/crawls/metadata/` to `bronze/{env}/crawls/markers/`
 
 ---
 
@@ -171,7 +171,7 @@ from {{ source('bronze', 'crawl_manifest_raw') }}
 | File | Change |
 |------|--------|
 | `lambda/bronze_manifest_verifier/handler.py` | Marker path, manifest path, verification block, Glue partition registration |
-| `infra/terraform/lambda.tf` | S3 notification filter prefix → `bronze/crawls/markers/` |
+| `infra/terraform/lambda.tf` | S3 notification filter prefix → `bronze/{env}/crawls/markers/` |
 | `infra/terraform/iam.tf` | Add `glue:CreatePartition` to Lambda role for `crawl_manifest_raw` table |
 | Glue (scraper-pipeline or manual DDL) | Create `crawl_manifest_raw` external table |
 
