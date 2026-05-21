@@ -93,7 +93,7 @@ resource "aws_ecs_task_definition" "image_pipeline" {
       image      = "${aws_ecr_repository.scraper.repository_url}:${var.image_tag}"
       essential  = true
       entryPoint = ["/bin/sh", "-c"]
-      command    = ["python run_image_pipeline.py --athena-database ${var.glue_database_name} --athena-workgroup ${var.athena_workgroup_name} --athena-output-loc s3://${var.price_comparison_bucket}/${var.athena_results_prefix} --storage-mode s3"]
+      command    = ["python run_image_pipeline.py --app-env ${var.app_env} --athena-workgroup ${var.athena_workgroup_name} --athena-output-loc s3://${var.price_comparison_bucket}/${var.athena_results_prefix} --storage-mode s3"]
       environment = [
         { name = "S3_BUCKET", value = var.price_comparison_bucket }
       ]
@@ -129,7 +129,8 @@ resource "aws_ecs_task_definition" "image_quality_checker" {
       essential  = true
       entryPoint = ["/bin/sh", "-c"]
       # dt and run-id are injected at runtime via Lambda → ECS RunTask command override
-      command    = ["python scripts/image_quality_checker.py --glue-database ${var.glue_database_name} --dt PLACEHOLDER --run-id PLACEHOLDER"]
+      # dt and run-id are injected at runtime via Lambda → ECS RunTask command override
+      command    = ["python scripts/image_quality_checker.py --app-env ${var.app_env} --dt PLACEHOLDER --run-id PLACEHOLDER"]
       environment = [
         { name = "S3_BUCKET", value = var.price_comparison_bucket }
       ]

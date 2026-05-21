@@ -23,13 +23,9 @@ resource "aws_lambda_function" "bronze_manifest_verifier" {
 
   environment {
     variables = {
-      ATHENA_TABLE        = var.athena_table
-      ATHENA_WORKGROUP    = var.athena_workgroup_name
-      ATHENA_DATA_CATALOG = var.athena_data_catalog
-      GLUE_DATABASE       = var.glue_database_name
-      # Backward-compatible alias for older handler logic / local testing scripts.
-      ATHENA_DATABASE        = var.glue_database_name
-      ATHENA_OUTPUT_LOCATION = "s3://${var.price_comparison_bucket}/${var.athena_results_prefix}"
+      APP_ENV          = var.app_env
+      ATHENA_TABLE     = var.athena_table
+      BRONZE_DATABASE  = var.bronze_database_name
     }
   }
 }
@@ -65,7 +61,7 @@ resource "aws_s3_bucket_notification" "bronze_notifications" {
     events              = ["s3:ObjectCreated:*"]
 
     # Trigger when manifest verification writes the success marker.
-    filter_prefix = "bronze/crawls/metadata/"
+    filter_prefix = "bronze/${var.app_env}/crawls/metadata/"
     filter_suffix = "_SUCCESS"
   }
 
@@ -74,7 +70,7 @@ resource "aws_s3_bucket_notification" "bronze_notifications" {
     events              = ["s3:ObjectCreated:*"]
 
     # Trigger quality checker when image pipeline writes _SUCCESS marker.
-    filter_prefix = "bronze/images/download_log/meta/"
+    filter_prefix = "bronze/${var.app_env}/images/download_log/meta/"
     filter_suffix = "_SUCCESS"
   }
 
@@ -113,7 +109,7 @@ resource "aws_lambda_function" "image_pipeline_trigger" {
       ECS_CONTAINER_NAME    = "image-quality-checker"
       ECS_SUBNET_IDS        = join(",", data.aws_subnets.default.ids)
       ECS_SECURITY_GROUP_ID = aws_security_group.ecs_task.id
-      GLUE_DATABASE         = var.glue_database_name
+      APP_ENV               = var.app_env
     }
   }
 }

@@ -23,8 +23,8 @@ class _FakeS3:
 
 
 def _load_handler_module():
-    # boto3 client creation at import requires a region to be set.
     os.environ.setdefault("AWS_DEFAULT_REGION", "us-east-1")
+    os.environ.setdefault("APP_ENV", "dev")
     module_path = Path("lambda/bronze_manifest_verifier/handler.py")
     spec = importlib.util.spec_from_file_location("bronze_manifest_verifier_handler", module_path)
     module = importlib.util.module_from_spec(spec)
@@ -35,8 +35,8 @@ def _load_handler_module():
 
 def _build_fixture(quality_status="pass", hash_override=None):
     bucket = "test-bucket"
-    manifest_key = "bronze/crawls/metadata/dev/ounass/2026-03-03/run123/manifest.json"
-    data_key = "bronze/crawls/dev/ounass/2026-03-03/run123/ounass.jsonl.gz"
+    manifest_key = "bronze/dev/crawls/metadata/ounass/2026-03-03/run123/manifest.json"
+    data_key = "bronze/dev/crawls/ounass/2026-03-03/run123/ounass.jsonl.gz"
 
     raw = b'{"a":1}\n{"a":2}\n'
     compressed = gzip.compress(raw)

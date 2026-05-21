@@ -15,17 +15,16 @@ ECS_TASK_DEFINITION  = os.environ["ECS_TASK_DEFINITION"]
 ECS_CONTAINER_NAME   = os.environ.get("ECS_CONTAINER_NAME", "image-quality-checker")
 ECS_SUBNET_IDS       = os.environ["ECS_SUBNET_IDS"].split(",")
 ECS_SECURITY_GROUP   = os.environ["ECS_SECURITY_GROUP_ID"]
-GLUE_DATABASE        = os.environ["GLUE_DATABASE"]
+APP_ENV              = os.environ.get("APP_ENV", "dev")
 
-# Expected key pattern: bronze/images/download_log/meta/{dt}/{run_id}/_SUCCESS
-_META_PREFIX = "bronze/images/download_log/meta/"
+# Expected key pattern: bronze/{env}/images/download_log/meta/{dt}/{run_id}/_SUCCESS
+_META_PREFIX = f"bronze/{APP_ENV}/images/download_log/meta/"
 
 
 def _extract_dt_run_id(key: str) -> tuple:
     if not key.startswith(_META_PREFIX):
         raise ValueError(f"Unexpected key: {key}")
-    # key = bronze/images/download_log/meta/2026-05-15/2026-05-15T07-53-07-848/_SUCCESS
-    remainder = key[len(_META_PREFIX):]       # "2026-05-15/2026-05-15T07-53-07-848/_SUCCESS"
+    remainder = key[len(_META_PREFIX):]  # "2026-05-15/2026-05-15T07-53-07-848/_SUCCESS"
     parts = remainder.split("/")
     if len(parts) < 3:
         raise ValueError(f"Could not extract dt/run_id from key: {key}")
@@ -37,9 +36,8 @@ def _trigger_quality_checker(dt: str, run_id: str) -> dict:
         f"python scripts/image_quality_checker.py"
         f" --dt {dt}"
         f" --run-id {run_id}"
-        f" --glue-database {GLUE_DATABASE}"
+        f" --app-env {APP_ENV}"
     )
-    command = [cmd]
     response = ecs.run_task(
         cluster=ECS_CLUSTER,
         taskDefinition=ECS_TASK_DEFINITION,
@@ -54,7 +52,7 @@ def _trigger_quality_checker(dt: str, run_id: str) -> dict:
         overrides={
             "containerOverrides": [{
                 "name": ECS_CONTAINER_NAME,
-                "command": command,
+                "command": [cmd],
             }]
         },
     )

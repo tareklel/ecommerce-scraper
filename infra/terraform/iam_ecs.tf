@@ -84,17 +84,26 @@ resource "aws_iam_role_policy" "ecs_task_image_pipeline_s3" {
       {
         Effect = "Allow",
         Action = ["s3:GetObject", "s3:PutObject"],
-        Resource = "${aws_s3_bucket.price_comparison_bucket.arn}/bronze/images/*"
+        Resource = [
+          "${aws_s3_bucket.price_comparison_bucket.arn}/bronze/dev/images/*",
+          "${aws_s3_bucket.price_comparison_bucket.arn}/bronze/prod/images/*"
+        ]
       },
       {
-        Effect   = "Allow",
-        Action   = ["s3:GetObject"],
-        Resource = "${aws_s3_bucket.price_comparison_bucket.arn}/bronze/crawls/*"
+        Effect = "Allow",
+        Action = ["s3:GetObject"],
+        Resource = [
+          "${aws_s3_bucket.price_comparison_bucket.arn}/bronze/dev/crawls/*",
+          "${aws_s3_bucket.price_comparison_bucket.arn}/bronze/prod/crawls/*"
+        ]
       },
       {
-        Effect   = "Allow",
-        Action   = ["s3:GetObject"],
-        Resource = "${aws_s3_bucket.price_comparison_bucket.arn}/price_comparison_dbt/*"
+        Effect = "Allow",
+        Action = ["s3:GetObject"],
+        Resource = [
+          "${aws_s3_bucket.price_comparison_bucket.arn}/dbt/dev/*",
+          "${aws_s3_bucket.price_comparison_bucket.arn}/dbt/prod/*"
+        ]
       },
       {
         Effect   = "Allow",
@@ -131,8 +140,10 @@ resource "aws_iam_role_policy" "ecs_task_image_pipeline_athena" {
         ],
         Resource = [
           "arn:aws:glue:${var.region}:*:catalog",
-          "arn:aws:glue:${var.region}:*:database/${var.glue_database_name}",
-          "arn:aws:glue:${var.region}:*:table/${var.glue_database_name}/*"
+          "arn:aws:glue:${var.region}:*:database/${var.bronze_database_name}",
+          "arn:aws:glue:${var.region}:*:table/${var.bronze_database_name}/*",
+          "arn:aws:glue:${var.region}:*:database/${var.dbt_database_name}",
+          "arn:aws:glue:${var.region}:*:table/${var.dbt_database_name}/*"
         ]
       },
       {
