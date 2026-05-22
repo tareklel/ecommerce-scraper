@@ -11,8 +11,9 @@ RUN apt-get update && apt-get install -y \
  && update-ca-certificates \
  && rm -rf /var/lib/apt/lists/*
 
-ARG POETRY_VERSION=1.7.1
-RUN pip install --no-cache-dir "poetry==$POETRY_VERSION"
+ARG POETRY_VERSION=1.8.5
+RUN pip install --no-cache-dir --upgrade pip setuptools packaging && \
+    pip install --no-cache-dir "poetry==$POETRY_VERSION"
 
 WORKDIR /app
 
