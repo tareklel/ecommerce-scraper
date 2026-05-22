@@ -15,7 +15,11 @@ import io
 import json
 import logging
 import os
+import sys
 from collections import Counter
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import boto3
 from PIL import Image, UnidentifiedImageError
