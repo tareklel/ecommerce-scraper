@@ -7,6 +7,11 @@ include .env
 export $(shell sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p' .env)
 endif
 
+# Environment: dev (default) or prod.
+# All S3 paths, database names, and Terraform vars are driven by this.
+# Override for prod operations: APP_ENV=prod make <target>
+APP_ENV ?= dev
+
 IMAGE_NAME = ecommerce-scraper
 # Use this for ECR tagging/pushing; keep in sync with Terraform image_tag when needed.
 IMAGE_TAG ?= latest
@@ -72,21 +77,22 @@ docker-rebuild: docker-prune
 	echo "🏗️ Rebuilding linux/amd64 image (no cache)..."; \
 	docker buildx build --platform linux/amd64 --no-cache -t $(IMAGE_NAME):latest .
 
-# farfetch 
+# farfetch
 run-ff-local:
 	$(LOAD_AWS_SECRET_ENV); \
 	poetry run python3 run_crawler.py farfetch --urls $(FF_TEST_URL)
 
 run-ff-test-upload:
 	$(LOAD_AWS_SECRET_ENV); \
+	APP_ENV=$(APP_ENV) \
 	AWS_PROFILE=$(AWS_PROFILE) \
 	S3_BUCKET=$(S3_BUCKET) \
 	S3_UPLOAD_ENABLED=true \
 	poetry run python3 run_crawler.py farfetch --urls $(FF_TEST_URL)
 
-docker-run-ff-dev:
+docker-run-ff:
 	$(LOAD_AWS_SECRET_ENV); \
-	docker run --rm $(DOCKER_SECRET_ENV_FLAGS) -v $(PWD)/output:/app/output $(IMAGE_NAME):latest run_crawler.py farfetch --urls $(FF_TEST_URL) --env dev
+	docker run --rm $(DOCKER_SECRET_ENV_FLAGS) -v $(PWD)/output:/app/output $(IMAGE_NAME):latest run_crawler.py farfetch --urls $(FF_TEST_URL) --env $(APP_ENV)
 
 # ounass
 run-ounass-local:
@@ -95,16 +101,16 @@ run-ounass-local:
 
 run-ounass-test-upload:
 	$(LOAD_AWS_SECRET_ENV); \
+	APP_ENV=$(APP_ENV) \
 	AWS_PROFILE=$(AWS_PROFILE) \
 	S3_BUCKET=$(S3_BUCKET) \
 	S3_UPLOAD_ENABLED=true \
 	poetry run python3 run_crawler.py ounass --urls $(OUNASS_TEST_URL)
 
-# ounass (intentional fail_quality smoke test + upload)
-# This keeps upload enabled but forces quality gate failure so Lambda should emit _FAIL_QUALITY
-# and not emit _SUCCESS.
+# Intentional fail_quality smoke test — forces quality gate failure to verify Lambda emits _FAIL_QUALITY.
 run-ounass-test-upload-faulty-quality:
 	$(LOAD_AWS_SECRET_ENV); \
+	APP_ENV=$(APP_ENV) \
 	AWS_PROFILE=$(AWS_PROFILE) \
 	S3_BUCKET=$(S3_BUCKET) \
 	S3_UPLOAD_ENABLED=true \
@@ -121,6 +127,7 @@ run-level-local:
 
 run-level-test-upload:
 	$(LOAD_AWS_SECRET_ENV); \
+	APP_ENV=$(APP_ENV) \
 	AWS_PROFILE=$(AWS_PROFILE) \
 	S3_BUCKET=$(S3_BUCKET) \
 	S3_UPLOAD_ENABLED=true \
@@ -128,10 +135,11 @@ run-level-test-upload:
 
 # Run any local command with .env plus AWS Secrets Manager values loaded.
 # Usage:
-#   make run-with-env COMMAND="poetry run python3 run_crawler.py level --env dev --urls-source s3://price-comparison-bucket/resources/crawl-lists/test_level_sa_urls_20260508.csv"
+#   make run-with-env COMMAND="poetry run python3 run_crawler.py level --env dev --urls-source s3://..."
 run-with-env:
-	@test -n "$(COMMAND)" || (echo 'Set COMMAND="your command". Example: make run-with-env COMMAND="poetry run python3 run_crawler.py level --env dev --urls-source s3://price-comparison-bucket/resources/crawl-lists/test_level_sa_urls_20260508.csv"' && exit 1)
+	@test -n "$(COMMAND)" || (echo 'Set COMMAND="your command".' && exit 1)
 	$(LOAD_AWS_SECRET_ENV); \
+	APP_ENV=$(APP_ENV) \
 	$(COMMAND)
 
 # image downloader
@@ -170,18 +178,18 @@ run-quality-gate-local:
 		$(QUALITY_GATE_EXTRA_ARGS)
 
 
-# terraform
+# terraform — TF_VAR_app_env ensures var.app_env matches APP_ENV without needing a tfvars file.
 tf-init:
 	cd $(TF_DIR) && terraform init
 
 tf-plan:
-	cd $(TF_DIR) && terraform plan
+	cd $(TF_DIR) && TF_VAR_app_env=$(APP_ENV) terraform plan
 
 tf-apply:
-	cd $(TF_DIR) && terraform apply -auto-approve
+	cd $(TF_DIR) && TF_VAR_app_env=$(APP_ENV) terraform apply -auto-approve
 
 tf-destroy:
-	cd $(TF_DIR) && terraform destroy -auto-approve
+	cd $(TF_DIR) && TF_VAR_app_env=$(APP_ENV) terraform destroy -auto-approve
 
 
 aws-login:
@@ -207,6 +215,7 @@ secrets-list:
 		--secret-id $(AWS_SECRET_ENV_NAME) \
 		--query SecretString \
 		--output text | python3 -c 'import json,sys; print("\n".join(sorted(json.load(sys.stdin).keys())))'
+
 # -----------------------------
 # ECR image push (manual start)
 # -----------------------------
@@ -230,8 +239,7 @@ ecr-push: docker-rebuild ecr-login
 # --------------------------------
 
 # Run one Fargate task using outputs from Terraform.
-# make ecs-run ECS_RUN_COMMAND="python3 run_crawler.py level --urls-source s3://price-comparison-bucket-eu-central-1/resources/crawl-lists/test_level_sa_urls_20260508.csv"
-# make ecs-run ECS_RUN_COMMAND="python3 run_crawler.py ounass --urls-source s3://price-comparison-bucket-eu-central-1/resources/crawl-lists/test_ounass_sa_urls_20260508.csv"
+# make ecs-run ECS_RUN_COMMAND="python3 run_crawler.py level --env dev --urls-source s3://..."
 ecs-run:
 	@CLUSTER=$$(cd $(TF_DIR) && AWS_PROFILE=$(AWS_PROFILE) terraform output -raw ecs_cluster_name); \
 	TASK_DEF=$$(cd $(TF_DIR) && AWS_PROFILE=$(AWS_PROFILE) terraform output -raw ecs_task_definition_arn); \
@@ -259,29 +267,35 @@ ecs-run:
 ecs-run-test: ECS_RUN_COMMAND = $(ECS_TEST_COMMAND)
 ecs-run-test: ecs-run
 
-# Image pipeline vars — default to dev; prod requires an explicit override or use the -prod targets.
-IMAGE_PIPELINE_APP_ENV ?= dev
+# --------------------------------
+# Image pipeline
+# --------------------------------
+
 IMAGE_PIPELINE_LIMIT ?=
 IMAGE_PIPELINE_LOG_LEVEL ?= INFO
 
 _IMAGE_PIPELINE_CMD = python run_image_pipeline.py \
-	--app-env $(IMAGE_PIPELINE_APP_ENV) \
+	--app-env $(APP_ENV) \
 	--athena-workgroup price-comparison \
 	--athena-output-loc s3://$(S3_BUCKET)/athena-results/ \
 	--storage-mode s3 \
 	--log-level $(IMAGE_PIPELINE_LOG_LEVEL) \
 	$(if $(IMAGE_PIPELINE_LIMIT),--limit $(IMAGE_PIPELINE_LIMIT),)
 
-# Run image pipeline locally (no Docker, no ECS — fastest for testing).
+# Run image pipeline locally.
 # make run-image-pipeline-local
-# make run-image-pipeline-local IMAGE_PIPELINE_LIMIT=5
+# make run-image-pipeline-local IMAGE_PIPELINE_LIMIT=5 APP_ENV=prod
 run-image-pipeline-local:
 	$(LOAD_AWS_SECRET_ENV); \
+	APP_ENV=$(APP_ENV) \
 	AWS_PROFILE=$(AWS_PROFILE) \
 	S3_BUCKET=$(S3_BUCKET) \
 	poetry run $(_IMAGE_PIPELINE_CMD)
 
-_ecs-run-image-pipeline:
+# Run image pipeline via ECS.
+# make ecs-run-image-pipeline
+# make ecs-run-image-pipeline APP_ENV=prod
+ecs-run-image-pipeline:
 	@CLUSTER=$$(cd $(TF_DIR) && AWS_PROFILE=$(AWS_PROFILE) terraform output -raw ecs_cluster_name); \
 	TASK_DEF=$$(cd $(TF_DIR) && AWS_PROFILE=$(AWS_PROFILE) terraform output -raw ecs_image_pipeline_task_definition_arn); \
 	SUBNETS=$$(cd $(TF_DIR) && AWS_PROFILE=$(AWS_PROFILE) terraform output -json default_subnet_ids | python3 -c 'import json,sys; print(",".join(json.load(sys.stdin)))'); \
@@ -295,20 +309,16 @@ _ecs-run-image-pipeline:
 		--network-configuration "awsvpcConfiguration={subnets=[$$SUBNETS],securityGroups=[$$SG],assignPublicIp=ENABLED}" \
 		--overrides "{\"containerOverrides\":[{\"name\":\"image-pipeline\",\"command\":[\"$$CMD\"]}]}"
 
-ecs-run-image-pipeline-dev: IMAGE_PIPELINE_APP_ENV = dev
-ecs-run-image-pipeline-dev: _ecs-run-image-pipeline
-
-ecs-run-image-pipeline-prod: IMAGE_PIPELINE_APP_ENV = prod
-ecs-run-image-pipeline-prod: _ecs-run-image-pipeline
-
 # Run quality checker locally for a given date partition.
 # make run-quality-checker-local DT=2026-05-21 RUN_ID=<run_id>
+# make run-quality-checker-local DT=2026-05-21 RUN_ID=<run_id> APP_ENV=prod
 run-quality-checker-local:
 	$(LOAD_AWS_SECRET_ENV); \
+	APP_ENV=$(APP_ENV) \
 	AWS_PROFILE=$(AWS_PROFILE) \
 	S3_BUCKET=$(S3_BUCKET) \
 	poetry run python scripts/image_quality_checker.py \
 		--dt $(DT) \
 		--run-id $(RUN_ID) \
-		--app-env $(IMAGE_PIPELINE_APP_ENV) \
+		--app-env $(APP_ENV) \
 		--log-level $(IMAGE_PIPELINE_LOG_LEVEL)
