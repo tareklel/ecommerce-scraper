@@ -28,7 +28,7 @@ DOCKER_SECRET_ENV_FLAGS = --env ZYTE_API_KEY --env ZYTE_API_ENABLED --env CRAWLE
 # Optional: override ECS command at runtime (used by ecs-run).
 ECS_RUN_COMMAND ?=
 # Saved test command (previous Terraform default) for quick reuse.
-ECS_TEST_COMMAND = python3 run_crawler.py ounass --urls https://www.ounass.ae/api/women/designers/burberry/bags && python3 run_crawler.py level --urls https://www.levelshoes.com/women/brands/toteme/bags
+ECS_TEST_COMMAND = python3 run_crawler.py ounass --env $(APP_ENV) --urls https://www.ounass.ae/api/women/designers/burberry/bags && python3 run_crawler.py level --env $(APP_ENV) --urls https://www.levelshoes.com/women/brands/toteme/bags
 # Script that renders ECS --overrides JSON from ECS_RUN_COMMAND.
 ECS_OVERRIDES_SCRIPT = scripts/ecs_overrides.py
 
@@ -239,14 +239,15 @@ ecr-push: docker-rebuild ecr-login
 # --------------------------------
 
 # Run one Fargate task using outputs from Terraform.
-# APP_ENV is baked into the task definition by tf-apply — override with APP_ENV=prod make tf-apply first.
-# make ecs-run ECS_RUN_COMMAND="python3 run_crawler.py level --urls-source s3://..."
+# APP_ENV is injected at runtime via the overrides script — no tf-apply needed to switch envs.
+# make ecs-run ECS_RUN_COMMAND="python3 run_crawler.py level --env dev --urls-source s3://..."
+# make ecs-run APP_ENV=prod ECS_RUN_COMMAND="python3 run_crawler.py level --env prod --urls-source s3://..."
 ecs-run:
 	@CLUSTER=$$(cd $(TF_DIR) && AWS_PROFILE=$(AWS_PROFILE) terraform output -raw ecs_cluster_name); \
 	TASK_DEF=$$(cd $(TF_DIR) && AWS_PROFILE=$(AWS_PROFILE) terraform output -raw ecs_task_definition_arn); \
 	SUBNETS=$$(cd $(TF_DIR) && AWS_PROFILE=$(AWS_PROFILE) terraform output -json default_subnet_ids | python3 -c 'import json,sys; print(",".join(json.load(sys.stdin)))'); \
 	SG=$$(cd $(TF_DIR) && AWS_PROFILE=$(AWS_PROFILE) terraform output -raw ecs_task_security_group_id); \
-	OVERRIDES=$$(ECS_RUN_COMMAND="$(ECS_RUN_COMMAND)" python3 $(ECS_OVERRIDES_SCRIPT)); \
+	OVERRIDES=$$(ECS_RUN_COMMAND="$(ECS_RUN_COMMAND)" APP_ENV=$(APP_ENV) python3 $(ECS_OVERRIDES_SCRIPT)); \
 	if [ -n "$$OVERRIDES" ]; then \
 		AWS_PROFILE=$(AWS_PROFILE) aws ecs run-task \
 			--region $(AWS_REGION) \

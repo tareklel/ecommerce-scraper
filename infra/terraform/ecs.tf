@@ -53,7 +53,6 @@ resource "aws_ecs_task_definition" "scraper" {
       entryPoint = var.ecs_entrypoint
       command    = var.ecs_command
       environment = [
-        { name = "APP_ENV",           value = var.app_env },
         { name = "S3_BUCKET",         value = var.price_comparison_bucket },
         { name = "S3_UPLOAD_ENABLED", value = var.s3_upload_enabled }
       ]
