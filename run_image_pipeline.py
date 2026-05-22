@@ -72,8 +72,8 @@ def _query_pending_images(athena, s3, bronze_database, qualified_catalog_table,
     sql = f"""
 SELECT c.site, c.primary_key, c.url
 FROM {qualified_catalog_table} c
-    SELECT site, primary_key, status,
 LEFT JOIN (
+    SELECT site, primary_key, status,
            ROW_NUMBER() OVER (PARTITION BY site, primary_key ORDER BY dt DESC) AS rn
     FROM {qualified_status_table}
 ) s ON c.site = s.site AND c.primary_key = s.primary_key AND s.rn = 1
