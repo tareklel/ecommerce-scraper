@@ -239,7 +239,8 @@ ecr-push: docker-rebuild ecr-login
 # --------------------------------
 
 # Run one Fargate task using outputs from Terraform.
-# make ecs-run ECS_RUN_COMMAND="python3 run_crawler.py level --env dev --urls-source s3://..."
+# APP_ENV is baked into the task definition by tf-apply — override with APP_ENV=prod make tf-apply first.
+# make ecs-run ECS_RUN_COMMAND="python3 run_crawler.py level --urls-source s3://..."
 ecs-run:
 	@CLUSTER=$$(cd $(TF_DIR) && AWS_PROFILE=$(AWS_PROFILE) terraform output -raw ecs_cluster_name); \
 	TASK_DEF=$$(cd $(TF_DIR) && AWS_PROFILE=$(AWS_PROFILE) terraform output -raw ecs_task_definition_arn); \
