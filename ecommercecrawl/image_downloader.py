@@ -146,7 +146,7 @@ def build_output_path(
     return os.path.join(output_dir, site, run_id, file_name)
 
 
-def build_canonical_blob_key(content_sha256: str, ext: str, blob_prefix: str = "bronze/images/by-hash") -> str:
+def build_canonical_blob_key(content_sha256: str, ext: str, blob_prefix: str) -> str:
     return f"{blob_prefix.rstrip('/')}/{content_sha256}{ext}"
 
 
@@ -302,7 +302,7 @@ def download_one_job(
     storage_mode: Literal["local", "s3", "both"] = "local",
     s3_client=None,
     s3_bucket: Optional[str] = None,
-    blob_prefix: str = "bronze/images/by-hash",
+    blob_prefix: Optional[str] = None,
 ) -> dict:
     try:
         site = normalize_site(job["site"])
@@ -353,10 +353,12 @@ def download_one_job(
                 error_message=f"Expected image content type, got {content_type}",
             )
 
+        if storage_mode in ("s3", "both") and not blob_prefix:
+            raise ValueError("blob_prefix is required when storage_mode is 's3' or 'both'")
         content = response.content
         content_sha256 = hashlib.sha256(content).hexdigest()
         content_ext = extension_from_content_type(content_type) or output_ext
-        canonical_blob_key = build_canonical_blob_key(content_sha256=content_sha256, ext=content_ext, blob_prefix=blob_prefix)
+        canonical_blob_key = build_canonical_blob_key(content_sha256=content_sha256, ext=content_ext, blob_prefix=blob_prefix or "")
 
         with open(output_path, "wb") as f:
             f.write(content)
@@ -425,8 +427,10 @@ def download_jobs(
     download_run_id: Optional[str] = None,
     storage_mode: Literal["local", "s3", "both"] = "local",
     s3_bucket: Optional[str] = None,
-    blob_prefix: str = "bronze/images/by-hash",
+    blob_prefix: Optional[str] = None,
 ) -> List[dict]:
+    if storage_mode in ("s3", "both") and not blob_prefix:
+        raise ValueError("blob_prefix is required when storage_mode is 's3' or 'both'")
     run_id = download_run_id or generate_run_id()
     s3_client = boto3.client("s3") if storage_mode in ("s3", "both") and s3_bucket else None
     results: List[dict] = []

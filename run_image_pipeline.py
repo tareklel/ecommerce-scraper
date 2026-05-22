@@ -72,12 +72,13 @@ def _query_pending_images(athena, s3, bronze_database, qualified_catalog_table,
     sql = f"""
 SELECT c.site, c.primary_key, c.url
 FROM {qualified_catalog_table} c
-LEFT JOIN (
     SELECT site, primary_key, status,
+LEFT JOIN (
            ROW_NUMBER() OVER (PARTITION BY site, primary_key ORDER BY dt DESC) AS rn
     FROM {qualified_status_table}
 ) s ON c.site = s.site AND c.primary_key = s.primary_key AND s.rn = 1
-WHERE s.status IS NULL OR s.status = 'error'
+WHERE c.dt = (SELECT MAX(dt) FROM {qualified_catalog_table})
+  AND (s.status IS NULL OR s.status = 'error')
 {limit_clause}
 """.strip()
     logger.info("Running Athena query:\n%s", sql)
@@ -259,8 +260,10 @@ def main():
     counts = Counter(r.get("status", "unknown") for r in results)
     logger.info("Download complete: %s", dict(counts))
 
-    # 4. Write status partition to S3
-    status_rows = _build_status_rows(results, dt, run_id)
+    # 4. Write status partition to S3 — skipped_duplicate is internal bookkeeping,
+    # not a download outcome; exclude it so the retry query stays clean
+    loggable = [r for r in results if r.get("status") != "skipped_duplicate"]
+    status_rows = _build_status_rows(loggable, dt, run_id)
     _write_status_partition(s3, bucket, status_prefix, dt, run_id, status_rows)
 
     # 5. Register Glue partition
