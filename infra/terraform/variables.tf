@@ -117,7 +117,7 @@ variable "athena_results_prefix" {
 variable "app_env" {
   description = "Deployment environment: dev or prod. Drives S3 prefixes, database names, and Lambda env vars."
   type        = string
-  default     = "prod"
+  default     = "dev"
   validation {
     condition     = contains(["dev", "prod"], var.app_env)
     error_message = "app_env must be dev or prod."
@@ -127,17 +127,17 @@ variable "app_env" {
 variable "glue_database_name" {
   description = "Glue Data Catalog database name used by dbt (matches scraper-pipeline Terraform)"
   type        = string
-  default     = "price_comparison_prod"
+  default     = "price_comparison_dev"
 }
 
 variable "bronze_database_name" {
   description = "Glue database for bronze tables (crawl raw, image log, image validated)"
   type        = string
-  default     = "price_comparison_prod"
+  default     = "price_comparison_dev"
 }
 
 variable "dbt_database_name" {
   description = "Glue database for dbt output tables (silver, gold)"
   type        = string
-  default     = "price_comparison_prod"
+  default     = "price_comparison_dev"
 }
