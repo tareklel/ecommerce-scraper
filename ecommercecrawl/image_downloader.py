@@ -146,8 +146,8 @@ def build_output_path(
     return os.path.join(output_dir, site, run_id, file_name)
 
 
-def build_canonical_blob_key(content_sha256: str, ext: str) -> str:
-    return f"bronze/images/by-hash/{content_sha256}{ext}"
+def build_canonical_blob_key(content_sha256: str, ext: str, blob_prefix: str = "bronze/images/by-hash") -> str:
+    return f"{blob_prefix.rstrip('/')}/{content_sha256}{ext}"
 
 
 def _result_blob(
@@ -302,6 +302,7 @@ def download_one_job(
     storage_mode: Literal["local", "s3", "both"] = "local",
     s3_client=None,
     s3_bucket: Optional[str] = None,
+    blob_prefix: str = "bronze/images/by-hash",
 ) -> dict:
     try:
         site = normalize_site(job["site"])
@@ -355,7 +356,7 @@ def download_one_job(
         content = response.content
         content_sha256 = hashlib.sha256(content).hexdigest()
         content_ext = extension_from_content_type(content_type) or output_ext
-        canonical_blob_key = build_canonical_blob_key(content_sha256=content_sha256, ext=content_ext)
+        canonical_blob_key = build_canonical_blob_key(content_sha256=content_sha256, ext=content_ext, blob_prefix=blob_prefix)
 
         with open(output_path, "wb") as f:
             f.write(content)
@@ -424,6 +425,7 @@ def download_jobs(
     download_run_id: Optional[str] = None,
     storage_mode: Literal["local", "s3", "both"] = "local",
     s3_bucket: Optional[str] = None,
+    blob_prefix: str = "bronze/images/by-hash",
 ) -> List[dict]:
     run_id = download_run_id or generate_run_id()
     s3_client = boto3.client("s3") if storage_mode in ("s3", "both") and s3_bucket else None
@@ -479,6 +481,7 @@ def download_jobs(
                 storage_mode=storage_mode,
                 s3_client=s3_client,
                 s3_bucket=s3_bucket,
+                blob_prefix=blob_prefix,
             )
             for job in deduped
         ]

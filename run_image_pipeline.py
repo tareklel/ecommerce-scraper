@@ -253,6 +253,7 @@ def main():
         download_run_id=run_id,
         storage_mode=args.storage_mode,
         s3_bucket=bucket,
+        blob_prefix=f"{bronze_prefix}images/by-hash",
     )
 
     counts = Counter(r.get("status", "unknown") for r in results)
