@@ -42,3 +42,30 @@ Check that all error paths in `download_one_job` pass `reason=` and `error_messa
 - `data.jsonl.gz` error rows contain `reason`, `error_message`, and `http_status`
 - ECS logs show at least one line per failed image with enough detail to diagnose without downloading the log file
 - Re-run today's failed batch and confirm root cause is visible in both surfaces
+
+## Schema change required
+
+`image_download_log` needs three new columns. Since it uses JSON SerDe, old records return NULL for new columns — no backfill needed.
+
+### 1. Update DDL in scraper-pipeline
+
+Add columns to `../scraper-pipeline/sql/athena/bronze_image_download_status.sql`:
+
+```sql
+reason        STRING,
+error_message STRING,
+http_status   INT,
+```
+
+### 2. Run ALTER TABLE on live table
+
+```sql
+ALTER TABLE price_comparison_dev.image_download_log
+ADD COLUMNS (
+  reason        STRING,
+  error_message STRING,
+  http_status   INT
+);
+```
+
+Repeat for `price_comparison_prod.image_download_log` before prod deploy.

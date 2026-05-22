@@ -99,12 +99,17 @@ def _build_status_rows(results, dt, run_id):
         job = r.get("job", {})
         request = r.get("request", {})
         storage = r.get("storage", {})
+        transfer = r.get("transfer", {})
+        error = r.get("error") or {}
         rows.append({
             "site": job.get("site"),
             "primary_key": job.get("primary_key"),
             "url": request.get("image_url"),
             "run_id": run_id,
             "status": r.get("status"),
+            "reason": r.get("reason"),
+            "error_message": error.get("message"),
+            "http_status": transfer.get("http_status"),
             "s3_blob_key": storage.get("canonical_blob_key"),
             "dt": dt,
         })
@@ -259,6 +264,16 @@ def main():
 
     counts = Counter(r.get("status", "unknown") for r in results)
     logger.info("Download complete: %s", dict(counts))
+    for r in results:
+        if r.get("status") == "error":
+            err = r.get("error") or {}
+            logger.warning(
+                "Download error pk=%s reason=%s http=%s msg=%s",
+                (r.get("job") or {}).get("primary_key"),
+                r.get("reason"),
+                (r.get("transfer") or {}).get("http_status"),
+                err.get("message"),
+            )
 
     # 4. Write status partition to S3 — skipped_duplicate is internal bookkeeping,
     # not a download outcome; exclude it so the retry query stays clean
