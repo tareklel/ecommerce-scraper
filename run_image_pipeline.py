@@ -73,10 +73,10 @@ def _query_pending_images(athena, s3, bronze_database, qualified_catalog_table,
 SELECT c.site, c.primary_key, c.url
 FROM {qualified_catalog_table} c
 LEFT JOIN (
-    SELECT site, primary_key, status,
-           ROW_NUMBER() OVER (PARTITION BY site, primary_key ORDER BY dt DESC) AS rn
+    SELECT site, primary_key, url, status,
+           ROW_NUMBER() OVER (PARTITION BY site, primary_key, url ORDER BY run_id DESC) AS rn
     FROM {qualified_status_table}
-) s ON c.site = s.site AND c.primary_key = s.primary_key AND s.rn = 1
+) s ON c.site = s.site AND c.primary_key = s.primary_key AND c.url = s.url AND s.rn = 1
 WHERE c.dt = (SELECT MAX(dt) FROM {qualified_catalog_table})
   AND (s.status IS NULL OR s.status = 'error')
 {limit_clause}

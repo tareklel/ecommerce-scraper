@@ -84,6 +84,25 @@
 - Added `s3:GetBucketLocation` to image pipeline IAM role (Athena needs it to verify output bucket) and `price_comparison_dbt/*` read grant (Athena scans dbt model partitions for `stg_product_image_download_status`).
 - Added `run-quality-checker-local DT=... RUN_ID=...` makefile target for local testing.
 
+## 2026-06-03 - Fix image pipeline pending-images query: per-URL status tracking and deterministic same-day ordering
+- Bug 1: `_query_pending_images` joined status on `(site, primary_key)` only — a new image URL for an existing product was silently skipped because an old `ok` status for the same product matched and filtered it out. Fixed by adding `url` to the subquery SELECT, partitioning ROW_NUMBER by `(site, primary_key, url)`, and adding `AND c.url = s.url` to the JOIN. Status is now tracked per `(site, primary_key, url)`.
+- Bug 2: `ORDER BY dt DESC` in the ROW_NUMBER window used date-only precision, so two runs on the same day (e.g., one error, one ok) produced identical `dt` values and the winning row was non-deterministic. Fixed by changing to `ORDER BY run_id DESC`; `run_id` is `YYYY-MM-DDTHH-MM-SS-mmm` and sorts correctly within the same day.
+- The same two bugs exist in `scraper-pipeline/dbt/models/silver/silver_product_image_download_status.sql` and were fixed there in a parallel session.
+
+## 2026-06-02 - scraper-pipeline: add crawl_manifest_raw DDL and silver_crawl_manifest dbt model
+- Added `sql/athena/bronze_crawl_manifest_raw.sql` in scraper-pipeline: external table with single `raw_json STRING` column, `PARTITIONED BY (site string, dt string)`, `LOCATION '__BRONZE_PREFIX__/crawls/manifests/'`.
+- Added `dbt/models/silver/silver_crawl_manifest.sql`: incremental model extracting run_id, crawler_name, exit_reason, start/finish time, duration, row_count, quality gate fields, and verification fields from `raw_json` via `json_extract_scalar`.
+- Aligned Lambda partition registration: `crawl_manifest_raw` uses `(site, dt)` values (not `(env, site, dt)`) to match the existing scraper-pipeline pattern where env is baked into the table LOCATION prefix.
+- Use `make athena-ddl DDL_FILE=sql/athena/bronze_crawl_manifest_raw.sql` in scraper-pipeline to create the table.
+
+## 2026-06-02 - Implement crawl_observability ticket: manifests/ dir, verified manifest write, crawl_manifest_raw partition
+- Forked markers out of `metadata/` into `bronze/{env}/crawls/markers/{site}/{dt}/{run_id}/` (clean break, no backwards compat).
+- Lambda now writes a verified copy of `manifest.json` — with `verification.outcome`, `verification.failure_reason`, `verification.verified_at` appended — to `bronze/{env}/crawls/manifests/{site}/{dt}/{run_id}/data.json`.
+- `_register_bronze_partition` (triggered by `_SUCCESS` in `markers/`) now registers two Glue partitions: the existing crawl data table `(site, dt)` and the new `crawl_manifest_raw` table `(env, site, dt)`.
+- Updated `infra/terraform/lambda.tf` `_SUCCESS` notification filter prefix from `metadata/` to `markers/`.
+- Added `scripts/backfill_manifests.py`: idempotent one-time script that copies historical `metadata/*/manifest.json` → `manifests/*/data.json` and registers `crawl_manifest_raw` Glue partitions; historical rows will have NULL verification fields.
+- Updated tests: marker path assertions updated to `markers/` prefix; added tests for verified manifest write, outcome field values, and dual-table partition registration.
+
 ## 2026-05-11 - Add Secrets Manager runtime env wiring and dynamic status counts
 - Added Terraform wiring for one JSON Secrets Manager secret (`ecommerce-scraper/env`) and ECS task secret injection for allowlisted runtime env keys.
 - Added Make helpers to fetch remote secret keys for local crawler runs, list secret keys without values, and update a single remote secret key without storing values in `.env` or Terraform state.
