@@ -61,7 +61,7 @@ resource "aws_s3_bucket_notification" "bronze_notifications" {
     events              = ["s3:ObjectCreated:*"]
 
     # Trigger when manifest verification writes the success marker.
-    filter_prefix = "bronze/${var.app_env}/crawls/metadata/"
+    filter_prefix = "bronze/${var.app_env}/crawls/markers/"
     filter_suffix = "_SUCCESS"
   }
 

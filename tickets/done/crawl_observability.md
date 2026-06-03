@@ -1,6 +1,32 @@
 # Ticket: Crawl Run Observability — `crawl_manifest_raw` Athena Table
 
-**Status: draft — not reviewed**
+**Status: implemented — pending deploy**
+
+## Checklist
+
+### Implemented
+- [x] Lambda: write markers to `crawls/markers/{site}/{dt}/{run_id}/`
+- [x] Lambda: write verified manifest with verification block to `crawls/manifests/{site}/{dt}/{run_id}/data.json`
+- [x] Lambda: append `verification.outcome`, `verification.failure_reason`, `verification.verified_at` to manifest
+- [x] Lambda: register Glue partitions for both crawl data table and `crawl_manifest_raw` on `_SUCCESS`
+- [x] `lambda.tf`: S3 notification filter prefix → `bronze/{env}/crawls/markers/`
+- [x] `iam.tf`: `glue:CreatePartition` already present — no change needed
+- [x] scraper-pipeline: `crawl_manifest_raw` external table DDL (`sql/athena/bronze_crawl_manifest_raw.sql`)
+- [x] scraper-pipeline: `silver_crawl_manifest` dbt model (`dbt/models/silver/silver_crawl_manifest.sql`)
+- [x] `scripts/backfill_manifests.py`: one-time historical backfill script
+- [x] Decision: Option B (dedicated directories per file type)
+- [x] Decision: clean break — `metadata/` writes removed, backfill script covers historical data
+- [x] Decision: scraper-pipeline owns `crawl_manifest_raw` Glue table
+
+### Pending (deploy steps)
+- [ ] `make tf-apply` in ecommerce-scraper to update Lambda and S3 notification filter
+- [ ] `make athena-ddl DDL_FILE=sql/athena/bronze_crawl_manifest_raw.sql` in scraper-pipeline (dev then prod)
+- [ ] Run `scripts/backfill_manifests.py --env prod` to backfill historical manifests
+- [ ] `make dbt-run` in scraper-pipeline to build `silver_crawl_manifest`
+
+### Out of Scope (future tickets)
+- [ ] `crawl_quality_raw` Athena table from `quality_report.json`
+- [ ] Alerting on failed crawls (CloudWatch alarm or SNS)
 
 ## Goal
 
@@ -28,22 +54,29 @@ pointed at `metadata/` because it would try to parse `_SUCCESS` as JSON.
 
 ---
 
-## Proposed S3 Layout
+## Final S3 Layout (Option B, implemented)
 
 ```
 bronze/{env}/crawls/{site}/{dt}/{run_id}/
-  {site}.jsonl.gz                        ← unchanged
+  {site}.jsonl.gz                        ← crawl data — unchanged
 
 bronze/{env}/crawls/metadata/{site}/{dt}/{run_id}/
-  manifest.json                          ← Athena-readable once markers removed
-  quality_report.json
+  manifest.json                          ← crawl writer still writes here (Lambda trigger)
+  quality_report.json                    ← crawl writer still writes here
+
+bronze/{env}/crawls/manifests/{site}/{dt}/{run_id}/
+  data.json                              ← verified manifest + verification block (written by Lambda)
 
 bronze/{env}/crawls/markers/{site}/{dt}/{run_id}/
-  _SUCCESS  |  _FAILED  |  _FAIL_QUALITY ← forked to own dir
+  _SUCCESS  |  _FAILED  |  _FAIL_QUALITY ← written by Lambda (triggers partition registration)
+
+bronze/{env}/crawls/quality_reports/{site}/{dt}/{run_id}/
+  data.json                              ← future (crawl_quality_raw ticket)
 ```
 
-Markers move to `bronze/{env}/crawls/markers/`. The `metadata/` directory becomes
-Athena-readable with no other changes to the crawl writer.
+`crawl_manifest_raw` points at `bronze/{env}/crawls/manifests/`.
+`metadata/` is still written by the crawl writer (Lambda trigger path unchanged) but is no longer
+the Athena-readable location.
 
 ---
 
@@ -141,6 +174,7 @@ select
   dt
 from {{ source('bronze', 'crawl_manifest_raw') }}
 ```
+name dbt 'silver_crawl_manifest'
 
 ---
 
@@ -170,10 +204,12 @@ from {{ source('bronze', 'crawl_manifest_raw') }}
 
 | File | Change |
 |------|--------|
-| `lambda/bronze_manifest_verifier/handler.py` | Marker path, manifest path, verification block, Glue partition registration |
+| `lambda/bronze_manifest_verifier/handler.py` | Marker path → `crawls/markers/`, manifest write → `crawls/manifests/`, verification block, dual Glue partition registration |
 | `infra/terraform/lambda.tf` | S3 notification filter prefix → `bronze/{env}/crawls/markers/` |
-| `infra/terraform/iam.tf` | Add `glue:CreatePartition` to Lambda role for `crawl_manifest_raw` table |
-| Glue (scraper-pipeline or manual DDL) | Create `crawl_manifest_raw` external table |
+| `infra/terraform/iam.tf` | No change — `glue:CreatePartition` with `Resource = "*"` already present |
+| `scraper-pipeline/sql/athena/bronze_crawl_manifest_raw.sql` | New DDL for `crawl_manifest_raw` external table |
+| `scraper-pipeline/dbt/models/silver/silver_crawl_manifest.sql` | New silver model extracting columns from `raw_json` |
+| `scripts/backfill_manifests.py` | One-time backfill script for historical manifests |
 
 ---
 
@@ -185,8 +221,34 @@ from {{ source('bronze', 'crawl_manifest_raw') }}
 
 ---
 
+## One-Time Backfill (Clean Break)
+
+`metadata/` files are not deleted — they stay in S3. But `crawl_manifest_raw` points at
+`manifests/`, so any run written before the cutover is invisible to the table.
+
+A one-time backfill script copies historical manifests into the new path and registers
+the Glue partitions so the table has continuous history from day one.
+
+**What the script does:**
+
+1. List all objects matching `bronze/{env}/crawls/metadata/{site}/{dt}/{run_id}/manifest.json`
+2. Copy each to `bronze/{env}/crawls/manifests/{site}/{dt}/{run_id}/data.json`
+3. Register a Glue partition for each `(env, site, dt)` triple
+
+**Caveat:** historical manifests pre-date the verification block, so `outcome`,
+`failure_reason`, and `verified_at` will be NULL for all backfilled rows. This is
+correct — outcomes were not recorded at the time. Filter with `WHERE verified_at IS NOT NULL`
+when you need verified-only data.
+
+**Script location:** `scripts/backfill_manifests.py` (to be written as part of this ticket)
+
+---
+
 ## Open Questions
 
-- [ ] Should `metadata/` dir be kept as-is for backwards compatibility, or fully
-      replaced by the new paths? (Backwards compat keeps both; clean break removes metadata writes)
-- [ ] Who owns the `crawl_manifest_raw` Glue table — this repo or scraper-pipeline?
+- [x] Should `metadata/` dir be kept as-is for backwards compatibility, or fully
+      replaced by the new paths? → **Clean break.** See One-Time Backfill above.
+- [x] Who owns the `crawl_manifest_raw` Glue table — this repo or scraper-pipeline? → **scraper-pipeline**, use `make` in that repo to create it.
+
+## From Tarik
+Make sure crawl_manifest_raw and silver_crawl_manifest dbt are written to scraper-pipeline

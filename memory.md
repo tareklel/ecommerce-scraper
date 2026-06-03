@@ -89,6 +89,18 @@
 - Bug 2: `ORDER BY dt DESC` in the ROW_NUMBER window used date-only precision, so two runs on the same day (e.g., one error, one ok) produced identical `dt` values and the winning row was non-deterministic. Fixed by changing to `ORDER BY run_id DESC`; `run_id` is `YYYY-MM-DDTHH-MM-SS-mmm` and sorts correctly within the same day.
 - The same two bugs exist in `scraper-pipeline/dbt/models/silver/silver_product_image_download_status.sql` and were fixed there in a parallel session.
 
+## 2026-06-03 - Implement and close crawl_observability; open crawl_quality_raw ticket
+- Fixed `crawl_manifest_raw` blank `raw_json`: Lambda now writes wrapper `{"run_id": "...", "raw_json": "<manifest string>"}` so JsonSerDe maps both columns correctly.
+- Fixed `backfill_manifests.py`: reads + wraps source manifest instead of raw S3 copy; fixed partition `Values` from `[env, site, dt]` → `[site, dt]` to match table's two-key schema.
+- Moved `tickets/crawl_observability.md` → `tickets/done/`.
+- Created `tickets/crawl_quality_raw.md`: covers Lambda reading `quality_report.json` and writing wrapper to `quality_reports/`, DDL + silver dbt model in scraper-pipeline, backfill script, and open question on whether to unnest violations into a separate model.
+
+## 2026-06-03 - Fix crawl_manifest_raw blank raw_json and add run_id column
+- Root cause: JsonSerDe maps JSON keys to column names — `raw_json STRING` was NULL because the manifest JSON has no `raw_json` key.
+- Lambda now writes a wrapper `{"run_id": "...", "raw_json": "<full verified manifest as JSON string>"}` to `manifests/.../data.json` so both columns map correctly.
+- DDL (`bronze_crawl_manifest_raw.sql` in scraper-pipeline) updated to add `run_id string` alongside `raw_json string`.
+- Backfill script updated to read+wrap rather than raw S3 copy, matching the new format.
+
 ## 2026-06-02 - scraper-pipeline: add crawl_manifest_raw DDL and silver_crawl_manifest dbt model
 - Added `sql/athena/bronze_crawl_manifest_raw.sql` in scraper-pipeline: external table with single `raw_json STRING` column, `PARTITIONED BY (site string, dt string)`, `LOCATION '__BRONZE_PREFIX__/crawls/manifests/'`.
 - Added `dbt/models/silver/silver_crawl_manifest.sql`: incremental model extracting run_id, crawler_name, exit_reason, start/finish time, duration, row_count, quality gate fields, and verification fields from `raw_json` via `json_extract_scalar`.
