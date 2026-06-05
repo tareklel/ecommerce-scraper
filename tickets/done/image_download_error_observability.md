@@ -1,6 +1,6 @@
 # Image Download Error Observability
 
-**Status:** draft — not reviewed
+**Status:** closed — implemented
 
 ## Problem
 
