@@ -1,6 +1,6 @@
 # Ticket: PLP Debug UI — Visual API Validator
 
-**Status: rumination — blocked on website description (see `tickets/website_description.md`)**
+**Status: ready for implementation**
 
 ## Purpose
 
@@ -117,7 +117,7 @@ natively via Tailwind, and produces a shareable artifact. The JS involved is
 │  │ Name     │  │ Name     │  │ Name     │  │ Name     │        │
 │  │ Brand    │  │ Brand    │  │ Brand    │  │ Brand    │        │
 │  │ Site     │  │ Site     │  │ Site     │  │ Site     │        │
-│  │ AED 850  │  │ AED 850  │  │ AED 850  │  │ AED 850  │        │
+│  │ SAR 850  │  │ SAR 850  │  │ SAR 850  │  │ SAR 850  │        │
 │  │ ~~1200~~ │  │          │  │ ~~1200~~ │  │          │        │
 │  │ -29%     │  │          │  │ -29%     │  │          │        │
 │  └──────────┘  └──────────┘  └──────────┘  └──────────┘        │
@@ -152,10 +152,13 @@ render in Arabic, filters remain in the same positions but text aligns right.
 ## Open Questions
 
 - [ ] Should the UI be committed to this repo or a separate `frontend` repo?
-      For MVP debug purposes, a `ui/` folder here is fine.
-- [ ] Pagination: infinite scroll or numbered pages? Numbered pages are simpler
-      and easier to debug (you can bookmark a specific page of results).
-- [ ] Should the language toggle show only the selected language or show bilingual
-      cards (en name + ar name stacked)? Stacked is more useful for data validation.
-- [ ] How to handle products with no image (`is_image_available = false`) —
-      hide them, show a placeholder, or show a "no image" badge?
+      For MVP debug purposes, a `ui/` folder here is fine — revisit when the real
+      frontend repo decision is made in `tickets/frontend_v0_discussion.md`.
+- [x] Pagination: numbered pages. Simpler to debug, bookmarkable.
+- [x] Language toggle: show bilingual stacked cards (Arabic name above, English below)
+      for data validation purposes. Arabic-first per product brief, so Arabic sits on top.
+      The real product will show single language; the debug UI shows both to surface gaps.
+- [x] Products with no image: show a placeholder (grey box with "no image" label), never
+      hide. Coverage gaps need to be visible for data validation.
+- [x] Default view: Arabic. Arabic is the primary language per product brief. The toggle
+      starts on AR; clicking EN switches the layout to LTR.

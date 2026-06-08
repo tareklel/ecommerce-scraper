@@ -1,6 +1,6 @@
 # Ticket: Frontend v0 — Design Discussion
 
-**Status: blocked on `tickets/website_description.md`**
+**Status: open for discussion — product brief complete, decisions below need owner input**
 
 ## Purpose
 
@@ -26,8 +26,13 @@ until the website description is written and this discussion has been resolved.
 - **Subfolder in `scraper-pipeline/` (`scraper-pipeline/frontend/`)** — probably
   wrong; that repo owns data models, not user-facing code.
 
-**Question to resolve:** Is the frontend a separate product with its own release
-cadence, or is it tightly coupled to data pipeline changes during v0?
+**From product brief:** The site is described as a standalone luxury discovery platform —
+this is a real product, not a data tool. A separate repo is the right long-term shape.
+For the debug UI phase (`tickets/plp_debug_ui.md`), a `ui/` folder in this repo is
+acceptable. Move to a dedicated repo before the first public URL is registered.
+
+**Question to resolve:** When exactly does the debug UI become the real product? At what
+point do we cut a new repo?
 
 ---
 
@@ -54,9 +59,15 @@ The choice depends on the website description. Some options:
 - Ceiling is low: no component reuse, no routing, manual state management
 - Right for the debug UI (`plp_debug_ui.md`), wrong for a shippable product
 
-**Question to resolve:** Is v0 a shippable product (→ Next.js) or an internal
-data validation tool (→ plain HTML from `plp_debug_ui.md`)? This hinges on the
-website description.
+**From product brief:** The site is a real product — clean, mobile-first, Arabic-first,
+closer to a luxury retailer than a data tool. Next.js is the right framework for
+production. Key requirements it handles: SSR for fast first load on mobile, `next-intl`
+for Arabic-first routing with RTL layout, SEO for product pages.
+
+The plain HTML debug UI (`tickets/plp_debug_ui.md`) comes first to validate data. Next.js
+is the framework for the real frontend that follows it.
+
+**Question to resolve:** JS/TS experience or contractor needed before Next.js build begins?
 
 ---
 
@@ -77,9 +88,16 @@ Proposed v0 scope, in order:
 Items 4 and 5 are not in scope until items 1–3 are stable and the data looks
 correct visually.
 
-**Question to resolve:** Does the website description change this order? For
-example, if the primary user action is "search for a specific item," then a
-search bar becomes a higher priority than a browsing PLP.
+**From product brief:** Browsing PLP is the primary action — users come to discover
+range and find deals, not to search for a specific item. Order is confirmed. No search
+bar at v0. PDP is in scope early (brief explicitly mentions product detail pages).
+
+Updated priority order:
+1. Debug UI with real data (`tickets/plp_debug_ui.md`) — validate data before designing
+2. CloudFront image serving (`tickets/image_serving.md`)
+3. Product API (`tickets/product_api.md`)
+4. PLP in Next.js — Arabic-first, mobile-first, new arrivals default, sale filter
+5. PDP — single product, retailer buy link, image; cross-site comparison is mid-term
 
 ---
 
@@ -117,17 +135,20 @@ to resolve first:
 
 | Prerequisite | Ticket | Status |
 |---|---|---|
-| Image CDN (CloudFront) | `tickets/image_serving.md` | blocked on description |
-| Product API (Lambda + cache export) | `tickets/product_api.md` | blocked on description |
+| Image CDN (CloudFront) | `tickets/image_serving.md` | ready for implementation |
+| Product API (Lambda + cache export) | `tickets/product_api.md` | ready for implementation |
 | Custom domain + SSL cert (ACM) | not yet written | needed before any public URL |
 | AWS account for frontend hosting | not yet written | Vercel is simpler for Next.js; S3+CloudFront for static |
 | CORS config on API | not yet written | needed for browser → API calls |
 | Auth / access control on API | not yet written | at minimum a shared key during dev |
 
-**Question to resolve:** Vercel vs AWS for frontend hosting? Vercel is near-zero
-config for Next.js and free at low traffic. AWS keeps everything in one account and
-avoids a third-party dependency. For a Gulf-focused product, AWS `me-central-1`
-(Bahrain) or `eu-central-1` (Frankfurt) origin may matter for latency.
+**From product brief:** SA-first, mobile-first, clean and fast. Latency to Saudi matters.
+CloudFront has edge nodes in Riyadh and Jeddah — an AWS-hosted static Next.js export
+served via CloudFront would have the best latency profile for the target audience.
+Vercel's edge network also covers the Gulf but adds a third-party dependency.
+
+**Question to resolve:** Preference for keeping everything in AWS vs Vercel's simpler
+Next.js deployment experience?
 
 ---
 

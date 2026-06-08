@@ -1,6 +1,6 @@
 # Ticket: Minimal Product Read API
 
-**Status: rumination — blocked on website description (see `tickets/website_description.md`)**
+**Status: ready for implementation**
 
 ## Goal
 
@@ -35,12 +35,14 @@ GET /products
   ?brand=gucci               (optional, canonical)
   ?category=shoes            (optional, canonical)
   ?subcategory=sneakers      (optional, canonical)
-  ?language=ar               (optional, en or ar)
+  ?language=ar               (optional, en or ar — Arabic is primary per product brief)
+  ?on_sale=true              (optional, filters to discounted products)
+  ?sort=new_arrivals         (default — confirmed from product brief; also: price_asc, price_desc)
   ?page=1&page_size=48
 ```
 
 Response: paginated list of product rows from `gold_product_serving_latest`,
-image URL constructed from `IMAGE_CDN_HOST + s3_blob_key`.
+currency in SAR (confirmed), image URL constructed from `IMAGE_CDN_HOST + s3_blob_key`.
 
 ---
 
@@ -147,7 +149,9 @@ dbt run completes
       but requires Athena output bucket permissions; boto3 scan is more portable.
 - [ ] Should the cache export be triggered by a dbt post-run hook or a separate
       EventBridge rule after the dbt ECS task exits?
-- [ ] Pagination in-memory (slice the list) or cursor-based? Cursor is more correct
-      but adds complexity; slice is fine for MVP catalogue sizes.
+- [ ] Pagination in-memory (slice the list) or cursor-based? Slice is fine for MVP
+      catalogue sizes; mobile-first suggests page_size=24 (2-column mobile grid) over 48.
 - [ ] Authentication on the API? Even a shared API key header to prevent public access
       during development.
+- [ ] `/filters` endpoint needed? The UI needs available brands/categories/subcategories
+      to populate dropdowns. Can be derived from the same snapshot cache at no extra cost.

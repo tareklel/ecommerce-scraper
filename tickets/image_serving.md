@@ -1,6 +1,6 @@
 # Ticket: Image Serving — CloudFront vs Presigned URLs
 
-**Status: rumination — blocked on website description (see `tickets/website_description.md`)**
+**Status: ready for implementation**
 
 ## Goal
 
@@ -89,7 +89,13 @@ be committed to any API or UI code.
 ## Open Questions
 
 - [ ] Custom domain (`images.{domain}`) now or placeholder CloudFront domain for MVP?
-- [ ] Should `bronze/images/by-hash/` remain in `eu-central-1` or move to a region
-      closer to the target audience (me-central-1 / Bahrain)?
-- [ ] Do we want image resizing at the CDN layer (CloudFront Functions or Lambda@Edge)
-      for thumbnails vs full-size? Not needed for MVP but worth plumbing for.
+      Domain name TBD per product brief — placeholder CloudFront domain is the MVP path;
+      upgrade to custom domain once the site name is chosen.
+- [x] S3 origin region: SA-first audience confirmed. CloudFront has edge nodes in Riyadh
+      and Jeddah, so `eu-central-1` origin is acceptable for MVP — edge caching absorbs
+      the latency gap. Migration to `me-central-1` (Bahrain) is a future consideration
+      if origin-miss latency becomes measurable.
+- [ ] Image resizing at CDN layer (CloudFront Functions or Lambda@Edge): mobile-first
+      requirement confirmed. Thumbnail variants (e.g. 400px width for PLP cards vs full
+      for PDP) are a near-term need once the mobile UI is built. Not needed for the debug
+      UI but worth designing the URL scheme for (e.g. `?w=400`) before the CDN is live.

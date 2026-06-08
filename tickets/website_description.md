@@ -1,6 +1,6 @@
 # Ticket: Website Description — Owner Input Required
 
-**Status: closed — see `context/product-brief.md`**
+**Status: done — superseded by `context/product-brief.md`**
 
 ## What This Is
 
