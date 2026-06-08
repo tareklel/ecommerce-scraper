@@ -120,3 +120,18 @@
 - Added Make helpers to fetch remote secret keys for local crawler runs, list secret keys without values, and update a single remote secret key without storing values in `.env` or Terraform state.
 - Added ignore coverage for `.env`/`env` variants and a JSON-to-shell export helper for safe local secret hydration.
 - Changed manifest status-code counts to include all observed Scrapy response status counters dynamically, including important statuses such as `403`.
+
+## 2026-06-05 - Add frontend planning tickets and close image download error observability
+- Moved `tickets/image_download_error_observability.md` → `tickets/done/` (implemented: reason, error_message, http_status now populated in download_log rows and logged per-failure at WARN).
+- Added `tickets/image_serving.md`: CloudFront vs presigned URLs rumination — recommends CloudFront; content-addressed keys allow infinite CDN TTL.
+- Added `tickets/product_api.md`: Lambda vs ECS API rumination — recommends Lambda with daily snapshot export from gold table to avoid per-request Athena latency.
+- Added `tickets/plp_debug_ui.md`: PLP debug UI spec — plain HTML + Tailwind recommended over Streamlit for RTL/Arabic support.
+- Added `tickets/website_description.md`: owner action required before frontend work begins.
+- Added `tickets/frontend_v0_discussion.md`: repo/framework/infra v0 discussion covering hosting, design process, and first priorities.
+- All three serving/API/UI tickets blocked on website_description.md.
+
+## 2026-06-08 - Establish product vision and reorganise project context
+- Completed product brief: Arabic-first luxury fashion discovery for Saudi Arabia/GCC, aspiring Saudi women buyers first, widest range available in Saudi as core value proposition, discovery/range identity (not cheapest-price messaging), mobile-first, clean like Farfetch, new arrivals default sort, sale surfaced via filters not front-and-centre, SAR pricing, mid-term: cross-site comparison + price alerts.
+- Moved `AGENTS.md` and `memory.md` into `context/`; added `context/product-brief.md`.
+- `CLAUDE.md` remains in root as a thin index pointing into `context/`.
+- Updated three frontend tickets (image_serving, product_api, plp_debug_ui) status to blocked on website description; website_description.md now superseded by product-brief.md.

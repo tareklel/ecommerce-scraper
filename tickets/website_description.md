@@ -1,6 +1,6 @@
 # Ticket: Website Description — Owner Input Required
 
-**Status: action required — owner (Tarik)**
+**Status: closed — see `context/product-brief.md`**
 
 ## What This Is
 

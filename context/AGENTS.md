@@ -1,0 +1,5 @@
+- We are building a luxury clothing price comparison website. See `context/product-brief.md` for the full product vision.
+- This repo manages crawler activity and Lambdas related to crawler activity.
+- After every commit, append a semi-concise summary of what changed to `context/memory.md`.
+- Write comments to explain intent, assumptions, and non-obvious logic. Keep comments concise and specific.
+- Before writing changes to files, first explain to me what you plan to do and then do changes once you get agreement.
