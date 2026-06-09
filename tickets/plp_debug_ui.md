@@ -4,105 +4,68 @@
 
 ## Purpose
 
-This is not the product. It is a visual sanity check for the API and data pipeline —
-the analogue of opening a spreadsheet to confirm the numbers look right, except the
-"spreadsheet" renders as a product listing page (PLP). The goal is to catch data
-problems (missing images, wrong prices, garbled Arabic text, broken discount math)
-that are invisible in raw JSON but obvious in a visual layout.
+Visual sanity check for the API and data pipeline before the real product is designed.
+The goal is to catch data problems — missing images, wrong prices, garbled Arabic text,
+broken discount math — that are invisible in raw JSON but obvious in a grid of product
+cards.
 
-Build this before building the real frontend. It removes the risk of discovering a
-broken data model only after a polished UI is already layered on top of it.
+Build this before designing the real PLP. It removes the risk of discovering a broken
+data model after a polished UI is layered on top of it. The debug UI code also becomes
+the foundation of the real PLP — no throwaway.
+
+---
+
+## Technology: Next.js
+
+**Not plain HTML.** The real product uses Next.js; starting here means the debug UI
+code graduates into the real PLP rather than being thrown away.
+
+Running locally: `npm run dev` → open `localhost:3000`. That is the entire dev loop.
+No cloud, no deployment. Hot-reload means changes appear in the browser immediately.
+
+This lives in the `price-comparison-web` repo (new, sibling to this repo in `../`).
+
+### Local images
+CloudFront is not needed to see images locally. Use presigned S3 URLs as a shortcut
+for dev sessions — they expire but that's fine when you're just looking at the data.
+Replace with CloudFront CDN URLs once `tickets/image_serving.md` is implemented.
 
 ---
 
 ## What It Shows
 
-Each product card displays:
-- Product name (in the selected language)
+Each product card:
+- Product name in Arabic (top) and English (below) — bilingual stacked for data validation
 - Brand (canonical)
-- Site name (e.g. `ounass`, `level-shoes`)
-- Price + currency
-- Price before discount (if discounted)
-- Discount percentage (if present)
-- Product image (from CDN)
+- Site name (`ounass`, `level-shoes`)
+- Price in SAR + currency
+- Price before discount struck through (if discounted)
+- Discount percentage badge (if present)
+- Product image
 - Link to original PDP (opens in new tab)
+
+Default view: Arabic (RTL layout). Language toggle switches to English (LTR).
 
 ---
 
 ## Interactions
 
 ### Language toggle
-Switch between `en` and `ar`. The toggle filters the API response to only show
-rows where `language = {selected}`. Arabic view should render RTL. This is the
-primary test for whether i18n data is correct — garbled names or missing Arabic
-rows are immediately visible.
+AR (default) / EN. Flips `dir` on the root element — entire layout mirrors.
+Both name variants are always present on the card; the toggle changes which is
+shown prominently vs dimmed.
 
 ### Top-bar filters (AND logic)
-Three dropdowns populated from the API response (or a `/filters` endpoint):
-- **Category** — canonical values from `category_canonical`
-- **Subcategory** — canonical values from `subcategory_canonical`, scoped to
-  selected category
-- **Brand** — canonical values from `brand_canonical`
+Three dropdowns populated from the API:
+- **Category** — `category_canonical`
+- **Subcategory** — `subcategory_canonical`, scoped to selected category
+- **Brand** — `brand_canonical`
 
-Selecting a filter re-fetches `/products` with the new query params. No client-side
-filtering — the API must handle it, so filters also validate API correctness.
+Filters re-fetch `/products` with updated query params. No client-side filtering —
+this validates the API, not just the UI.
 
-### Site toggle (optional for MVP)
-Checkbox or pill toggle per site (ounass / level-shoes) to isolate one site's data.
-
----
-
-## Technology Options
-
-### Option A: Streamlit
-
-Python-only, no HTML/CSS/JS knowledge required. Deploys with `streamlit run app.py`.
-
-**Strengths**
-- You already know Python — no context switch
-- A working PLP with filters and language toggle is ~150 lines of code
-- Built-in layout primitives (columns, sidebar, selectbox, image)
-- Fast iteration: change Python, browser refreshes
-
-**Weaknesses**
-- Looks like a data tool, not a product page — card layout and RTL rendering require
-  custom HTML components (`st.markdown` with unsafe HTML or `st.components.v1.html`)
-- Arabic RTL text needs a `direction: rtl` CSS override in an HTML component;
-  doable but not native
-- Not deployable as a production frontend — useful only for internal validation
-
-**When to choose:** If the goal is purely data validation and you want to be running
-within an hour, use Streamlit.
-
-### Option B: Plain HTML + Fetch (single file)
-
-A single `index.html` with vanilla JS `fetch()` calls to the API, Tailwind CSS via
-CDN for styling, no build step.
-
-**Strengths**
-- No build tools, no npm, no Node — open the file in a browser
-- Tailwind's `dir="rtl"` attribute handles Arabic layout correctly
-- Looks closer to a real PLP — product grid, card proportions, image sizing
-- Easier to evolve into the real frontend later (copy the card component into Next.js)
-- Zero new dependencies
-
-**Weaknesses**
-- Requires writing HTML and basic JS — unfamiliar territory, but the patterns are
-  mechanical (fetch → map → render cards) and easy to explain/generate
-
-**When to choose:** If the goal is to see something that looks like an actual product
-page and can be shared with a non-technical stakeholder, use this. The step from
-"data looks right" to "show someone else" is much smaller.
-
----
-
-## Recommendation
-
-**Option B (plain HTML)** for this use case. The RTL/Arabic requirement means
-Streamlit needs custom HTML components anyway, eliminating its main advantage.
-A single-file HTML approach gets you a grid that looks like a PLP, handles RTL
-natively via Tailwind, and produces a shareable artifact. The JS involved is
-`fetch → JSON.parse → template string` — generatable without prior JS experience.
+### Site toggle
+Pill toggle per site to isolate one site's data.
 
 ---
 
@@ -110,11 +73,12 @@ natively via Tailwind, and produces a shareable artifact. The JS involved is
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│  [Category ▼]  [Subcategory ▼]  [Brand ▼]          [EN] [AR]    │
+│  [Category ▼]  [Subcategory ▼]  [Brand ▼]          [AR] [EN]    │
 ├──────────────────────────────────────────────────────────────────┤
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐        │
 │  │  [img]   │  │  [img]   │  │  [img]   │  │  [img]   │        │
-│  │ Name     │  │ Name     │  │ Name     │  │ Name     │        │
+│  │ AR name  │  │ AR name  │  │ AR name  │  │ AR name  │        │
+│  │ EN name  │  │ EN name  │  │ EN name  │  │ EN name  │        │
 │  │ Brand    │  │ Brand    │  │ Brand    │  │ Brand    │        │
 │  │ Site     │  │ Site     │  │ Site     │  │ Site     │        │
 │  │ SAR 850  │  │ SAR 850  │  │ SAR 850  │  │ SAR 850  │        │
@@ -124,41 +88,39 @@ natively via Tailwind, and produces a shareable artifact. The JS involved is
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-Arabic mode: entire layout flips RTL (`<html dir="rtl">`), product name and brand
-render in Arabic, filters remain in the same positions but text aligns right.
+Arabic mode: full RTL, cards flow right-to-left, text aligns right.
+No-image products: grey placeholder box with "لا توجد صورة / no image" — never hidden.
 
 ---
 
 ## Acceptance Criteria
 
-- Grid renders product image, name, brand, site, price, discounted price (if applicable)
+- Grid renders bilingual product name, brand, site, SAR price, discounted price
 - Each card links to the original PDP
-- Language toggle switches between en/ar rows and flips layout direction
-- Category → subcategory → brand filters narrow the grid; clearing a filter widens it
-- Missing image shows a placeholder, not a broken image icon
-- Works locally by pointing `API_BASE_URL` at `http://localhost:8000`
+- AR toggle: RTL layout, Arabic name prominent; EN toggle: LTR, English prominent
+- Category → subcategory → brand filters narrow the grid
+- No-image products show placeholder, not broken icon
+- Runs locally at `localhost:3000` with API at `localhost:8000`
 
 ---
 
 ## Work Items
 
-| File | Change |
-|------|--------|
-| `ui/index.html` | New — single-file PLP debug UI |
-| `ui/README.md` | How to run locally (set API base URL, open in browser) |
+| File | Repo | Change |
+|------|------|--------|
+| `app/page.tsx` | `price-comparison-web` | PLP page — product grid, filter bar, language toggle |
+| `components/ProductCard.tsx` | `price-comparison-web` | Bilingual card component |
+| `components/FilterBar.tsx` | `price-comparison-web` | Category/subcategory/brand dropdowns |
+| `.env.local` | `price-comparison-web` | `NEXT_PUBLIC_API_BASE_URL=http://localhost:8000` |
 
 ---
 
-## Open Questions
+## Resolved Questions
 
-- [ ] Should the UI be committed to this repo or a separate `frontend` repo?
-      For MVP debug purposes, a `ui/` folder here is fine — revisit when the real
-      frontend repo decision is made in `tickets/frontend_v0_discussion.md`.
-- [x] Pagination: numbered pages. Simpler to debug, bookmarkable.
-- [x] Language toggle: show bilingual stacked cards (Arabic name above, English below)
-      for data validation purposes. Arabic-first per product brief, so Arabic sits on top.
-      The real product will show single language; the debug UI shows both to surface gaps.
-- [x] Products with no image: show a placeholder (grey box with "no image" label), never
-      hide. Coverage gaps need to be visible for data validation.
-- [x] Default view: Arabic. Arabic is the primary language per product brief. The toggle
-      starts on AR; clicking EN switches the layout to LTR.
+- [x] Framework: Next.js (not plain HTML) — debug code graduates to real product
+- [x] Language toggle: bilingual stacked cards (AR top, EN below) for data validation
+- [x] No-image: show placeholder, never hide
+- [x] Default view: Arabic (RTL)
+- [x] Pagination: numbered pages
+- [x] Images locally: presigned S3 URLs (dev shortcut, replaced by CloudFront later)
+- [x] Repo: `price-comparison-web` in `../`

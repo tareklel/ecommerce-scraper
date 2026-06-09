@@ -1,164 +1,121 @@
 # Ticket: Frontend v0 — Design Discussion
 
-**Status: open for discussion — product brief complete, decisions below need owner input**
-
-## Purpose
-
-This is a structured discussion, not an implementation ticket. The output is a
-set of decisions that unblock actual build work. Nothing here should be built
-until the website description is written and this discussion has been resolved.
+**Status: mostly resolved — two open items remain (domain, contractor timing)**
 
 ---
 
-## 1. Which Repo
+## Decisions Made
 
-**Options:**
+### Repo
+**`price-comparison-web` as a sibling repo in `../`.**
+The debug UI (`tickets/plp_debug_ui.md`) can live in `ui/` inside this repo temporarily,
+but the real Next.js product starts in its own repo from day one. No mixing with the
+scraper.
 
-- **New repo (`price-comparison-web` or similar)** — clean separation between
-  crawler infra and the frontend. Standard for a product that will have its own
-  deploy pipeline, CI, and contributors who don't need to touch the scraper.
-  Recommended if the frontend will eventually be a standalone product.
+### Framework
+**Next.js with static export, hosted on AWS (S3 + CloudFront).**
 
-- **Subfolder in this repo (`ui/`)** — lower friction during early prototyping,
-  single git history, easier to co-commit frontend and API changes. Becomes awkward
-  when the frontend team (or tools like Vercel) want to own the root of the repo.
+Static export means Next.js builds every page into plain HTML at build time. The result
+is a folder of files served by S3 + CloudFront — no running server, no Lambda, nothing
+computed per request. CloudFront edge nodes in Riyadh and Jeddah serve pre-built HTML
+to Saudi mobile users with sub-second load times. The site rebuilds daily after dbt runs.
+This is the right shape for a daily-refresh product catalogue.
 
-- **Subfolder in `scraper-pipeline/` (`scraper-pipeline/frontend/`)** — probably
-  wrong; that repo owns data models, not user-facing code.
+Vercel (the company behind Next.js) also runs a hosting platform that deploys Next.js
+with minimal config. It is not being used — it adds a third-party dependency to an
+otherwise AWS-native stack and offers no meaningful advantage given CloudFront already
+covers the Gulf.
 
-**From product brief:** The site is described as a standalone luxury discovery platform —
-this is a real product, not a data tool. A separate repo is the right long-term shape.
-For the debug UI phase (`tickets/plp_debug_ui.md`), a `ui/` folder in this repo is
-acceptable. Move to a dedicated repo before the first public URL is registered.
+Key Next.js capabilities this product needs:
+- `next-intl` for Arabic-first routing with RTL layout (`dir="rtl"` applied at the
+  locale level, not manually per component)
+- Static export for S3+CloudFront deployment
+- SEO: product pages need to be indexable (Arabic product names in `<title>` and meta)
+- Image optimisation: `next/image` with CloudFront as the loader
 
-**Question to resolve:** When exactly does the debug UI become the real product? At what
-point do we cut a new repo?
+Remix is not being used. Next.js is the right choice: more mature Arabic/RTL ecosystem,
+more contractors know it, better training data.
 
----
+Plain HTML + Tailwind is right for the **debug UI only** (`tickets/plp_debug_ui.md`).
 
-## 2. Which Coding Framework
+### Design Process
+**Build the debug UI in Next.js with real data first, then design.**
 
-The choice depends on the website description. Some options:
+The debug UI is not a throwaway — it uses Next.js (same as the real product) and lives
+in `price-comparison-web` from the start. Its cards and filter logic become the foundation
+of the real PLP. Figma is skipped: a luxury fashion PLP is a well-understood layout
+pattern and the unknowns are content questions (how long are Arabic names, what does
+SAR + discount look like, how much image coverage exists) answered by seeing real data,
+not by wireframing.
 
-**Next.js (React)**
-- Industry standard for content-heavy sites that need SEO (product pages get indexed)
-- Good RTL/i18n support via `next-intl` or built-in i18n routing
-- Can be statically exported (no server needed) or server-rendered (SSR for fast
-  first load)
-- Vercel deployment is near-zero config; AWS deployment via Lambda/ECS is more work
-- Requires JS/TS experience — if this is a constraint, the UI stays a debug tool
-  longer and a developer hire/contractor is needed before v0 launches
+### Hosting
+**AWS: S3 + CloudFront for the static Next.js export.**
+Same account, same Terraform patterns, CloudFront edge coverage in Riyadh and Jeddah.
+No new vendor relationships.
 
-**Remix**
-- Similar to Next.js, better data-loading model, strong server-rendering story
-- Smaller ecosystem than Next.js, less relevant to evaluate until framework choice
-  is narrowed
+### v0 Scope
+**PLP + PDP, in that order.** Confirmed by product brief.
+No search bar at v0. Browse-first (new arrivals default, category/brand filters).
+Cross-site product matching, price history, and alerts are mid-term.
 
-**Plain HTML + Tailwind (no framework)**
-- Zero build tooling, fast to prototype, easy to generate with AI assistance
-- Ceiling is low: no component reuse, no routing, manual state management
-- Right for the debug UI (`plp_debug_ui.md`), wrong for a shippable product
+### Contractor
+Zero JS experience is a real constraint but not an immediate blocker.
 
-**From product brief:** The site is a real product — clean, mobile-first, Arabic-first,
-closer to a luxury retailer than a data tool. Next.js is the right framework for
-production. Key requirements it handles: SSR for fast first load on mobile, `next-intl`
-for Arabic-first routing with RTL layout, SEO for product pages.
+What can be built without a contractor:
+- The plain HTML debug UI entirely
+- Next.js project setup, routing, API wiring, filter/pagination logic (generated)
+- Basic Tailwind responsive grid layout (generated)
 
-The plain HTML debug UI (`tickets/plp_debug_ui.md`) comes first to validate data. Next.js
-is the framework for the real frontend that follows it.
+Where a contractor is worth it:
+- Arabic typography: font selection (Cairo, IBM Plex Arabic, Noto Naskh) and
+  text rendering on mobile. Getting this wrong makes the site look non-native.
+- Luxury mobile UX feel: image loading, scroll behaviour, touch interactions.
+  The gap between "technically correct" and "feels like Farfetch" lives here.
+- RTL edge cases: bidirectional text, mixed AR/EN strings, filter drawer positioning.
 
-**Question to resolve:** JS/TS experience or contractor needed before Next.js build begins?
-
----
-
-## 3. First Priorities After Framework Decision
-
-Proposed v0 scope, in order:
-
-1. **PLP (product listing page)** — grid of products, filters (brand/category/
-   subcategory), language toggle (en/ar), links out to retailer
-2. **Image serving working end-to-end** — CloudFront CDN serving images from
-   `bronze/images/by-hash/` (see `tickets/image_serving.md`)
-3. **API working end-to-end** — `/products` endpoint serving the gold table
-   (see `tickets/product_api.md`)
-4. **Basic PDP (product detail page)** — single product, all available prices
-   across sites, image, buy links — this is the core value proposition
-5. **Search / brand browse** — find a specific item or browse by brand
-
-Items 4 and 5 are not in scope until items 1–3 are stable and the data looks
-correct visually.
-
-**From product brief:** Browsing PLP is the primary action — users come to discover
-range and find deals, not to search for a specific item. Order is confirmed. No search
-bar at v0. PDP is in scope early (brief explicitly mentions product detail pages).
-
-Updated priority order:
-1. Debug UI with real data (`tickets/plp_debug_ui.md`) — validate data before designing
-2. CloudFront image serving (`tickets/image_serving.md`)
-3. Product API (`tickets/product_api.md`)
-4. PLP in Next.js — Arabic-first, mobile-first, new arrivals default, sale filter
-5. PDP — single product, retailer buy link, image; cross-site comparison is mid-term
+**Plan:** no contractor until after the debug UI is working with real data. At that
+point, 2–3 weeks with someone who knows Next.js + Arabic RTL to build the visual shell.
+After that, the codebase is maintainable and extendable going forward.
 
 ---
 
-## 4. How to Design Before Deployment
+## Priority Order
 
-Options for validating the design before writing production code:
-
-**a. Figma / hand-drawn wireframes**
-Walk through the key screens (PLP, PDP, search results) as static mocks before
-writing any HTML. Cheap to change, easy to share. Requires either Figma experience
-or a designer. Good fit if you want to agree on layout and hierarchy before coding.
-
-**b. v0.dev (AI UI generator)**
-Describe the page in plain English, get a React component back. Fast way to get
-a visual starting point with no design skills. Output is usable code, not just a
-mock. Useful for the PLP layout and card design specifically.
-
-**c. Build the debug UI first (`plp_debug_ui.md`)**
-Wire up real data before designing anything. See what the actual product catalogue
-looks like in a grid — real product names, real prices, real images — then design
-around the real content rather than placeholder text. This often surfaces surprises
-(very long Arabic names, large price ranges, sparse image coverage) that invalidate
-a design made in isolation.
-
-**Recommendation:** Option c first (debug UI with real data), then option b (v0.dev
-for the visual shell), then refine in code. Avoids designing for data that doesn't
-match reality.
+1. Create `price-comparison-web` repo, scaffold Next.js with static export + `next-intl`
+2. Product API running locally (`tickets/product_api.md` — local first, cloud later)
+3. Debug UI in Next.js (`tickets/plp_debug_ui.md`) — real data, local browser
+4. CloudFront image serving (`tickets/image_serving.md`) — presigned URLs for local dev,
+   CloudFront before public URL
+5. PLP polish in Next.js — Arabic-first, mobile-first, new arrivals default, sale filter
+6. PDP — product image, name, price, retailer buy link; cross-site comparison is mid-term
 
 ---
 
-## 5. Underlying Infrastructure to Set Up
+## Infrastructure Prerequisites
 
-Prerequisites before any frontend can go live. These are the tickets/discussions
-to resolve first:
+To **see the site in a local browser** (no cloud needed):
+
+| Prerequisite | Notes |
+|---|---|
+| Product API on `localhost:8000` | FastAPI reading from a local JSON snapshot of the gold table |
+| CORS: allow `localhost:3000` | One line in FastAPI dev config |
+| Images: presigned S3 URLs | Acceptable shortcut for dev sessions — no new infra |
+
+To **put the site on a public URL** (cloud work):
 
 | Prerequisite | Ticket | Status |
 |---|---|---|
 | Image CDN (CloudFront) | `tickets/image_serving.md` | ready for implementation |
-| Product API (Lambda + cache export) | `tickets/product_api.md` | ready for implementation |
-| Custom domain + SSL cert (ACM) | not yet written | needed before any public URL |
-| AWS account for frontend hosting | not yet written | Vercel is simpler for Next.js; S3+CloudFront for static |
-| CORS config on API | not yet written | needed for browser → API calls |
-| Auth / access control on API | not yet written | at minimum a shared key during dev |
-
-**From product brief:** SA-first, mobile-first, clean and fast. Latency to Saudi matters.
-CloudFront has edge nodes in Riyadh and Jeddah — an AWS-hosted static Next.js export
-served via CloudFront would have the best latency profile for the target audience.
-Vercel's edge network also covers the Gulf but adds a third-party dependency.
-
-**Question to resolve:** Preference for keeping everything in AWS vs Vercel's simpler
-Next.js deployment experience?
+| Product API deployed (Lambda) | `tickets/product_api.md` | ready for implementation |
+| S3 bucket + CloudFront for frontend static files | not yet written | |
+| Custom domain + SSL cert (ACM) | not yet written | blocked on domain name |
+| CORS config on deployed API | not yet written | |
+| API auth (shared key) | not yet written | |
 
 ---
 
-## Discussion Output Required
+## Remaining Open Items
 
-Before any code is written, this ticket should produce written decisions on:
-
-- [ ] Repo location
-- [ ] Framework
-- [ ] v0 scope (PLP only, or PLP + PDP)
-- [ ] Design process (wireframes / v0.dev / debug-first)
-- [ ] Hosting (Vercel vs AWS)
-- [ ] Domain name
+- [ ] Domain name — TBD; needed before ACM cert and CloudFront custom domain are set up
+- [ ] Contractor timing — after debug UI confirms data quality, before Next.js visual
+      shell is built; scope: Arabic RTL polish + luxury mobile UX, ~2–3 weeks
