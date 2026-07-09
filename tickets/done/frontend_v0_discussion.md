@@ -60,6 +60,6 @@ All active work is now in `../price-comparison-web/tickets/`:
 | PDP | `pdp.md` |
 | Frontend hosting and deployment | `frontend_hosting.md` |
 | API auth and CORS | `api_auth_cors.md` |
-| Image CDN | `../ecommerce-scraper/tickets/image_serving.md` |
+| Image CDN | `../price-comparison-web/tickets/image_serving.md` |
 
 Remaining open: domain name, contractor timing.
