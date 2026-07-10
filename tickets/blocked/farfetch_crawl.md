@@ -1,6 +1,8 @@
 # Ticket: Farfetch Crawler — JSON-LD Extraction
 
-**Status: draft — probe validated 2026-07-06**
+**Status: blocked — not possible now**
+
+**Blocker**: Farfetch uses Akamai WAF. Only Zyte `browserHtml: True` gets through — `httpResponseBody` returns 520 even via Zyte's proxy. `browserHtml` is prohibitively expensive at crawl scale. Revisit if Zyte session reuse or a cheaper anti-bot bypass becomes viable.
 
 ## Goal
 
@@ -146,11 +148,6 @@ PLP seed URL format (from breadcrumb data):
 - Brand listing: `/ae/shopping/women/{brand-slug}/items.aspx`
 - Category: `/ae/shopping/women/{brand-slug}/{category-slug}-{id}/items.aspx`
 
-Note: generic category PLPs (e.g. `/ae/shopping/women/bags-1/items.aspx`) return 404
-as of 2026-07. Use brand-level PLPs as seeds. The crawl registry stores valid PLPs
-so this only affects the initial seed list. Validate CSV seeds before use
-(`resources/farfetch_urls.csv` uses `tops-1` format — may also be stale).
-
 ---
 
 ## Language Handling
@@ -206,15 +203,24 @@ canonical mapping of Arabic names, and whether Arabic is a separate run or a
 
 ## Zyte Configuration
 
-PDPs: `browserHtml: True` required (JS executes before JSON-LD is injected).
-PLPs: `httpResponseBody` may be sufficient — to validate.
+### `browserHtml: True` is required — confirmed
+
+Farfetch uses Akamai WAF. Tested 2026-07-10:
+- Direct curl → 478 bytes, "Access Denied" (Akamai hard block)
+- `httpResponseBody` via Zyte → HTTP 520 (Akamai blocked the plain HTTP request even through Zyte's proxy)
+- `browserHtml: True` via Zyte → 304K chars, full PDP with JSON-LD ✓
+
+There is no cheaper path. `browserHtml` is the only Zyte mode that carries enough
+browser fingerprinting to get past Akamai on Farfetch.
+
+**Cost mitigation options to explore separately:**
+- Zyte `actions` + session reuse (one browser session across multiple PDPs)
+- Batch/async API calls to parallelise and reduce wall-clock cost
+- Cache raw HTML S3 blobs and skip re-crawl when price/stock hasn't changed
 
 ```python
-# PDP
+# PDP and PLP — both require browserHtml
 "zyte_api": {"browserHtml": True, "geolocation": "AE"}
-
-# PLP — try httpResponseBody first; fall back to browserHtml if ItemList absent
-"zyte_api": {"httpResponseBody": True, "httpResponseHeaders": True, "geolocation": "AE"}
 ```
 
 ---

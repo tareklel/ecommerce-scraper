@@ -30,15 +30,43 @@ DEFAULT_PDP = "https://www.farfetch.com/ae/shopping/women/toteme-square-toe-leat
 DEFAULT_PLP = "https://www.farfetch.com/ae/shopping/women/toteme/items.aspx"
 
 
-def fetch_rendered(url: str, api_key: str, timeout: int = 90) -> str:
-    resp = requests.post(
-        ZYTE_API_URL,
-        auth=(api_key, ""),
-        json={"url": url, "browserHtml": True},
-        timeout=timeout,
-    )
-    resp.raise_for_status()
-    return resp.json()["browserHtml"]
+def fetch_page(url: str, api_key: str, mode: str = "browser", timeout: int = 90) -> str:
+    """Fetch a page via Zyte API.
+
+    mode="browser"  → browserHtml: True  (JS rendered, expensive)
+    mode="http"     → httpResponseBody   (SSR only, ~5-10x cheaper)
+    """
+    if mode == "http":
+        resp = requests.post(
+            ZYTE_API_URL,
+            auth=(api_key, ""),
+            json={"url": url, "httpResponseBody": True, "httpResponseHeaders": True},
+            timeout=timeout,
+        )
+        if resp.status_code == 520:
+            raise RuntimeError(
+                "Zyte returned 520 — target WAF blocked the plain HTTP request. "
+                "Farfetch requires browserHtml (full browser) to bypass Akamai. "
+                "Re-run without --mode http."
+            )
+        resp.raise_for_status()
+        data = resp.json()
+        if data.get("status") == 429:
+            raise RuntimeError("Zyte rate limit hit — wait and retry")
+        import base64
+        return base64.b64decode(data.get("httpResponseBody", "")).decode("utf-8", errors="replace")
+    else:
+        resp = requests.post(
+            ZYTE_API_URL,
+            auth=(api_key, ""),
+            json={"url": url, "browserHtml": True},
+            timeout=timeout,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        if data.get("status") == 429:
+            raise RuntimeError("Zyte rate limit hit — wait and retry")
+        return data["browserHtml"]
 
 
 def extract_jsonld_blocks(html: str) -> list[dict]:
@@ -141,6 +169,8 @@ def main():
     parser.add_argument("--url", default=DEFAULT_PDP, help="Farfetch PDP URL to probe")
     parser.add_argument("--dump-jsonld", action="store_true", help="Print raw JSON-LD blocks")
     parser.add_argument("--probe-plp", action="store_true", help="Also probe the default PLP for ItemList")
+    parser.add_argument("--mode", choices=["browser", "http"], default="browser",
+                        help="browser=browserHtml (expensive) | http=httpResponseBody (cheap, SSR only)")
     args = parser.parse_args()
 
     api_key = os.environ.get("ZYTE_API_KEY", "").strip()
@@ -148,8 +178,8 @@ def main():
         sys.exit("ZYTE_API_KEY is not set.")
 
     # --- PDP probe ---
-    print(f"Fetching PDP: {args.url}")
-    html = fetch_rendered(args.url, api_key)
+    print(f"Fetching PDP [{args.mode}]: {args.url}")
+    html = fetch_page(args.url, api_key, mode=args.mode)
     print(f"Got {len(html):,} chars")
 
     title_m = re.search(r'<title>(.*?)</title>', html)
@@ -197,7 +227,7 @@ def main():
     # --- PLP probe (optional) ---
     if args.probe_plp:
         print(f"\n\nFetching PLP: {DEFAULT_PLP}")
-        plp_html = fetch_rendered(DEFAULT_PLP, api_key)
+        plp_html = fetch_page(DEFAULT_PLP, api_key, mode=args.mode)
         print(f"Got {len(plp_html):,} chars")
         plp_blocks = extract_jsonld_blocks(plp_html)
         print(f"JSON-LD blocks: {len(plp_blocks)} ({[b.get('@type') for b in plp_blocks]})")
