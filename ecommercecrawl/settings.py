@@ -15,6 +15,7 @@ BOT_NAME = 'ecommercecrawl'
 FARFETCH_URLS_PATH = "resources/farfetch_urls.csv"
 OUNASS_URLS_PATH = "resources/ounass_urls.csv"
 LEVEL_URLS_PATH = "resources/level_urls.csv"
+BLOOMINGDALES_URLS_PATH = "resources/bloomingdales_urls.csv"
 
 
 
