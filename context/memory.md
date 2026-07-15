@@ -130,6 +130,14 @@
 - Added `tickets/frontend_v0_discussion.md`: repo/framework/infra v0 discussion covering hosting, design process, and first priorities.
 - All three serving/API/UI tickets blocked on website_description.md.
 
+## 2026-07-15 - `fabadb0` - Add Bloomingdales.sa crawl ticket, site methodology, and product schema
+- Added `context/crawling_methodology.md`: reusable phase-by-phase guide for onboarding new sites — WAF/SSR probe, API discovery, data source priority, raw HTML vs extract-on-crawl decision, language derivation, pagination types, and implementation file checklist.
+- Added `ecommercecrawl/constants/product_schema.py`: site-agnostic canonical field contract with per-field type, required flag, and description; `REQUIRED_FIELDS`/`OPTIONAL_FIELDS` frozensets for quality checks and LLM evaluation.
+- Added `tickets/bloomingdales_crawl.md`: implementation-ready ticket after live probe (2026-07-15). Platform: SFCC (Demandware). No Zyte needed — Cloudflare present but not blocking. Language: `bloomingdales.sa`=AR, `en.bloomingdales.sa`=EN (subdomain). PLP: SSR HTML (48 items, `data-pid` extraction) + `Search-UpdateGrid` API for pagination (`?cgid=...&start=N&sz=48`). PDP: JSON-LD `@type=Product` with name/brand/sku/price/SAR/availability/6 images; category from DOM microdata breadcrumbs (position 3/4); `portal_itemid` from URL PID suffix (e.g. `BAG219542223xBLK`).
+- Added `scripts/probe_bloomingdales.py`: feasibility probe (6/6 checks passed). `--en` flag for English subdomain.
+- Added `resources/bloomingdales_urls.csv`: EN + AR PLP seeds for bags/shoes/clothing categories plus one EN/AR PDP for smoke testing.
+- Moved Farfetch crawl ticket to `tickets/blocked/` — Akamai WAF blocks httpResponseBody even via Zyte; browserHtml only viable mode but prohibitively expensive at scale.
+
 ## 2026-06-08 - Establish product vision and reorganise project context
 - Completed product brief: Arabic-first luxury fashion discovery for Saudi Arabia/GCC, aspiring Saudi women buyers first, widest range available in Saudi as core value proposition, discovery/range identity (not cheapest-price messaging), mobile-first, clean like Farfetch, new arrivals default sort, sale surfaced via filters not front-and-centre, SAR pricing, mid-term: cross-site comparison + price alerts.
 - Moved `AGENTS.md` and `memory.md` into `context/`; added `context/product-brief.md`.
