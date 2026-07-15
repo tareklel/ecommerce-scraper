@@ -130,6 +130,15 @@
 - Added `tickets/frontend_v0_discussion.md`: repo/framework/infra v0 discussion covering hosting, design process, and first priorities.
 - All three serving/API/UI tickets blocked on website_description.md.
 
+## 2026-07-15 - `103b588` - Implement Bloomingdales.sa spider
+- Spider implemented: constants/bloomingdales_constants.py, rules/bloomingdales_rules.py, spiders/bloomingdales_crawl.py.
+- Platform confirmed SFCC (Demandware). No Zyte needed; Cloudflare does not block.
+- PLP pagination: first page SSR HTML (48 items) + SFCC Search-UpdateGrid API for pages 2+, stop when response has 0 PDP hrefs.
+- PDP extraction: JSON-LD @type=Product (name/brand/price/SAR/availability/images) + DOM microdata breadcrumbs (position 2=gender, 3=category, 4=subcategory). Color from URL PID suffix (`BAG219542223xBLK` → `Black`).
+- Multiple color variants: each gets its own PLP tile + href, harvested naturally — no special handling needed.
+- Smoke: 19 items, 0 errors, quality_gate=pass.
+- Quality gate exclusions added for bloomingdales (color, sizes, price_discount, primary_label).
+
 ## 2026-07-15 - `fabadb0` - Add Bloomingdales.sa crawl ticket, site methodology, and product schema
 - Added `context/crawling_methodology.md`: reusable phase-by-phase guide for onboarding new sites — WAF/SSR probe, API discovery, data source priority, raw HTML vs extract-on-crawl decision, language derivation, pagination types, and implementation file checklist.
 - Added `ecommercecrawl/constants/product_schema.py`: site-agnostic canonical field contract with per-field type, required flag, and description; `REQUIRED_FIELDS`/`OPTIONAL_FIELDS` frozensets for quality checks and LLM evaluation.
