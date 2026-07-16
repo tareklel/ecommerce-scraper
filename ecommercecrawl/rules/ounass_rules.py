@@ -200,7 +200,9 @@ def _parse_tab_html(raw_html: str) -> tuple[str | None, list[str] | None]:
     def clean(s: str) -> str:
         s = re.sub(r'<[^>]+>', ' ', s)
         s = html_mod.unescape(re.sub(r'\s+', ' ', s).strip())
-        return s.replace('\xa0', '').replace('\u200f', '').strip()
+        s = s.replace('\xa0', '').replace('\u200f', '').strip()
+        # Ounass inlines bullet glyphs as text (e.g. "\u2022 \u0627\u0644\u0644\u0648\u0646: \u0623\u0632\u0631\u0642")
+        return re.sub(r'^[\u2022\u00b7\-]\s*', '', s).strip()
 
     paras = re.findall(r'<p[^>]*>(.*?)</p>', raw_html, re.DOTALL | re.IGNORECASE)
     prose_parts = [clean(p) for p in paras]

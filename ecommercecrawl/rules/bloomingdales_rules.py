@@ -147,27 +147,32 @@ def _li_texts(ul_html: str) -> list[str]:
     return result
 
 
+_DETAILS_LABEL_RE = re.compile(
+    r'<b>(?:Details\s*(?:&amp;|&)\s*Care|التفاصيل[^<]*)</b>',
+    re.IGNORECASE,
+)
+
 def _extract_details_and_care(html: str) -> list[str] | None:
-    # <b>Details & Care</b> immediately followed by <ul> in the body HTML
-    m = re.search(
-        r'<b>Details\s*(?:&amp;|&)\s*Care</b>\s*(<ul>.*?</ul>)',
-        html, re.DOTALL | re.IGNORECASE,
-    )
+    # EN: <b>Details & Care</b>  |  AR: <b>التفاصيل وإرشادات العناية:</b>
+    # SFCC may omit </ul>, so use a character window rather than relying on </ul>.
+    m = _DETAILS_LABEL_RE.search(html)
     if not m:
         return None
-    result = _li_texts(m.group(1))
+    chunk = html[m.end():m.end() + 800]
+    result = _li_texts(chunk)
     return result or None
 
 
 def _extract_size_fit(html: str) -> list[str] | None:
-    # #pdp-sizeandfit accordion section
-    m = re.search(
-        r'id=["\']pdp-sizeandfit["\'][^>]*>.*?(<ul>.*?</ul>)',
-        html, re.DOTALL | re.IGNORECASE,
-    )
+    # Locate #pdp-sizeandfit, then grab <li> items within a tight window.
+    # SFCC renders the <ul> without a closing </ul> on some products, so we
+    # must not rely on </ul> as a terminator — a character window is safer.
+    m = re.search(r'id=["\']pdp-sizeandfit["\']', html, re.IGNORECASE)
     if not m:
         return None
-    result = _li_texts(m.group(1))
+    # 800 chars is enough for ~15 dimension lines but stops well before any nav.
+    chunk = html[m.start():m.start() + 800]
+    result = _li_texts(chunk)
     return result or None
 
 
