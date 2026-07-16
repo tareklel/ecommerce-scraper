@@ -1,8 +1,8 @@
+import html as html_mod
 import json
 import re
 import logging
 from ecommercecrawl.constants.ounass_constants import TLD_LANGUAGE_MAP
-from html.parser import HTMLParser
 from urllib.parse import urlparse
 
 SOLD_OUT_LABELS_NORMALIZED = {
@@ -191,35 +191,43 @@ def get_image_url(state):
         return None
     
 
-class HTMLCleaner(HTMLParser):
-    def __init__(self):
-        super().__init__()
-        self.text = []
-
-    def handle_data(self, data):
-        self.text.append(data)
-
-    def get_cleaned_text(self):
-        text = ''.join(self.text).replace('\n', ' ')
-        text = text.replace('\xa0', '').replace('\u200f', '')
-        return text
-
 def get_language(url):
     return TLD_LANGUAGE_MAP.get(url.split('https://')[-1].split('/')[0], None)
 
-def extract_product_details(state):
-    design_details = [x['html'] for x in state['pdp']['contentTabs'] if x['tabId'] == 'designDetails'][0]
-    size_fit = [x['html'] for x in state['pdp']['contentTabs'] if x['tabId'] == 'sizeAndFit'][0]
 
-    cleaner = HTMLCleaner()
-    cleaner.feed(design_details)
-    design_details_cleaned = cleaner.get_cleaned_text()
+def _parse_tab_html(raw_html: str) -> tuple[str | None, list[str] | None]:
+    """Return (prose, bullets) from an HTML tab blob."""
+    def clean(s: str) -> str:
+        s = re.sub(r'<[^>]+>', ' ', s)
+        s = html_mod.unescape(re.sub(r'\s+', ' ', s).strip())
+        return s.replace('\xa0', '').replace('\u200f', '').strip()
 
-    cleaner = HTMLCleaner()
-    cleaner.feed(size_fit)
-    size_fit_cleaned = cleaner.get_cleaned_text()
+    paras = re.findall(r'<p[^>]*>(.*?)</p>', raw_html, re.DOTALL | re.IGNORECASE)
+    prose_parts = [clean(p) for p in paras]
+    prose = ' '.join(t for t in prose_parts if t) or None
 
-    return {"design_details": design_details_cleaned, "size_fit": size_fit_cleaned}
+    lis = re.findall(r'<li[^>]*>(.*?)</li>', raw_html, re.DOTALL | re.IGNORECASE)
+    bullets = [clean(li) for li in lis]
+    bullets = [b for b in bullets if b] or None
+
+    return prose, bullets
+
+
+def extract_product_details(state) -> dict:
+    tabs = {x['tabId']: x['html'] for x in state['pdp']['contentTabs']}
+
+    design_html = tabs.get('designDetails', '')
+    size_html = tabs.get('sizeAndFit', '')
+
+    desc, detail_bullets = _parse_tab_html(design_html)
+    size_prose, size_bullets = _parse_tab_html(size_html)
+
+    # size_fit: prefer bullets; fall back to wrapping prose as single-item list
+    size_fit: list[str] | None = size_bullets
+    if not size_fit and size_prose:
+        size_fit = [size_prose]
+
+    return {'description': desc, 'details': detail_bullets, 'size_fit': size_fit}
 
 
 def get_data(state):

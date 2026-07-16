@@ -136,6 +136,41 @@ def _strip_html(raw: str | None) -> str | None:
     return re.sub(r'\s+', ' ', text).strip() or None
 
 
+def _li_texts(ul_html: str) -> list[str]:
+    items = re.findall(r'<li[^>]*>(.*?)</li>', ul_html, re.DOTALL | re.IGNORECASE)
+    result = []
+    for li in items:
+        text = re.sub(r'<[^>]+>', ' ', li)
+        text = html_module.unescape(re.sub(r'\s+', ' ', text).strip())
+        if text:
+            result.append(text)
+    return result
+
+
+def _extract_details_and_care(html: str) -> list[str] | None:
+    # <b>Details & Care</b> immediately followed by <ul> in the body HTML
+    m = re.search(
+        r'<b>Details\s*(?:&amp;|&)\s*Care</b>\s*(<ul>.*?</ul>)',
+        html, re.DOTALL | re.IGNORECASE,
+    )
+    if not m:
+        return None
+    result = _li_texts(m.group(1))
+    return result or None
+
+
+def _extract_size_fit(html: str) -> list[str] | None:
+    # #pdp-sizeandfit accordion section
+    m = re.search(
+        r'id=["\']pdp-sizeandfit["\'][^>]*>.*?(<ul>.*?</ul>)',
+        html, re.DOTALL | re.IGNORECASE,
+    )
+    if not m:
+        return None
+    result = _li_texts(m.group(1))
+    return result or None
+
+
 def extract_color(html: str, url: str) -> str | None:
     pid = extract_pid(url) or ''
     # extract_pid uppercases the whole PID, so separator is 'X'
@@ -208,7 +243,11 @@ def extract_product(response) -> dict:
         'currency':      offers.get('priceCurrency'),
         'out_of_stock':  'OutOfStock' in (offers.get('availability') or ''),
         'image_urls':    [img for img in images if img],
-        'text':          _strip_html(product.get('description')),
+        'text': {
+            'description': _strip_html(product.get('description')),
+            'details':     _extract_details_and_care(html),
+            'size_fit':    _extract_size_fit(html),
+        },
         'color':         extract_color(html, url),
         'sizes':         extract_sizes(html),
         'price_discount': extract_price_discount(html),

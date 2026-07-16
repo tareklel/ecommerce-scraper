@@ -143,15 +143,16 @@ PRODUCT_SCHEMA = {
     },
     # ---- Text ----
     "text": {
-        "type": "dict | str | None",
+        "type": "dict | None",
         "required": False,
         "description": (
-            "Rich product description / details text. "
-            "For structured content (e.g. Ounass): dict with string keys, "
-            "e.g. {'design_details': '...', 'size_fit': '...'}. "
-            "For simpler sites: plain string. "
-            "Used downstream by LLMs for product understanding and quality evaluation. "
-            "Include materials, care instructions, dimensions if available."
+            "Structured product copy, always a dict with three optional slots: "
+            "{'description': str | None, 'details': list[str] | None, 'size_fit': list[str] | None}. "
+            "'description' is the prose flavor paragraph. "
+            "'details' is a list of material/care/composition bullet strings. "
+            "'size_fit' is a list of dimension/fit bullet strings. "
+            "Any slot may be None if the site does not provide that content. "
+            "Used downstream by the website for structured rendering and by LLMs for quality evaluation."
         ),
     },
 }

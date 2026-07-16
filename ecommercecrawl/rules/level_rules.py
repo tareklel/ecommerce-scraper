@@ -131,31 +131,42 @@ def get_primary_label_from_item(x):
 def _norm_ws(s: str) -> str:
     return re.sub(r"\s+", " ", (s or "")).strip()
 
-def extract_product_details(response):
-    accordion_nodes = response.xpath(
-    '//div[contains(@class,"accordion-root")]'
-    '[.//button//*[normalize-space()="Product Details" or normalize-space()="تفاصيل المنتج"]]'
+def extract_product_details(response) -> dict:
+    description = None
+    details = None
+    size_fit = None
+
+    # Product Details accordion
+    pd_nodes = response.xpath(
+        '//div[contains(@class,"accordion-root")]'
+        '[.//button//*[normalize-space()="Product Details" or normalize-space()="تفاصيل المنتج"]]'
     )
-    if not accordion_nodes:
-        return ""
-    root = accordion_nodes[0]
+    if pd_nodes:
+        root = pd_nodes[0]
+        # Prose from <p> tags
+        p_texts = [_norm_ws(t) for t in root.css('div.accordion-details-root > p::text').getall()]
+        desc = _norm_ws(' '.join(t for t in p_texts if t))
+        if desc:
+            description = desc
+        # Bullets from <ul data-testid="lineitems"> <li>
+        bullets = [_norm_ws(li) for li in root.css('ul[data-testid="lineitems"] li::text').getall()]
+        bullets = [b for b in bullets if b]
+        if bullets:
+            details = bullets
 
-    detail_fragments = [
-        text for text in root.css('div.accordion-details-root > p::text').getall()
-        if text is not None
-    ]
-    details_text = _norm_ws(" ".join(detail_fragments))
+    # Size and Fit accordion
+    sf_nodes = response.xpath(
+        '//div[contains(@class,"accordion-root")]'
+        '[.//button//*[normalize-space()="Size and Fit" or normalize-space()="المقاس والملاءمة"]]'
+    )
+    if sf_nodes:
+        root = sf_nodes[0]
+        bullets = [_norm_ws(li) for li in root.css('ul li::text').getall()]
+        bullets = [b for b in bullets if b]
+        if bullets:
+            size_fit = bullets
 
-    bullets = []
-    for li in root.css('ul[data-testid="lineitems"] li::text').getall():
-        cleaned = _norm_ws(li)
-        if cleaned:
-            bullets.append(cleaned)
-
-    if details_text:
-        bullets.append(details_text)
-
-    return bullets
+    return {'description': description, 'details': details, 'size_fit': size_fit}
 
 
 SKU_REGEX = re.compile(
