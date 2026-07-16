@@ -230,18 +230,27 @@ def _parse_tab_html(raw_html: str) -> tuple[str | None, list[str] | None]:
 def extract_product_details(state) -> dict:
     tabs = {x['tabId']: x['html'] for x in state['pdp']['contentTabs']}
 
+    # Editor's description — dedicated 'description' tab or descriptionText field
+    desc_html = tabs.get('description', '')
+    _, desc_bullets = _parse_tab_html(desc_html)
+    # The description tab uses the same multi-<p> format; join as prose string
+    description: str | None = None
+    if desc_bullets:
+        description = ' '.join(desc_bullets)
+    if not description:
+        description = (state['pdp'].get('descriptionText') or '').strip() or None
+
     design_html = tabs.get('designDetails', '')
     size_html = tabs.get('sizeAndFit', '')
 
-    desc, detail_bullets = _parse_tab_html(design_html)
+    _, detail_bullets = _parse_tab_html(design_html)
     size_prose, size_bullets = _parse_tab_html(size_html)
 
-    # size_fit: prefer bullets; fall back to wrapping prose as single-item list
     size_fit: list[str] | None = size_bullets
     if not size_fit and size_prose:
         size_fit = [size_prose]
 
-    return {'description': desc, 'details': detail_bullets, 'size_fit': size_fit}
+    return {'description': description, 'details': detail_bullets, 'size_fit': size_fit}
 
 
 def get_data(state):

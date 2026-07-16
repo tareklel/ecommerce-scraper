@@ -5,11 +5,18 @@ from urllib.parse import urlparse
 
 from ecommercecrawl.constants import bloomingdales_constants as constants
 
-# Matches the PID suffix: -BAG219542223xBLK.html or -ACC123456xLight___PastelPink.html
-_PDP_RE = re.compile(r'-([A-Z]{2,}\d{5,}x[^/]+)\.html$', re.IGNORECASE)
+# Matches variant PID suffix: -BAG219542223xBLK.html or -ACC123456xLight___PastelPink.html
+# Also matches numeric master-product URLs: -219019583.html (single-variant products like shoes)
+_PDP_RE = re.compile(
+    r'-([A-Z]{2,}\d{5,}x[^/\s.]+|\d{7,})\.html$',
+    re.IGNORECASE,
+)
 
-# PLP href pattern: relative URL containing the PID suffix
-_PLP_HREF_RE = re.compile(r'href="(/[^"]*-[A-Z]{2,}\d{5,}x[^"]+\.html)"', re.IGNORECASE)
+# PLP href pattern: relative URL containing the PID suffix (variant or numeric master)
+_PLP_HREF_RE = re.compile(
+    r'href="(/[^"]*-(?:[A-Z]{2,}\d{5,}x[^"]+|\d{7,})\.html)"',
+    re.IGNORECASE,
+)
 
 # Common 3-letter SFCC color codes that are not self-describing
 _COLOR_CODES = {
@@ -53,13 +60,26 @@ def is_first_plp_page(url: str) -> bool:
     return 'demandware.store' not in url
 
 
-def extract_pid(url: str) -> str | None:
+def extract_pid(url: str, html: str = '') -> str | None:
     """
     Extract variant PID from the URL slug.
-    /marc-jacobs-scene-vanity-bag-BAG219542223xBLK.html → 'BAG219542223xBLK'
+    /marc-jacobs-scene-vanity-bag-BAG219542223xBLK.html → 'BAG219542223XBLK'
+    For numeric-only master URLs (e.g. -219019583.html), falls back to the
+    js-product-id-vg DOM element which holds the selected variant PID.
     """
     m = _PDP_RE.search(urlparse(url).path)
-    return m.group(1).upper() if m else None
+    if not m:
+        return None
+    raw = m.group(1)
+    # If URL has a variant PID (contains 'x'), return it uppercased
+    if re.search(r'[A-Za-z]', raw):
+        return raw.upper()
+    # Numeric master ID — try to get the actual selected variant PID from DOM
+    if html:
+        dom_m = re.search(r'class="js-product-id-vg">([^<]+)<', html)
+        if dom_m:
+            return dom_m.group(1).strip().upper()
+    return raw.upper()
 
 
 def get_cgid(html: str) -> str | None:
@@ -177,7 +197,7 @@ def _extract_size_fit(html: str) -> list[str] | None:
 
 
 def extract_color(html: str, url: str) -> str | None:
-    pid = extract_pid(url) or ''
+    pid = extract_pid(url, html) or ''
     # extract_pid uppercases the whole PID, so separator is 'X'
     if 'X' not in pid:
         return None
@@ -245,7 +265,7 @@ def extract_product(response) -> dict:
     # Confirmed order: [0]=brand, [1]=gender, [2]=category, [3]=subcategory, [4]=product_name
 
     return {
-        'portal_itemid': extract_pid(url),
+        'portal_itemid': extract_pid(url, html),
         'product_name':  (product.get('name') or '').strip(),
         'brand':         (product.get('brand') or {}).get('name') if isinstance(product.get('brand'), dict) else product.get('brand'),
         'gender':        crumbs[1] if len(crumbs) > 1 else None,
