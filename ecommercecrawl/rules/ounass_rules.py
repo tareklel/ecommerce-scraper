@@ -196,23 +196,35 @@ def get_language(url):
 
 
 def _parse_tab_html(raw_html: str) -> tuple[str | None, list[str] | None]:
-    """Return (prose, bullets) from an HTML tab blob."""
+    """Return (prose, bullets) from an HTML tab blob.
+
+    Handles two source formats:
+    - <ul><li> structure (Level Shoes, some SFCC sites): <p> = prose, <li> = bullets
+    - Multiple <p> items (Ounass): each <p> is a separate bullet; no prose slot
+    """
     def clean(s: str) -> str:
         s = re.sub(r'<[^>]+>', ' ', s)
         s = html_mod.unescape(re.sub(r'\s+', ' ', s).strip())
         s = s.replace('\xa0', '').replace('\u200f', '').strip()
-        # Ounass inlines bullet glyphs as text (e.g. "\u2022 \u0627\u0644\u0644\u0648\u0646: \u0623\u0632\u0631\u0642")
         return re.sub(r'^[\u2022\u00b7\-]\s*', '', s).strip()
 
-    paras = re.findall(r'<p[^>]*>(.*?)</p>', raw_html, re.DOTALL | re.IGNORECASE)
-    prose_parts = [clean(p) for p in paras]
-    prose = ' '.join(t for t in prose_parts if t) or None
-
     lis = re.findall(r'<li[^>]*>(.*?)</li>', raw_html, re.DOTALL | re.IGNORECASE)
-    bullets = [clean(li) for li in lis]
-    bullets = [b for b in bullets if b] or None
+    paras = re.findall(r'<p[^>]*>(.*?)</p>', raw_html, re.DOTALL | re.IGNORECASE)
+    para_texts = [clean(p) for p in paras]
+    para_texts = [t for t in para_texts if t]
 
-    return prose, bullets
+    if lis:
+        # Explicit list structure: <p> is prose, <li> are bullets
+        prose = ' '.join(para_texts) or None
+        bullets = [clean(li) for li in lis]
+        return prose, [b for b in bullets if b] or None
+
+    if len(para_texts) > 1:
+        # Multiple <p> items with no <li>: each <p> is a separate bullet (Ounass style)
+        return None, para_texts
+
+    # Single <p> or no tags: flat prose
+    return (' '.join(para_texts) or None), None
 
 
 def extract_product_details(state) -> dict:
