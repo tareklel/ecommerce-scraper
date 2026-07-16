@@ -189,7 +189,14 @@ def extract_color(html: str, url: str) -> str | None:
 
 
 def extract_sizes(html: str) -> list[str] | None:
-    raw = re.findall(r'data-attr="size"[^>]*data-attr-value="([^"]+)"', html)
+    # Cross-sell carousels on the PDP also render size swatches for other products.
+    # Main product size buttons always have data-url; carousel tiles don't.
+    raw = []
+    for btn in re.findall(r'<button\b[^>]*>', html, re.IGNORECASE):
+        if 'data-url=' in btn and 'data-attr="size"' in btn:
+            m = re.search(r'data-attr-value="([^"]+)"', btn)
+            if m:
+                raw.append(m.group(1))
     if not raw:
         return None
     result = []
