@@ -250,7 +250,8 @@ def extract_product_details(state) -> dict:
     if not size_fit and size_prose:
         size_fit = [size_prose]
 
-    return {'description': description, 'details': detail_bullets, 'size_fit': size_fit}
+    result = {'description': description, 'details': detail_bullets, 'size_fit': size_fit}
+    return result if any(v is not None for v in result.values()) else None
 
 
 def get_data(state):

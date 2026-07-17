@@ -175,7 +175,8 @@ def extract_product_details(response) -> dict:
         if bullets:
             size_fit = bullets
 
-    return {'description': description, 'details': details, 'size_fit': size_fit}
+    result = {'description': description, 'details': details, 'size_fit': size_fit}
+    return result if any(v is not None for v in result.values()) else None
 
 
 SKU_REGEX = re.compile(

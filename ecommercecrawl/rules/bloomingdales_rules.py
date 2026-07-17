@@ -289,11 +289,11 @@ def extract_product(response) -> dict:
         'currency':      offers.get('priceCurrency'),
         'out_of_stock':  'OutOfStock' in (offers.get('availability') or ''),
         'image_urls':    [img for img in images if img],
-        'text': {
+        'text': (lambda t: t if any(v is not None for v in t.values()) else None)({
             'description': _strip_html(product.get('description')),
             'details':     _extract_details_and_care(html),
             'size_fit':    _extract_size_fit(html),
-        },
+        }),
         'color':         extract_color(html, url),
         'sizes':         extract_sizes(html),
         'price_discount': extract_price_discount(html),
