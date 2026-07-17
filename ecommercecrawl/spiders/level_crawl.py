@@ -107,8 +107,8 @@ class LevelSpider(MasterCrawl, scrapy.Spider):
                 'subcategory': rules.get_subcategory_from_item(item),
                 'price': rules.get_price_from_item(item),
                 'currency': rules.get_currency_from_item(item),
-                # percentage discounted
                 'price_discount': rules.get_price_discount_from_item(item),
+                'was_price': rules.get_was_price_from_item(item),
                 'primary_label': rules.get_primary_label_from_item(item),
                 'image_urls': rules.get_image_urls_from_item(item)
                 # add stock_info https://www.levelshoes.com/off-white-out-of-office-ooo-sneakers-white-calf-leather-men-low-tops-a8vplk.html
@@ -142,6 +142,7 @@ class LevelSpider(MasterCrawl, scrapy.Spider):
                 'price': lambda: rules.extract_price(response),
                 'currency': lambda: rules.extract_currency(response),
                 'price_discount': lambda: rules.extract_price_discount(response),
+                'was_price': lambda: rules.extract_was_price(response),
                 'primary_label': lambda: rules.extract_badges(response),
                 'image_urls': lambda: rules.extract_first_image_url(response),
                 'text': lambda: rules.extract_product_details(response),

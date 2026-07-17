@@ -113,6 +113,15 @@ def get_currency_from_item(x):
         return x['originalPrice'].split(' ')[-1]
     return None
 
+def get_was_price_from_item(x):
+    # originalPrice format: "1,200.00 AED" — number is first token
+    if isinstance(x, dict) and x.get('originalPrice'):
+        try:
+            return float(x['originalPrice'].split(' ')[0].replace(',', ''))
+        except (ValueError, IndexError):
+            return None
+    return None
+
 def get_price_discount_from_item(x):
     if isinstance(x, dict) and x.get('discountPercentage'):
         return x['discountPercentage']
@@ -479,6 +488,20 @@ def extract_currency(response: Response) -> Optional[str]:
     if currency:
         return currency.strip()
 
+    return None
+
+
+def extract_was_price(response: Response) -> float | None:
+    # Original price is rendered with Tailwind's line-through class, text is "500 AED"
+    m = re.search(
+        r'class="[^"]*\bline-through\b[^"]*"[^>]*>(\d[\d,]*(?:\.\d+)?)\s+[A-Z]{2,4}',
+        response.text, re.IGNORECASE,
+    )
+    if m:
+        try:
+            return float(m.group(1).replace(',', ''))
+        except ValueError:
+            pass
     return None
 
 

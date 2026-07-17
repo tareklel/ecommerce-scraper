@@ -267,6 +267,7 @@ def get_data(state):
         'price': safe_get(state, ['pdp', 'price']),
         'currency': safe_get(state, ['currency']),
         'price_discount': get_discount(state),
+        'was_price': safe_get(state, ['pdp', 'slashedPrice']),
         'primary_label': get_primary_label(state),
         'image_urls': get_image_url(state),
         'out_of_stock': get_sold_out(state),
