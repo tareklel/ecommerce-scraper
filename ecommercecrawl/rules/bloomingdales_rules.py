@@ -29,7 +29,7 @@ _COLOR_CODES = {
 
 
 def get_language(url: str) -> str:
-    """'EN' for en.bloomingdales.sa, 'AR' for bloomingdales.sa."""
+    """'EN' for en.bloomingdales.*, 'AR' for bloomingdales.* (no en. prefix)."""
     hostname = urlparse(url).hostname or ''
     return 'EN' if hostname.startswith('en.') else 'AR'
 
@@ -39,7 +39,7 @@ def is_plp(url: str) -> bool:
     path = parsed.path or ''
     netloc = parsed.netloc or ''
     return (
-        'bloomingdales.sa' in netloc
+        'bloomingdales.' in netloc
         and not path.endswith('.html')
         and 'demandware.store' not in path
         and len(path.strip('/')) > 0
@@ -49,7 +49,7 @@ def is_plp(url: str) -> bool:
 def is_pdp(url: str) -> bool:
     parsed = urlparse(url)
     return (
-        'bloomingdales.sa' in (parsed.netloc or '')
+        'bloomingdales.' in (parsed.netloc or '')
         and parsed.path.endswith('.html')
         and bool(_PDP_RE.search(parsed.path))
     )
@@ -228,18 +228,32 @@ def extract_sizes(html: str) -> list[str] | None:
 
 def extract_price_discount(html: str) -> str | None:
     m = re.search(
-        r'class="[^"]*(?:percent-off|sale-price|discount-label)[^"]*"[^>]*>\s*([^<]*\d+\s*%[^<]*)<',
+        r'class="[^"]*(?:blm-price__percentage|percent-off|sale-price|discount-label)[^"]*"[^>]*>\s*([^<]*\d+\s*%[^<]*)<',
         html, re.IGNORECASE,
     )
     return m.group(1).strip() if m else None
 
 
-def extract_primary_label(html: str) -> list[str] | None:
-    labels = re.findall(
-        r'class="[^"]*(?:callout|promo-flag|product-badge|badge-label)[^"]*"[^>]*>([^<]+)<',
-        html, re.IGNORECASE,
+def extract_was_price(html: str) -> float | None:
+    # Original/slashed price lives in blm-price__standard — only present when on sale
+    m = re.search(
+        r'class="[^"]*blm-price__standard[^"]*"[^>]*>.*?content="(\d+(?:\.\d+)?)"',
+        html, re.DOTALL | re.IGNORECASE,
     )
-    unique = list(dict.fromkeys(b.strip() for b in labels if b.strip() and len(b.strip()) < 60))
+    return float(m.group(1)) if m else None
+
+
+def extract_primary_label(html: str) -> list[str] | None:
+    # Anchor to blm-pdpmain__badges to avoid carousel tile badges (same class, different container)
+    m = re.search(r'class="[^"]*blm-pdpmain__badges[^"]*"', html, re.IGNORECASE)
+    if not m:
+        return None
+    chunk = html[m.start():m.start() + 600]
+    labels = re.findall(
+        r'class="[^"]*blm-badge[^"]*"[^>]*>\s*([^\s<][^<]{0,58}?)\s*<',
+        chunk, re.IGNORECASE,
+    )
+    unique = list(dict.fromkeys(b.strip() for b in labels if b.strip()))
     return unique or None
 
 
@@ -283,5 +297,6 @@ def extract_product(response) -> dict:
         'color':         extract_color(html, url),
         'sizes':         extract_sizes(html),
         'price_discount': extract_price_discount(html),
+        'was_price':      extract_was_price(html),
         'primary_label': extract_primary_label(html),
     }

@@ -111,6 +111,11 @@ PRODUCT_SCHEMA = {
         "required": False,
         "description": "Discount label as displayed on site. E.g. '40% OFF'. NULL if full price.",
     },
+    "was_price": {
+        "type": "float | None",
+        "required": False,
+        "description": "Original (pre-sale) price in the same currency as `price`. NULL if not on sale.",
+    },
     # ---- Availability ----
     "out_of_stock": {
         "type": "bool",
