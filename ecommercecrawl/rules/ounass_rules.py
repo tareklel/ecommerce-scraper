@@ -184,11 +184,33 @@ def get_primary_label(state):
     except Exception:
         return None
     
-def get_image_url(state):
-    try:
-        return state['pdp']['images'][0]['oneX'].split('//')[1]
-    except Exception:
+def _normalize_image_url(raw: str) -> str | None:
+    if not isinstance(raw, str):
         return None
+    raw = raw.strip()
+    if raw.startswith('//'):
+        raw = 'https:' + raw
+    if not raw.startswith('http'):
+        return None
+    return raw
+
+def get_image_urls(state) -> list[str] | None:
+    images = (state.get('pdp') or {}).get('images')
+    if images is None:
+        return None
+    if not isinstance(images, list):
+        return None
+    result = []
+    seen = set()
+    for obj in images:
+        if not isinstance(obj, dict):
+            continue
+        raw = obj.get('oneX') or obj.get('twoX') or obj.get('oneXMobile')
+        url = _normalize_image_url(raw)
+        if url and url not in seen:
+            seen.add(url)
+            result.append(url)
+    return result  # [] for explicit empty gallery, list for success
     
 
 def get_language(url):
@@ -270,7 +292,7 @@ def get_data(state):
         'price_discount': get_discount(state),
         'was_price': safe_get(state, ['pdp', 'slashedPrice']),
         'primary_label': get_primary_label(state),
-        'image_urls': get_image_url(state),
+        'image_urls': get_image_urls(state),
         'out_of_stock': get_sold_out(state),
         'text': extract_product_details(state),     
     }

@@ -164,4 +164,4 @@ def test_handle_plp_item_builds_request_with_meta():
     assert meta_item["currency"] == "AED"
     assert meta_item["price_discount"] == 20
     assert meta_item["primary_label"] == ["NEW"]
-    assert meta_item["image_urls"] == "https://cdn.levelshoes.com/img.jpg"
+    assert meta_item["image_urls"] == ["https://cdn.levelshoes.com/img.jpg"]

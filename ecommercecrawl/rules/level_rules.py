@@ -127,10 +127,25 @@ def get_price_discount_from_item(x):
         return x['discountPercentage']
     return None
 
-def get_image_urls_from_item(x):
-    if isinstance(x, dict) and x.get('imagePreviewGallery'):
-        return x['imagePreviewGallery'][0]['url']
-    return None
+def _collect_image_urls(hero_url: str | None, gallery: list | None) -> list[str] | None:
+    if hero_url is None and gallery is None:
+        return None
+    seen, result = set(), []
+    candidates = ([hero_url] if hero_url else []) + [g.get('url') for g in (gallery or []) if isinstance(g, dict)]
+    for url in candidates:
+        if isinstance(url, str) and url.startswith('http') and url not in seen:
+            seen.add(url)
+            result.append(url)
+    return result  # [] only when source is explicitly present but empty
+
+def get_image_urls_from_item(x) -> list[str] | None:
+    if not isinstance(x, dict):
+        return None
+    hero = (x.get('image') or {}).get('url') if isinstance(x.get('image'), dict) else None
+    gallery = x.get('imagePreviewGallery')
+    if hero is None and not gallery:
+        return None
+    return _collect_image_urls(hero, gallery)
 
 def get_primary_label_from_item(x):
     if isinstance(x, dict) and x.get('badges'):
@@ -592,43 +607,49 @@ def extract_badges(response) -> Optional[list[str]]:
 
     return out or None
 
-def extract_first_image_url(response: Response) -> Optional[str]:
-    """
-    Extract primary (first) product image URL from LevelShoes PDP.
-    """
+def extract_image_urls(response: Response) -> list[str] | None:
+    # 1) __NEXT_DATA__ — authoritative ordered gallery
+    nd = response.xpath('//script[@id="__NEXT_DATA__"]/text()').get()
+    if nd:
+        try:
+            data = json.loads(nd)
+            pd = data.get('props', {}).get('pageProps', {}).get('productDetails') or {}
+            hero = (pd.get('image') or {}).get('url') if isinstance(pd.get('image'), dict) else None
+            gallery = pd.get('imagePreviewGallery') if isinstance(pd.get('imagePreviewGallery'), list) else None
+            if hero is not None or gallery is not None:
+                return _collect_image_urls(hero, gallery)
+        except Exception:
+            pass
 
-    # 1) OpenGraph (most reliable, always primary image)
-    img = response.xpath('//meta[@property="og:image"]/@content').get()
-    if img:
-        return img.strip()
-
-    # 2) JSON-LD Product.image[0]
+    # 2) JSON-LD Product.image list
     for block in response.xpath('//script[@type="application/ld+json"]/text()').getall():
         try:
             data = json.loads(block)
             items = data if isinstance(data, list) else [data]
             for item in items:
-                if item.get("@type") == "Product":
-                    images = item.get("image")
-                    if isinstance(images, list) and images:
-                        return images[0].strip()
+                if item.get('@type') == 'Product':
+                    images = item.get('image')
+                    if isinstance(images, list):
+                        og = response.xpath('//meta[@property="og:image"]/@content').get()
+                        return _collect_image_urls(og, [{'url': u} for u in images if isinstance(u, str)])
                     if isinstance(images, str):
-                        return images.strip()
+                        return _collect_image_urls(images, None)
         except Exception:
             pass
 
-    # 3) Twitter card fallback
-    img = response.xpath('//meta[@name="twitter:image"]/@content').get()
+    # 3) OpenGraph scalar last resort
+    img = response.xpath('//meta[@property="og:image"]/@content').get()
     if img:
-        return img.strip()
-
-    # 4) DOM fallback: first catalog image ending with _1
-    imgs = response.xpath('//img/@src').getall()
-    for url in imgs:
-        if re.search(r"_1\.(jpg|png|webp)", url, re.I):
-            return url.strip()
+        url = img.strip()
+        return [url] if url.startswith('http') else None
 
     return None
+
+
+def extract_first_image_url(response: Response) -> Optional[str]:
+    """Kept for backwards compatibility; delegates to extract_image_urls."""
+    urls = extract_image_urls(response)
+    return urls[0] if urls else None
 
 from scrapy.http import Response
 

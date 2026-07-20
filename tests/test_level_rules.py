@@ -131,9 +131,33 @@ def test_get_currency_from_item_splits_amount_and_currency():
     assert rules.get_currency_from_item(item) == "AED"
 
 
-def test_get_image_urls_from_item_returns_first_url():
-    item = {"imagePreviewGallery": [{"url": "https://cdn.levelshoes.com/img.jpg"}]}
-    assert rules.get_image_urls_from_item(item) == "https://cdn.levelshoes.com/img.jpg"
+def test_get_image_urls_from_item_returns_gallery_list():
+    item = {"imagePreviewGallery": [
+        {"url": "https://cdn.levelshoes.com/a.jpg"},
+        {"url": "https://cdn.levelshoes.com/b.jpg"},
+    ]}
+    assert rules.get_image_urls_from_item(item) == [
+        "https://cdn.levelshoes.com/a.jpg",
+        "https://cdn.levelshoes.com/b.jpg",
+    ]
+
+
+def test_get_image_urls_from_item_prepends_hero_and_deduplicates():
+    item = {
+        "image": {"url": "https://cdn.levelshoes.com/hero.jpg"},
+        "imagePreviewGallery": [
+            {"url": "https://cdn.levelshoes.com/hero.jpg"},
+            {"url": "https://cdn.levelshoes.com/side.jpg"},
+        ],
+    }
+    assert rules.get_image_urls_from_item(item) == [
+        "https://cdn.levelshoes.com/hero.jpg",
+        "https://cdn.levelshoes.com/side.jpg",
+    ]
+
+
+def test_get_image_urls_from_item_returns_none_when_empty():
+    assert rules.get_image_urls_from_item({}) is None
 
 
 def test_get_primary_label_from_item_extracts_texts():
@@ -161,10 +185,14 @@ def test_extract_product_details_returns_bullets_and_text():
         body=html,
         encoding="utf-8",
     )
-    assert rules.extract_product_details(response) == ['Leather upper', 'Rubber sole', '100% calf leather Made in Italy']
+    assert rules.extract_product_details(response) == {
+        "description": "100% calf leather Made in Italy",
+        "details": ["Leather upper", "Rubber sole"],
+        "size_fit": None,
+    }
 
 
-def test_extract_product_details_returns_empty_when_missing():
+def test_extract_product_details_returns_none_when_missing():
     html = "<div class='other-section'>No product details here</div>"
     response = HtmlResponse(
         url="https://www.levelshoes.com/product.html",
@@ -172,7 +200,7 @@ def test_extract_product_details_returns_empty_when_missing():
         body=html,
         encoding="utf-8",
     )
-    assert rules.extract_product_details(response) == ""
+    assert rules.extract_product_details(response) is None
 
 
 def test_extract_sku_prefers_json_ld():
@@ -269,10 +297,33 @@ def test_extract_badges_cleans_and_dedupes():
     assert rules.extract_badges(response) == ["EXCLUSIVE", "NEW"]
 
 
-def test_extract_first_image_url_from_og_tag():
-    html = """
-    <meta property="og:image" content="https://cdn.levelshoes.com/primary.jpg">
-    """
+def test_extract_image_urls_from_next_data():
+    import json as _json
+    next_data = _json.dumps({"props": {"pageProps": {"productDetails": {
+        "image": {"url": "https://cdn.levelshoes.com/hero.jpg"},
+        "imagePreviewGallery": [
+            {"url": "https://cdn.levelshoes.com/hero.jpg"},
+            {"url": "https://cdn.levelshoes.com/side.jpg"},
+            {"url": "https://cdn.levelshoes.com/detail.jpg"},
+        ],
+    }}}})
+    html = f'<script id="__NEXT_DATA__" type="application/json">{next_data}</script>'
+    response = make_response(html)
+    assert rules.extract_image_urls(response) == [
+        "https://cdn.levelshoes.com/hero.jpg",
+        "https://cdn.levelshoes.com/side.jpg",
+        "https://cdn.levelshoes.com/detail.jpg",
+    ]
+
+
+def test_extract_image_urls_og_scalar_fallback():
+    html = '<meta property="og:image" content="https://cdn.levelshoes.com/primary.jpg">'
+    response = make_response(html)
+    assert rules.extract_image_urls(response) == ["https://cdn.levelshoes.com/primary.jpg"]
+
+
+def test_extract_first_image_url_compat_shim():
+    html = '<meta property="og:image" content="https://cdn.levelshoes.com/primary.jpg">'
     response = make_response(html)
     assert rules.extract_first_image_url(response) == "https://cdn.levelshoes.com/primary.jpg"
 

@@ -144,7 +144,7 @@ class LevelSpider(MasterCrawl, scrapy.Spider):
                 'price_discount': lambda: rules.extract_price_discount(response),
                 'was_price': lambda: rules.extract_was_price(response),
                 'primary_label': lambda: rules.extract_badges(response),
-                'image_urls': lambda: rules.extract_first_image_url(response),
+                'image_urls': lambda: rules.extract_image_urls(response),
                 'text': lambda: rules.extract_product_details(response),
                 'out_of_stock': lambda: rules.is_out_of_stock(response),
                 'level_category_id': lambda: rules.extract_level_category_id(response)

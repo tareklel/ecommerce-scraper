@@ -237,14 +237,69 @@ def test_get_primary_label_returns_none_for_missing_badge():
     assert rules.get_primary_label(state) is None
 
 
-def test_get_image_url_extracts_path():
-    state = {"pdp": {"images": [{"oneX": "https://cdn.ounass.ae/image.jpg"}]}}
-    assert rules.get_image_url(state) == "cdn.ounass.ae/image.jpg"
+def test_get_image_urls_returns_ordered_absolute_list():
+    state = {"pdp": {"images": [
+        {"oneX": "//cdn.ounass.ae/a.jpg"},
+        {"oneX": "//cdn.ounass.ae/b.jpg"},
+        {"oneX": "//cdn.ounass.ae/c.jpg"},
+        {"oneX": "//cdn.ounass.ae/d.jpg"},
+    ]}}
+    result = rules.get_image_urls(state)
+    assert result == [
+        "https://cdn.ounass.ae/a.jpg",
+        "https://cdn.ounass.ae/b.jpg",
+        "https://cdn.ounass.ae/c.jpg",
+        "https://cdn.ounass.ae/d.jpg",
+    ]
 
 
-def test_get_image_url_returns_none_on_error():
-    state = {"pdp": {}}
-    assert rules.get_image_url(state) is None
+def test_get_image_urls_normalizes_scheme_relative():
+    state = {"pdp": {"images": [{"oneX": "//cdn.ounass.ae/image.jpg"}]}}
+    assert rules.get_image_urls(state) == ["https://cdn.ounass.ae/image.jpg"]
+
+
+def test_get_image_urls_deduplicates():
+    state = {"pdp": {"images": [
+        {"oneX": "//cdn.ounass.ae/a.jpg"},
+        {"oneX": "//cdn.ounass.ae/a.jpg"},
+        {"oneX": "//cdn.ounass.ae/b.jpg"},
+    ]}}
+    assert rules.get_image_urls(state) == [
+        "https://cdn.ounass.ae/a.jpg",
+        "https://cdn.ounass.ae/b.jpg",
+    ]
+
+
+def test_get_image_urls_falls_back_to_twox_then_mobile():
+    state = {"pdp": {"images": [
+        {"twoX": "//cdn.ounass.ae/hi.jpg"},
+        {"oneXMobile": "//cdn.ounass.ae/mob.jpg"},
+    ]}}
+    assert rules.get_image_urls(state) == [
+        "https://cdn.ounass.ae/hi.jpg",
+        "https://cdn.ounass.ae/mob.jpg",
+    ]
+
+
+def test_get_image_urls_skips_invalid_members():
+    state = {"pdp": {"images": [
+        {"oneX": "//cdn.ounass.ae/good.jpg"},
+        "not-a-dict",
+        {"oneX": None},
+        {"oneX": "//cdn.ounass.ae/also-good.jpg"},
+    ]}}
+    assert rules.get_image_urls(state) == [
+        "https://cdn.ounass.ae/good.jpg",
+        "https://cdn.ounass.ae/also-good.jpg",
+    ]
+
+
+def test_get_image_urls_returns_none_when_images_missing():
+    assert rules.get_image_urls({"pdp": {}}) is None
+
+
+def test_get_image_urls_returns_empty_list_for_explicit_empty():
+    assert rules.get_image_urls({"pdp": {"images": []}}) == []
 
 
 def test_get_data_collects_expected_fields():
@@ -263,29 +318,26 @@ def test_get_data_collects_expected_fields():
             "price": 1500,
             "discountPercent": 20,
             "badge": {"value": "EXCLUSIVE"},
-            "images": [{"oneX": "https://cdn.ounass.ae/path/img.jpg"}],
+            "images": [
+                {"oneX": "//cdn.ounass.ae/hero.jpg"},
+                {"oneX": "//cdn.ounass.ae/side.jpg"},
+            ],
             "contentTabs": [
-                {"tabId": "designDetails", "html": "<p>Leather upper</p>"},
-                {"tabId": "sizeAndFit", "html": "<p>True to size</p>"},
+                {"tabId": "designDetails", "html": "<p>• Leather upper</p><p>• Made in Italy</p>"},
+                {"tabId": "sizeAndFit", "html": "<p>• True to size</p><p>• Model wears S</p>"},
             ],
         }
     }
-
-    assert rules.get_data(state) == {
-        "country": "AE",
-        "portal_itemid": "SKU123",
-        "product_name": "Product Name",
-        "gender": "MEN",
-        "brand": "Brand",
-        "brand_id": "BRAND123",
-        "category": "Shoes",
-        "subcategory": "Sneakers",
-        "color": "Black",
-        "price": 1500,
-        "currency": "AED",
-        "price_discount": 20,
-        "primary_label": "EXCLUSIVE",
-        "image_urls": "cdn.ounass.ae/path/img.jpg",
-        "out_of_stock": False,
-        "text": {"design_details": "Leather upper", "size_fit": "True to size"},
+    data = rules.get_data(state)
+    assert data["image_urls"] == [
+        "https://cdn.ounass.ae/hero.jpg",
+        "https://cdn.ounass.ae/side.jpg",
+    ]
+    assert data["text"] == {
+        "description": None,
+        "details": ["Leather upper", "Made in Italy"],
+        "size_fit": ["True to size", "Model wears S"],
     }
+    assert data["price"] == 1500
+    assert data["portal_itemid"] == "SKU123"
+    assert data["was_price"] is None
