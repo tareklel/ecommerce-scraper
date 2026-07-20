@@ -258,6 +258,17 @@ def test_get_image_urls_normalizes_scheme_relative():
     assert rules.get_image_urls(state) == ["https://cdn.ounass.ae/image.jpg"]
 
 
+def test_get_image_urls_normalizes_bare_host_and_http_to_https():
+    state = {"pdp": {"images": [
+        {"oneX": "ounass-ae.atgcdn.ae/path/hero.jpg?version=1"},
+        {"oneX": "http://ounass-ae.atgcdn.ae/path/side.jpg?version=2"},
+    ]}}
+    assert rules.get_image_urls(state) == [
+        "https://ounass-ae.atgcdn.ae/path/hero.jpg?version=1",
+        "https://ounass-ae.atgcdn.ae/path/side.jpg?version=2",
+    ]
+
+
 def test_get_image_urls_deduplicates():
     state = {"pdp": {"images": [
         {"oneX": "//cdn.ounass.ae/a.jpg"},
@@ -298,8 +309,28 @@ def test_get_image_urls_returns_none_when_images_missing():
     assert rules.get_image_urls({"pdp": {}}) is None
 
 
+@pytest.mark.parametrize(
+    "state",
+    [
+        None,
+        {},
+        {"pdp": None},
+        {"pdp": {"images": {}}},
+        {"pdp": {"images": "not-a-list"}},
+        {"pdp": {"images": [{"oneX": "data:image/png;base64,abc"}]}},
+    ],
+)
+def test_get_image_urls_returns_none_for_missing_or_malformed_gallery(state):
+    assert rules.get_image_urls(state) is None
+
+
 def test_get_image_urls_returns_empty_list_for_explicit_empty():
     assert rules.get_image_urls({"pdp": {"images": []}}) == []
+
+
+def test_extract_product_details_normalizes_all_null_struct_to_none():
+    state = {"pdp": {"contentTabs": [], "descriptionText": None}}
+    assert rules.extract_product_details(state) is None
 
 
 def test_get_data_collects_expected_fields():

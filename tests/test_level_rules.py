@@ -3,6 +3,10 @@ from types import SimpleNamespace
 from scrapy.http import HtmlResponse, Request
 
 from ecommercecrawl.rules import level_rules as rules
+from tests.level_image_gallery_fixtures import (
+    MIUMIU_EXPECTED_IMAGE_URLS,
+    MIUMIU_PRODUCT_DETAILS,
+)
 
 
 def make_response(html: str, url: str = "https://www.levelshoes.com/product.html") -> HtmlResponse:
@@ -160,6 +164,36 @@ def test_get_image_urls_from_item_returns_none_when_empty():
     assert rules.get_image_urls_from_item({}) is None
 
 
+def test_get_image_urls_from_item_preserves_explicit_empty_gallery():
+    assert rules.get_image_urls_from_item({"imagePreviewGallery": []}) == []
+
+
+@pytest.mark.parametrize(
+    "item",
+    [
+        {"imagePreviewGallery": {}},
+        {"imagePreviewGallery": "not-a-list"},
+        {"imagePreviewGallery": [{"url": "javascript:alert(1)"}]},
+    ],
+)
+def test_get_image_urls_from_item_returns_none_for_malformed_gallery(item):
+    assert rules.get_image_urls_from_item(item) is None
+
+
+def test_get_image_urls_from_item_normalizes_scheme_relative_and_http_urls():
+    item = {
+        "image": {"url": "//cdn.levelshoes.com/hero.jpg"},
+        "imagePreviewGallery": [
+            {"url": "http://cdn.levelshoes.com/hero.jpg"},
+            {"url": " https://cdn.levelshoes.com/side.jpg?version=2 "},
+        ],
+    }
+    assert rules.get_image_urls_from_item(item) == [
+        "https://cdn.levelshoes.com/hero.jpg",
+        "https://cdn.levelshoes.com/side.jpg?version=2",
+    ]
+
+
 def test_get_primary_label_from_item_extracts_texts():
     item = {"badges": [{"text": "NEW"}, {"text": "EXCLUSIVE"}]}
     assert rules.get_primary_label_from_item(item) == ["NEW", "EXCLUSIVE"]
@@ -313,6 +347,55 @@ def test_extract_image_urls_from_next_data():
         "https://cdn.levelshoes.com/hero.jpg",
         "https://cdn.levelshoes.com/side.jpg",
         "https://cdn.levelshoes.com/detail.jpg",
+    ]
+
+
+def test_extract_image_urls_from_saved_miumiu_next_data_extract():
+    import json as _json
+
+    next_data = _json.dumps({
+        "props": {"pageProps": {"productDetails": MIUMIU_PRODUCT_DETAILS}},
+    })
+    html = f'<script id="__NEXT_DATA__" type="application/json">{next_data}</script>'
+
+    assert rules.extract_image_urls(make_response(html)) == MIUMIU_EXPECTED_IMAGE_URLS
+
+
+def test_extract_image_urls_json_ld_list_prepends_og_and_deduplicates():
+    html = """
+    <meta property="og:image" content="//cdn.levelshoes.com/hero.jpg">
+    <script type="application/ld+json">
+      {
+        "@type": "Product",
+        "image": [
+          "http://cdn.levelshoes.com/hero.jpg",
+          "https://cdn.levelshoes.com/side.jpg",
+          {"contentUrl": "https://cdn.levelshoes.com/detail.jpg"}
+        ]
+      }
+    </script>
+    """
+    assert rules.extract_image_urls(make_response(html)) == [
+        "https://cdn.levelshoes.com/hero.jpg",
+        "https://cdn.levelshoes.com/side.jpg",
+        "https://cdn.levelshoes.com/detail.jpg",
+    ]
+
+
+def test_extract_image_urls_preserves_explicit_empty_next_gallery():
+    html = """
+    <script id="__NEXT_DATA__" type="application/json">
+      {"props":{"pageProps":{"productDetails":{"imagePreviewGallery":[]}}}}
+    </script>
+    <meta property="og:image" content="https://cdn.levelshoes.com/stale.jpg">
+    """
+    assert rules.extract_image_urls(make_response(html)) == []
+
+
+def test_extract_image_urls_uses_twitter_scalar_fallback():
+    html = '<meta name="twitter:image" content="//cdn.levelshoes.com/primary.jpg">'
+    assert rules.extract_image_urls(make_response(html)) == [
+        "https://cdn.levelshoes.com/primary.jpg",
     ]
 
 

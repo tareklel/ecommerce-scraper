@@ -35,6 +35,9 @@ ECS_OVERRIDES_SCRIPT = scripts/ecs_overrides.py
 FF_TEST_URL = https://www.farfetch.com/ae/shopping/women/louis-vuitton-pre-owned/clothing-1/items.aspx
 OUNASS_TEST_URL ?= https://saudi.ounass.com/api/women/designers/ami/bags
 LEVEL_TEST_URL ?= https://www.levelshoes.com/women/brands/miu-miu/bags
+OUNASS_IMAGE_SMOKE_URL ?= https://saudi.ounass.com/shop-safiyaa-finley-peplum-dress-for-women-219174599_2709.html
+LEVEL_IMAGE_SMOKE_URL ?= https://www.levelshoes.com/miu-miu-wander-matelass-satin-mini-bag-blue-satin-women-mini-bags-qmbhpt.html
+IMAGE_GALLERY_SMOKE_WORK_DIR ?=
 IMAGE_DOWNLOADER_INPUT_JSONL ?= resources/image_download_test_jobs.jsonl
 IMAGE_DOWNLOADER_OUTPUT_DIR ?= output/images
 IMAGE_DOWNLOADER_MAX_WORKERS ?= 10
@@ -124,6 +127,18 @@ run-ounass-test-upload-faulty-quality:
 run-level-local:
 	$(LOAD_AWS_SECRET_ENV); \
 	poetry run python3 run_crawler.py level --urls $(LEVEL_TEST_URL)
+
+# Crawl one PDP per site, fan out every gallery URL, and download locally.
+# S3 is disabled in both this recipe and the validator as a fail-closed guard.
+smoke-product-image-galleries-local:
+	$(LOAD_AWS_SECRET_ENV); \
+	APP_ENV=dev \
+	S3_UPLOAD_ENABLED=false \
+	QUALITY_GATE_ENABLED=false \
+	poetry run python3 scripts/smoke_product_image_galleries.py \
+		--ounass-url "$(OUNASS_IMAGE_SMOKE_URL)" \
+		--level-url "$(LEVEL_IMAGE_SMOKE_URL)" \
+		$(if $(IMAGE_GALLERY_SMOKE_WORK_DIR),--work-dir "$(IMAGE_GALLERY_SMOKE_WORK_DIR)",)
 
 run-level-test-upload:
 	$(LOAD_AWS_SECRET_ENV); \

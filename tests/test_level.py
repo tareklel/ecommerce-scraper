@@ -1,6 +1,7 @@
 import pytest
 import requests
 import scrapy
+from scrapy.http import HtmlResponse
 from ecommercecrawl.spiders.level_crawl import LevelSpider
 from ecommercecrawl.constants import level_constants as constants
 
@@ -144,7 +145,11 @@ def test_handle_plp_item_builds_request_with_meta():
         "originalPrice": "123 AED",
         "discountPercentage": 20,
         "badges": [{"text": "NEW"}],
-        "imagePreviewGallery": [{"url": "https://cdn.levelshoes.com/img.jpg"}],
+        "image": {"url": "https://cdn.levelshoes.com/hero.jpg"},
+        "imagePreviewGallery": [
+            {"url": "https://cdn.levelshoes.com/hero.jpg"},
+            {"url": "https://cdn.levelshoes.com/side.jpg"},
+        ],
     }
 
     requests_out = list(spider._handle_item(item))
@@ -164,4 +169,51 @@ def test_handle_plp_item_builds_request_with_meta():
     assert meta_item["currency"] == "AED"
     assert meta_item["price_discount"] == 20
     assert meta_item["primary_label"] == ["NEW"]
-    assert meta_item["image_urls"] == ["https://cdn.levelshoes.com/img.jpg"]
+    assert meta_item["image_urls"] == [
+        "https://cdn.levelshoes.com/hero.jpg",
+        "https://cdn.levelshoes.com/side.jpg",
+    ]
+
+
+def test_parse_direct_pdp_emits_image_gallery_array():
+    spider = LevelSpider()
+    url = "https://www.levelshoes.com/example-product.html"
+    html = """
+    <script id="__NEXT_DATA__" type="application/json">
+      {"props":{"pageProps":{"productDetails":{
+        "image":{"url":"https://cdn.levelshoes.com/hero.jpg"},
+        "imagePreviewGallery":[
+          {"url":"https://cdn.levelshoes.com/hero.jpg"},
+          {"url":"https://cdn.levelshoes.com/side.jpg"}
+        ]
+      }}}}
+    </script>
+    """
+    request = scrapy.Request(url)
+    response = HtmlResponse(url=url, request=request, body=html, encoding="utf-8")
+
+    [item] = list(spider.parse_pdp(response))
+
+    assert item["image_urls"] == [
+        "https://cdn.levelshoes.com/hero.jpg",
+        "https://cdn.levelshoes.com/side.jpg",
+    ]
+
+
+def test_parse_pdp_preserves_explicit_empty_plp_gallery(monkeypatch):
+    spider = LevelSpider()
+    url = "https://www.levelshoes.com/example-product.html"
+    request = scrapy.Request(url, meta={"data_dict": {"image_urls": []}})
+    response = HtmlResponse(url=url, request=request, body="<html></html>", encoding="utf-8")
+
+    def fail_if_called(_response):
+        raise AssertionError("PDP fallback must not replace a confirmed empty gallery")
+
+    monkeypatch.setattr(
+        "ecommercecrawl.spiders.level_crawl.rules.extract_image_urls",
+        fail_if_called,
+    )
+
+    [item] = list(spider.parse_pdp(response))
+
+    assert item["image_urls"] == []

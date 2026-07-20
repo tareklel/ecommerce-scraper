@@ -22,7 +22,7 @@ python3 run_image_downloader.py --input-jsonl <path>
 Each line must be a JSON object. Required fields per row:
 - `site`
 - `primary_key` (alias accepted: `unique_id`)
-- image URL as `image_url` or `image_urls`
+- one scalar image URL as `image_url` (legacy scalar alias: `image_urls`)
 
 Optional per row:
 - `source_run_id` (alias accepted: `run_id`)
@@ -40,9 +40,30 @@ Supported `site` values:
 Example JSONL lines:
 
 ```json
-{"site":"level-shoes","primary_key":"8119826_level-shoes","image_urls":"https://assets.levelshoes.com/...jpg?ts=20251120165020","run_id":"2026-02-23T14-09-16-758"}
-{"site":"ounass","primary_key":"218511926_ounass","image_urls":"ounass-ae.atgcdn.ae/.../218511841_beige_in.jpg?ts=1752483038.634","run_id":"2026-02-26T14-26-22-999"}
+{"site":"level-shoes","primary_key":"8119826_level-shoes","image_url":"https://assets.levelshoes.com/...jpg?ts=20251120165020","run_id":"2026-02-23T14-09-16-758"}
+{"site":"ounass","primary_key":"218511926_ounass","image_url":"https://ounass-ae.atgcdn.ae/.../218511841_beige_in.jpg?ts=1752483038.634","run_id":"2026-02-26T14-26-22-999"}
 ```
+
+### Crawler gallery boundary
+
+Canonical crawler rows use ordered `image_urls` arrays. The downloader's batch
+reader does not accept those arrays directly: one downloader job represents one
+URL. Convert a crawler artifact first so gallery order and product identity are
+preserved:
+
+```bash
+python3 scripts/backfill/build_image_jobs_from_gz.py \
+  --input-gz <crawler-output.jsonl.gz> \
+  --output-jsonl <image-jobs.jsonl>
+
+python3 run_image_downloader.py \
+  --input-jsonl <image-jobs.jsonl> \
+  --output-dir <local-image-directory>
+```
+
+The builder emits one scalar `image_url` job for each valid array member, in
+source order. Passing an array-valued `image_urls` field straight to
+`run_image_downloader.py` is unsupported.
 
 ### Mode 2: Inline single-job mode
 

@@ -358,7 +358,7 @@ def download_one_job(
         content = response.content
         content_sha256 = hashlib.sha256(content).hexdigest()
         content_ext = extension_from_content_type(content_type) or output_ext
-        canonical_blob_key = build_canonical_blob_key(content_sha256=content_sha256, ext=content_ext, blob_prefix=blob_prefix or "")
+        canonical_blob_key = build_canonical_blob_key(content_sha256=content_sha256, ext=content_ext, blob_prefix=blob_prefix or "bronze/images/by-hash")
 
         with open(output_path, "wb") as f:
             f.write(content)

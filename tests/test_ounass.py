@@ -185,6 +185,31 @@ def test_handle_seed_url_api_backend_skips_duplicate_pdp_url(spider):
     assert second == []
 
 
+@patch("ecommercecrawl.spiders.ounass_crawl.rules.get_state")
+def test_parse_pdp_emits_image_gallery_array(mock_get_state, spider):
+    mock_get_state.return_value = {
+        "country": "AE",
+        "currency": "AED",
+        "pdp": {
+            "visibleSku": "SKU123",
+            "images": [
+                {"oneX": "//ounass-ae.atgcdn.ae/hero.jpg"},
+                {"oneX": "//ounass-ae.atgcdn.ae/side.jpg"},
+            ],
+            "contentTabs": [],
+        },
+    }
+    url = "https://www.ounass.ae/shop-example-product.html"
+    response = create_mock_response(b"<html></html>", url=url)
+
+    [item] = list(spider.parse_pdp(response))
+
+    assert item["image_urls"] == [
+        "https://ounass-ae.atgcdn.ae/hero.jpg",
+        "https://ounass-ae.atgcdn.ae/side.jpg",
+    ]
+
+
 # --- Tests for get_pages ---
 
 @patch('ecommercecrawl.spiders.ounass_crawl.rules.get_max_pages', return_value=3)

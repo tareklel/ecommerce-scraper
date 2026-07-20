@@ -137,13 +137,14 @@ PRODUCT_SCHEMA = {
     },
     # ---- Media ----
     "image_urls": {
-        "type": "list[str]",
+        "type": "list[str] | None",
         "required": True,
         "description": (
             "All product image URLs, ordered: first element is the hero/primary image. "
             "Must be absolute URLs (https://...). Language-independent. "
-            "Must be a non-empty list. "
-            "Do not include thumbnail variants or duplicates."
+            "A non-empty list is a successful gallery observation, [] is an explicitly "
+            "empty authoritative gallery, and NULL means the source was missing, malformed, "
+            "or could not be extracted. Do not include thumbnail variants or duplicates."
         ),
     },
     # ---- Text ----

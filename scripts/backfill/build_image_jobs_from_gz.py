@@ -19,7 +19,9 @@ def _extract_image_urls(payload: dict):
     if value is None:
         return []
     if isinstance(value, list):
-        return [str(v).strip() for v in value if str(v).strip()]
+        # Preserve canonical gallery order and ignore malformed members rather
+        # than converting objects or nulls into bogus URL strings.
+        return [v.strip() for v in value if isinstance(v, str) and v.strip()]
     if isinstance(value, str):
         stripped = value.strip()
         return [stripped] if stripped else []

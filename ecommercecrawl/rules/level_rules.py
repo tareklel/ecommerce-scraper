@@ -5,6 +5,8 @@ from scrapy.http import Response
 from lxml import html
 from urllib.parse import urlparse
 
+from ecommercecrawl.rules.image_rules import normalize_ordered_image_urls
+
 
 def get_products(payload: dict):
     # return products from payload
@@ -127,24 +129,31 @@ def get_price_discount_from_item(x):
         return x['discountPercentage']
     return None
 
-def _collect_image_urls(hero_url: str | None, gallery: list | None) -> list[str] | None:
-    if hero_url is None and gallery is None:
-        return None
-    seen, result = set(), []
-    candidates = ([hero_url] if hero_url else []) + [g.get('url') for g in (gallery or []) if isinstance(g, dict)]
-    for url in candidates:
-        if isinstance(url, str) and url.startswith('http') and url not in seen:
-            seen.add(url)
-            result.append(url)
-    return result  # [] only when source is explicitly present but empty
+def _image_url_value(value):
+    if isinstance(value, str):
+        return value
+    if isinstance(value, dict):
+        return value.get('url') or value.get('contentUrl')
+    return None
+
+
+def _collect_image_urls(hero_url, gallery: list) -> list[str] | None:
+    candidates = []
+    if hero_url is not None:
+        candidates.append(_image_url_value(hero_url))
+    candidates.extend(_image_url_value(value) for value in gallery)
+    return normalize_ordered_image_urls(candidates)
 
 def get_image_urls_from_item(x) -> list[str] | None:
     if not isinstance(x, dict):
         return None
-    hero = (x.get('image') or {}).get('url') if isinstance(x.get('image'), dict) else None
-    gallery = x.get('imagePreviewGallery')
-    if hero is None and not gallery:
+    if 'imagePreviewGallery' not in x:
         return None
+
+    gallery = x['imagePreviewGallery']
+    if not isinstance(gallery, list):
+        return None
+    hero = (x.get('image') or {}).get('url') if isinstance(x.get('image'), dict) else None
     return _collect_image_urls(hero, gallery)
 
 def get_primary_label_from_item(x):
@@ -613,11 +622,12 @@ def extract_image_urls(response: Response) -> list[str] | None:
     if nd:
         try:
             data = json.loads(nd)
-            pd = data.get('props', {}).get('pageProps', {}).get('productDetails') or {}
-            hero = (pd.get('image') or {}).get('url') if isinstance(pd.get('image'), dict) else None
-            gallery = pd.get('imagePreviewGallery') if isinstance(pd.get('imagePreviewGallery'), list) else None
-            if hero is not None or gallery is not None:
-                return _collect_image_urls(hero, gallery)
+            pd = data.get('props', {}).get('pageProps', {}).get('productDetails')
+            if isinstance(pd, dict) and 'imagePreviewGallery' in pd:
+                gallery = pd['imagePreviewGallery']
+                if isinstance(gallery, list):
+                    hero = pd.get('image')
+                    return _collect_image_urls(hero, gallery)
         except Exception:
             pass
 
@@ -627,21 +637,33 @@ def extract_image_urls(response: Response) -> list[str] | None:
             data = json.loads(block)
             items = data if isinstance(data, list) else [data]
             for item in items:
-                if item.get('@type') == 'Product':
-                    images = item.get('image')
-                    if isinstance(images, list):
-                        og = response.xpath('//meta[@property="og:image"]/@content').get()
-                        return _collect_image_urls(og, [{'url': u} for u in images if isinstance(u, str)])
-                    if isinstance(images, str):
-                        return _collect_image_urls(images, None)
+                item_types = item.get('@type')
+                is_product = item_types == 'Product' or (
+                    isinstance(item_types, list) and 'Product' in item_types
+                )
+                if not is_product or 'image' not in item:
+                    continue
+
+                images = item['image']
+                if isinstance(images, list):
+                    gallery = images
+                elif isinstance(images, (str, dict)):
+                    gallery = [images]
+                else:
+                    continue
+
+                og = response.xpath('//meta[@property="og:image"]/@content').get()
+                return _collect_image_urls(og, gallery)
         except Exception:
             pass
 
-    # 3) OpenGraph scalar last resort
-    img = response.xpath('//meta[@property="og:image"]/@content').get()
+    # 3) OpenGraph/Twitter scalar last resort
+    img = (
+        response.xpath('//meta[@property="og:image"]/@content').get()
+        or response.xpath('//meta[@name="twitter:image"]/@content').get()
+    )
     if img:
-        url = img.strip()
-        return [url] if url.startswith('http') else None
+        return normalize_ordered_image_urls([img])
 
     return None
 

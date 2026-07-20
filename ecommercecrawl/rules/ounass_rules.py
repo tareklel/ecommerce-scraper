@@ -3,6 +3,7 @@ import json
 import re
 import logging
 from ecommercecrawl.constants.ounass_constants import TLD_LANGUAGE_MAP
+from ecommercecrawl.rules.image_rules import normalize_ordered_image_urls
 from urllib.parse import urlparse
 
 SOLD_OUT_LABELS_NORMALIZED = {
@@ -184,33 +185,29 @@ def get_primary_label(state):
     except Exception:
         return None
     
-def _normalize_image_url(raw: str) -> str | None:
-    if not isinstance(raw, str):
-        return None
-    raw = raw.strip()
-    if raw.startswith('//'):
-        raw = 'https:' + raw
-    if not raw.startswith('http'):
-        return None
-    return raw
-
 def get_image_urls(state) -> list[str] | None:
-    images = (state.get('pdp') or {}).get('images')
-    if images is None:
+    if not isinstance(state, dict):
         return None
+    pdp = state.get('pdp')
+    if not isinstance(pdp, dict) or 'images' not in pdp:
+        return None
+
+    images = pdp['images']
     if not isinstance(images, list):
         return None
-    result = []
-    seen = set()
+
+    candidates = []
     for obj in images:
         if not isinstance(obj, dict):
+            candidates.append(None)
             continue
-        raw = obj.get('oneX') or obj.get('twoX') or obj.get('oneXMobile')
-        url = _normalize_image_url(raw)
-        if url and url not in seen:
-            seen.add(url)
-            result.append(url)
-    return result  # [] for explicit empty gallery, list for success
+        candidates.append(
+            obj.get('oneX') or obj.get('twoX') or obj.get('oneXMobile')
+        )
+
+    # Historical Ounass payloads can expose scheme-relative URLs or a bare
+    # atgcdn host. New crawl output is canonicalized to absolute HTTPS.
+    return normalize_ordered_image_urls(candidates, allow_bare_host=True)
     
 
 def get_language(url):

@@ -219,10 +219,19 @@ Adapt to the specific site's URL structure. Follow the precedent set by `level_r
 
 ## Phase 4: Images
 
-- `image_urls` must always be a **list**, even for a single image
-- Prefer JSON-LD `image[*].contentUrl` or `image[*].url` (all images, ordered)
-- Fallback: OpenGraph `og:image` (single image only)
-- Must be absolute URLs (`https://...`); fix scheme-relative URLs: `'//' + url` → `'https://' + url`
+- Every output row must contain the `image_urls` key. Its value is an ordered
+  list on success, `[]` only when an authoritative source explicitly returns an
+  empty gallery, or `null` when that source is missing, malformed, or cannot be
+  extracted.
+- Preserve the retailer's gallery order, prepend an explicitly supplied hero,
+  and deduplicate only after URL normalization. The first successful URL is the
+  source primary image; never sort galleries.
+- Prefer authoritative application state. For generic PDP fallbacks, use
+  JSON-LD `image[*].contentUrl` or `image[*].url`, then OpenGraph/Twitter as a
+  scalar singleton. Do not scan arbitrary DOM images because navigation and
+  recommendations contaminate product galleries.
+- URLs must be absolute HTTPS. Normalize scheme-relative (`//host/path`) and
+  documented retailer-specific bare-host values, while retaining query strings.
 - No auth tokens in URLs (tokens expire before the image downloader pipeline runs)
 
 ---
