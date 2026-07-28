@@ -9,13 +9,14 @@ from scrapy.utils.project import get_project_settings
 from ecommercecrawl.spiders.farfetch_crawl import FFSpider
 from ecommercecrawl.spiders.ounass_crawl import OunassSpider
 from ecommercecrawl.spiders.level_crawl import LevelSpider
-
+from ecommercecrawl.spiders.bloomingdales_crawl import BloomingdalesSpider
 
 
 spider_map = {
         'farfetch': FFSpider,
         'ounass': OunassSpider,
         'level': LevelSpider,
+        'bloomingdales': BloomingdalesSpider,
     }
 
 
