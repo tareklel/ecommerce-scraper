@@ -2,16 +2,11 @@
 
 ## Status
 
-Implemented locally at `e6ba2ab`; deterministic validation and the live local
-smoke pass. The coordinated V2 rollout remains pending with both pipeline
-tickets:
+**Done ✓** — deployed at `e6ba2ab` (2026-07-20). 231 tests passing, live smoke `SMOKE PASS`.
 
+Pipeline adoption (DDL cut, dbt rebuild) is tracked separately in scraper-pipeline:
 - `../scraper-pipeline/ticket/support-multiple-product-images.md`
 - `../scraper-pipeline/ticket/reset-dev-raw-for-product-schema-v2.md`
-
-Do not deploy this scraper change while the active bronze tables still declare
-`image_urls string`. The same reset also changes both sites' `text` fields to a
-typed struct, so the image change must not trigger a partial V2 crawl first.
 
 ## Goal
 
