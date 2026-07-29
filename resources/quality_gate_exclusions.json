@@ -3,18 +3,21 @@
     "brand_id",
     "color",
     "price_discount",
+    "was_price",
     "primary_label"
   ],
   "level-shoes": [
     "level_category_id",
     "color",
     "price_discount",
+    "was_price",
     "primary_label"
   ],
   "bloomingdales": [
     "color",
     "sizes",
     "price_discount",
+    "was_price",
     "primary_label"
   ]
 }
