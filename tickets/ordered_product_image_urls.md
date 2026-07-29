@@ -2,7 +2,9 @@
 
 ## Status
 
-Draft; implementation must be coordinated with both pipeline tickets:
+Implemented locally at `e6ba2ab`; deterministic validation and the live local
+smoke pass. The coordinated V2 rollout remains pending with both pipeline
+tickets:
 
 - `../scraper-pipeline/ticket/support-multiple-product-images.md`
 - `../scraper-pipeline/ticket/reset-dev-raw-for-product-schema-v2.md`
@@ -22,8 +24,8 @@ explicitly empty source gallery.
 
 ## Feasibility Evidence
 
-Both sources already expose the complete ordered gallery; current helpers
-explicitly select element 0:
+Both sources expose the complete ordered gallery. Before this implementation,
+their helpers explicitly selected element 0:
 
 - Ounass `pdp.images` is an ordered list. The saved `test_ounass.ipynb` payload
   contains four entries, each with `oneX`, `oneXMobile`, and `twoX`. Current
@@ -209,12 +211,10 @@ PYTEST_ADDOPTS="-p no:cacheprovider" .venv/bin/pytest -q \
   tests/test_build_image_jobs_from_gz.py
 ```
 
-Baseline note from 2026-07-17: the current narrower command over
-`test_ounass_rules.py`, `test_level_rules.py`, and `test_level.py` has 79 passing
-tests and three unrelated stale assertions. They concern structured `text` and
-the concurrent `was_price` work, not image extraction. Update those stale
-expectations before claiming the final focused suite is green; do not hide them
-with `--ignore` or a broad test selection workaround.
+Validation on 2026-07-20 passed 142 focused tests, including normalization,
+both rule modules and spider paths, array fanout, and the offline smoke
+validator. The full repository suite passed 225 tests. No failures were hidden
+with ignores or test-selection workarounds.
 
 ## Required Live Local Smoke Test
 
@@ -300,16 +300,20 @@ order arbitrarily select one market's gallery.
 |---|---|
 | `ecommercecrawl/rules/ounass_rules.py` | Extract and normalize every ordered Ounass image |
 | `ecommercecrawl/rules/level_rules.py` | Return full Level PLP and direct-PDP galleries |
+| `ecommercecrawl/rules/image_rules.py` | Shared ordered URL normalization and deduplication |
 | `ecommercecrawl/spiders/level_crawl.py` | Propagate array values through both spider paths |
 | `ecommercecrawl/constants/product_schema.py` | Document required key and three-state array value |
 | `context/crawling_methodology.md` | Document source hero/order/normalization rules |
 | `docs/image_downloader_blob_contract.md` | Document array-to-scalar job boundary |
 | `tests/test_ounass_rules.py` | Ounass extraction contract tests |
 | `tests/test_level_rules.py` | Level PLP/PDP extraction contract tests |
+| `tests/level_image_gallery_fixtures.py` | Compact real Level `__NEXT_DATA__` gallery extract |
 | `tests/test_ounass.py` | Spider propagation tests |
 | `tests/test_level.py` | Both Level spider paths emit arrays |
 | `tests/test_build_image_jobs_from_gz.py` | Array fan-out regression test |
+| `scripts/backfill/build_image_jobs_from_gz.py` | Ignore malformed members while preserving valid order |
 | `scripts/smoke_product_image_galleries.py` | Automated live local crawl/output/download validator |
+| `tests/test_smoke_product_image_galleries.py` | Offline smoke-contract and saved-byte validation |
 | `makefile` | `smoke-product-image-galleries-local` target and URL overrides |
 
 Preserve unrelated in-progress `was_price` and structured-text changes already
@@ -346,18 +350,21 @@ present in the worktree.
 
 ## Validation Log
 
-Populate during implementation:
-
 ```text
-Date:
-Commit:
-Ounass PDP:
-Ounass extracted/downloaded:
-Level Shoes PDP:
-Level Shoes extracted/downloaded:
-Focused pytest result:
-Full pytest result:
-Smoke result:
+Date: 2026-07-20
+Commit: e6ba2ab
+Ounass PDP: https://saudi.ounass.com/shop-safiyaa-finley-peplum-dress-for-women-219174599_2709.html
+Ounass extracted/downloaded: 4/4
+Level Shoes PDP: https://www.levelshoes.com/miu-miu-wander-matelass-satin-mini-bag-blue-satin-women-mini-bags-qmbhpt.html
+Level Shoes extracted/downloaded: 4/4
+Focused pytest result: 69 passed in 0.69s after final contract hardening
+Full pytest result: 231 passed in 2.69s
+Smoke harness result: offline validator tests, CLI help, and Make dry-run passed
+Live smoke result:
+site=ounass products=1 gallery_urls=4 jobs=4 downloaded_ok=4 hero=https://ounass-sa.atgcdn.ae/small_light(p=zoom,of=webp,q=65)/pub/media/catalog/product/2/1/219174599_blk_in.jpg
+site=level-shoes products=1 gallery_urls=4 jobs=4 downloaded_ok=4 hero=https://assets.levelshoes.com/cdn-cgi/image/width=720,height=1008,quality=85,format=webp/media/catalog/product/5/b/5bp078olo2bd8f0d30v_1.jpg
+SMOKE PASS
+Cross-market result: pending live verification before deployment
 ```
 
 ## Out of Scope
