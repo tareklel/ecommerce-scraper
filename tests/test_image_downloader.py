@@ -15,9 +15,17 @@ class _MockResponse:
 
 
 def test_normalize_site_level_alias():
+    assert downloader.normalize_site("bloomingdales") == "bloomingdales"
     assert downloader.normalize_site("level_shoes") == "level-shoes"
     assert downloader.normalize_site("level") == "level-shoes"
     assert downloader.normalize_site("ounass") == "ounass"
+
+
+def test_bloomingdales_download_headers_use_sa_referer():
+    headers = downloader.get_site_headers("bloomingdales")
+
+    assert headers["referer"] == "https://bloomingdales.sa/"
+    assert headers["user-agent"]
 
 
 def test_normalize_image_url_for_ounass_scheme_less_url():

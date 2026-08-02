@@ -11,6 +11,7 @@ from urllib.parse import urlparse
 import boto3
 import requests
 
+from ecommercecrawl.constants import bloomingdales_constants
 from ecommercecrawl.constants import farfetch_constants
 from ecommercecrawl.constants import level_constants
 from ecommercecrawl.constants import ounass_constants
@@ -28,6 +29,7 @@ STATUS_SKIPPED_DUPLICATE = "skipped_duplicate"
 
 
 SITE_ALIASES = {
+    "bloomingdales": bloomingdales_constants.NAME,
     "farfetch": farfetch_constants.NAME,
     "level": level_constants.NAME,
     "level-shoes": level_constants.NAME,
@@ -78,6 +80,11 @@ def normalize_image_url(site: str, image_url: str) -> str:
 
 
 def get_site_headers(site: str) -> Dict[str, str]:
+    if site == bloomingdales_constants.NAME:
+        return {
+            "user-agent": "Mozilla/5.0",
+            "referer": bloomingdales_constants.MAIN_SITE_AR,
+        }
     if site == level_constants.NAME:
         return {
             "user-agent": level_constants.API_HEADERS.get("user-agent", "Mozilla/5.0"),
