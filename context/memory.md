@@ -1,5 +1,15 @@
 # Memory
 
+## 2026-08-03 - `0caf14f`, `2aef7cd` - Bloomingdale's image downloads and Ounass crawl hardening
+- Added Bloomingdale's to the shared image-downloader site registry and send `https://bloomingdales.sa/` as the request referer, preventing valid gallery jobs from being rejected as an unsupported site.
+- Operationally validated the Bloomingdale's downloader change in dev: all 983 previously skipped jobs downloaded successfully; shared `latest` and production targets were not changed.
+- Reworked Ounass brand-PLP crawling for the upstream removal of brand+category API paths: brand PLP hits are now filtered by each product's breadcrumb category before primary and variation PDP slugs are emitted.
+- Added Ounass `--category` CLI filtering plus optional per-seed `url,category` CSV values for both local and `s3://` URL sources; per-row categories override the global category and persist across pagination URLs.
+- Changed the default Ounass Zyte PDP request from `browserHtml` to the cheaper plain `httpResponseBody`, because PDP state is normally server-rendered; missing state triggers one forced rendered retry and then logs an error rather than retrying forever.
+- Normalized Ounass `primary_label` to the schema's list shape, made Scrapy log level configurable with `SCRAPY_LOG_LEVEL`, and aligned image-downloader documentation with `bronze/images/by-hash/` and removal of primary-key pointer blobs.
+- Added regression coverage for category matching/filter propagation, local and S3 category CSV parsing, PDP rendered fallback behavior, settings, label shape, and gallery smoke behavior.
+- Git handoff state after `2aef7cd`: working tree clean; local `main` was two commits ahead of `origin/main`. Both commits were saved locally but not pushed.
+
 ## 2026-02-24 - `d4ee777` - Add bronze Athena partition registration on success
 - Added repo-level `AGENTS.md` guidance for project scope and workflow expectations.
 - Extended `lambda/bronze_manifest_verifier` to handle both `manifest.json` and `_SUCCESS` S3 events in one handler.
