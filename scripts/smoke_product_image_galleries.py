@@ -133,6 +133,7 @@ def _run_crawl(site: str, url: str, work_dir: Path) -> Path:
             "APP_ENV": "dev",
             "QUALITY_GATE_ENABLED": "false",
             "S3_UPLOAD_ENABLED": "false",
+            "SCRAPY_LOG_LEVEL": "WARNING",
             "SCRAPY_SETTINGS_MODULE": "ecommercecrawl.settings",
         }
     )

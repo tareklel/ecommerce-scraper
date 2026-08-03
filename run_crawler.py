@@ -63,6 +63,54 @@ def load_urls_source(source):
     return _read_local_urls_source(source)
 
 
+def _rows_from_csv_text(csv_text):
+    """
+    Like `_urls_from_csv_text`, but also reads a "category" column when the
+    header names it (e.g. `url,category`). Used for Ounass's per-URL category
+    filter; a row's category is None when the column is absent or blank.
+    """
+    has_category_column = False
+    rows = []
+    for row in csv.reader(StringIO(csv_text)):
+        if not row:
+            continue
+        first_column = row[0].strip()
+        if not first_column:
+            continue
+        if first_column.lower() == "url":
+            has_category_column = len(row) > 1 and row[1].strip().lower() == "category"
+            continue
+        category = None
+        if has_category_column and len(row) > 1:
+            category = row[1].strip() or None
+        rows.append((first_column, category))
+    return rows
+
+
+def load_url_category_rows(source):
+    """
+    Load (url, category) rows from a CSV source, local or s3://.
+
+    Superset of `load_urls_source` that additionally surfaces a per-row
+    "category" column for spiders that support category filtering (Ounass).
+    """
+    if source.startswith("s3://"):
+        parsed = urlparse(source)
+        bucket = parsed.netloc
+        key = parsed.path.lstrip("/")
+        if not bucket or not key:
+            raise ValueError(f"Invalid S3 URL source: {source}")
+
+        import boto3
+
+        response = boto3.client("s3").get_object(Bucket=bucket, Key=key)
+        body = response["Body"].read().decode("utf-8-sig")
+        return _rows_from_csv_text(body)
+
+    with open(source, newline='', encoding='utf-8-sig') as inputfile:
+        return _rows_from_csv_text(inputfile.read())
+
+
 def main():
     parser = argparse.ArgumentParser(description="E-commerce scraper CLI.")
     parser.add_argument('spider', choices=list(spider_map.keys()), help='The spider to run.')
@@ -78,6 +126,14 @@ def main():
     )
     parser.add_argument('--env', choices=['dev', 'prod'], default='dev', help='Environment setting (dev or prod).')
     parser.add_argument('--limit', type=int, help='Limit the number of pages to crawl.')
+    parser.add_argument(
+        '--category',
+        help=(
+            'Ounass only: only crawl PDPs whose breadcrumb category matches this '
+            'slug (e.g. "bags"). Applies to every seed URL unless overridden per-row '
+            'by a "category" column in --urls-source CSV.'
+        ),
+    )
 
     args = parser.parse_args()
 
@@ -109,11 +165,19 @@ def main():
         else:
             spider_kwargs['urls'] = args.urls
     elif args.urls_source:
-        spider_kwargs['urls'] = load_urls_source(args.urls_source)
+        rows = load_url_category_rows(args.urls_source)
+        spider_kwargs['urls'] = [url for url, _category in rows]
         spider_kwargs['urls_source'] = args.urls_source
+        if args.spider == 'ounass':
+            url_categories = {url: category for url, category in rows if category}
+            if url_categories:
+                spider_kwargs['url_categories'] = url_categories
 
     if args.limit:
         spider_kwargs['limit'] = args.limit
+
+    if args.spider == 'ounass' and args.category:
+        spider_kwargs['category'] = args.category
     
     process.crawl(spider_class, **spider_kwargs)
     process.start()

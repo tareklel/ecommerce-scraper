@@ -147,6 +147,89 @@ def test_get_pdps_returns_empty_list_for_no_hits():
     response_missing_hits = create_mock_response({})
     assert rules.get_pdps(response_missing_hits) == []
 
+
+# --- Tests for hit_matches_category / get_pdps category filtering ---
+
+def _hit(slug, breadcrumb_url_paths):
+    return {
+        "slug": slug,
+        "breadcrumbs": [{"urlPath": path} for path in breadcrumb_url_paths],
+    }
+
+def test_hit_matches_category_matches_any_breadcrumb_segment():
+    hit = _hit("bag", ["women", "women/bags", "women/bags/top-handle-bags"])
+    assert rules.hit_matches_category(hit, "bags") is True
+
+def test_hit_matches_category_is_case_insensitive():
+    hit = _hit("bag", ["women/Bags"])
+    assert rules.hit_matches_category(hit, "BAGS") is True
+
+def test_hit_matches_category_false_when_no_segment_matches():
+    hit = _hit("shirt", ["women", "women/clothing", "women/clothing/tops"])
+    assert rules.hit_matches_category(hit, "bags") is False
+
+def test_hit_matches_category_false_for_no_partial_segment_match():
+    """A segment must match exactly; "bag" should not match "handbags"."""
+    hit = _hit("handbag", ["women/handbags"])
+    assert rules.hit_matches_category(hit, "bag") is False
+
+def test_hit_matches_category_true_when_no_category_given():
+    hit = _hit("anything", [])
+    assert rules.hit_matches_category(hit, None) is True
+    assert rules.hit_matches_category(hit, "") is True
+
+def test_hit_matches_category_false_for_missing_breadcrumbs():
+    assert rules.hit_matches_category({"slug": "x"}, "bags") is False
+
+def test_get_pdps_filters_by_category():
+    data = {
+        "hits": [
+            _hit("shop-bag", ["women/bags/top-handle-bags"]),
+            _hit("shop-shirt", ["women/clothing/tops/t-shirts"]),
+        ]
+    }
+    response = create_mock_response(data)
+
+    urls = rules.get_pdps(response, category="bags")
+
+    assert urls == [f"{MAIN_SITE}shop-bag.html"]
+
+def test_get_pdps_without_category_returns_everything():
+    data = {
+        "hits": [
+            _hit("shop-bag", ["women/bags"]),
+            _hit("shop-shirt", ["women/clothing/tops"]),
+        ]
+    }
+    response = create_mock_response(data)
+
+    urls = rules.get_pdps(response)
+
+    assert set(urls) == {f"{MAIN_SITE}shop-bag.html", f"{MAIN_SITE}shop-shirt.html"}
+
+def test_get_pdps_category_filter_excludes_variation_slugs_of_excluded_hits():
+    data = {
+        "hits": [
+            {
+                "slug": "shop-shirt",
+                "breadcrumbs": [{"urlPath": "women/clothing/tops"}],
+                "configurableAttributes": [
+                    {"options": [{"attributeSpecificProperties": {"slug": "shop-shirt-red"}}]}
+                ],
+            },
+            {
+                "slug": "shop-bag",
+                "breadcrumbs": [{"urlPath": "women/bags"}],
+                "configurableAttributes": [],
+            },
+        ]
+    }
+    response = create_mock_response(data)
+
+    urls = rules.get_pdps(response, category="bags")
+
+    assert urls == [f"{MAIN_SITE}shop-bag.html"]
+
 # --- Tests for is_pdp ---
 
 def test_is_pdp_true_for_html_url():
@@ -228,12 +311,20 @@ def test_get_discount_returns_value_or_none():
 
 
 def test_get_primary_label_extracts_value():
-    state = {"pdp": {"badge": {"value": "NEW"}}}
-    assert rules.get_primary_label(state) == "NEW"
+    state = {"pdp": {"badge": {"value": "  حصري   أوناس  "}}}
+    assert rules.get_primary_label(state) == ["حصري أوناس"]
 
 
-def test_get_primary_label_returns_none_for_missing_badge():
-    state = {"pdp": {}}
+@pytest.mark.parametrize(
+    "state",
+    [
+        {"pdp": {}},
+        {"pdp": {"badge": {"value": "   "}}},
+        {"pdp": {"badge": {"value": None}}},
+        {"pdp": {"badge": {"value": 123}}},
+    ],
+)
+def test_get_primary_label_returns_none_for_missing_or_blank_badge(state):
     assert rules.get_primary_label(state) is None
 
 
@@ -371,4 +462,5 @@ def test_get_data_collects_expected_fields():
     }
     assert data["price"] == 1500
     assert data["portal_itemid"] == "SKU123"
+    assert data["primary_label"] == ["EXCLUSIVE"]
     assert data["was_price"] is None

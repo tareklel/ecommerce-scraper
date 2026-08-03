@@ -37,6 +37,34 @@ def configure_spider(spider, **overrides):
     return spider
 
 
+# --- Tests for category init/lookup ---
+
+def test_init_normalizes_category_case_and_whitespace():
+    spider = OunassSpider(category="  Bags  ")
+    assert spider.category == "bags"
+
+def test_init_treats_blank_category_as_none():
+    spider = OunassSpider(category="  ")
+    assert spider.category is None
+
+def test_init_normalizes_url_categories_and_drops_blank_entries():
+    spider = OunassSpider(
+        url_categories={
+            "http://fake.com/plp-a?p=0": " Bags ",
+            "http://fake.com/plp-b?p=0": "",
+        }
+    )
+    assert spider.url_categories == {"http://fake.com/plp-a": "bags"}
+
+def test_get_category_for_url_uses_base_url_across_pagination():
+    spider = OunassSpider(
+        category="clothing",
+        url_categories={"http://fake.com/plp-a": "bags"},
+    )
+    assert spider._get_category_for_url("http://fake.com/plp-a?p=3") == "bags"
+    assert spider._get_category_for_url("http://fake.com/plp-b?p=1") == "clothing"
+
+
 # --- Tests for _handle_seed_url ---
 
 def test_handle_seed_url_auto_backend_uses_api_for_plp_by_default(spider):
@@ -210,6 +238,34 @@ def test_parse_pdp_emits_image_gallery_array(mock_get_state, spider):
     ]
 
 
+@patch("ecommercecrawl.spiders.ounass_crawl.rules.get_state", return_value=None)
+def test_parse_pdp_retries_with_rendered_html_when_state_missing(mock_get_state, spider):
+    """A plain http_response miss should retry once, forced to rendered_html."""
+    configure_spider(spider)
+    url = "https://www.ounass.ae/shop-example-product.html"
+    response = create_mock_response(b"<html></html>", url=url)
+
+    [request] = list(spider.parse_pdp(response))
+
+    assert request.url == url
+    assert request.callback == spider.parse_pdp
+    assert request.meta["force_rendered_pdp"] is True
+    assert request.meta["zyte_api"]["browserHtml"] is True
+
+
+@patch("ecommercecrawl.spiders.ounass_crawl.rules.get_state", return_value=None)
+def test_parse_pdp_gives_up_after_rendered_html_retry_also_misses(mock_get_state, spider):
+    """Do not loop forever if rendered_html also fails to surface state."""
+    configure_spider(spider)
+    url = "https://www.ounass.ae/shop-example-product.html"
+    request = scrapy.Request(url=url, meta={"force_rendered_pdp": True})
+    response = HtmlResponse(url=url, request=request, body=b"<html></html>", encoding="utf-8")
+
+    results = list(spider.parse_pdp(response))
+
+    assert results == []
+
+
 # --- Tests for get_pages ---
 
 @patch('ecommercecrawl.spiders.ounass_crawl.rules.get_max_pages', return_value=3)
@@ -294,6 +350,36 @@ def test_parse_plp_sorted_first_page(mock_rules, spider):
     # It should get pages to schedule
     spider.get_pages.assert_called_once_with(response)
     # It should also get products from the current page
-    mock_rules.get_pdps.assert_called_once_with(response)
+    mock_rules.get_pdps.assert_called_once_with(response, category=None)
     # It should have handled one pagination URL and one product URL
     assert spider._handle_seed_url.call_count == 2
+
+
+def test_parse_plp_passes_global_category_to_get_pdps(spider):
+    """The --category flag should reach rules.get_pdps for every PLP page."""
+    spider.category = "bags"
+    url = f"http://fake.com/plp?{constants.PLPSORT_KEY}={constants.PLPSORT}"
+    response = create_mock_response(b'', url=url)
+
+    with patch('ecommercecrawl.spiders.ounass_crawl.rules') as mock_rules:
+        mock_rules.is_first_page.return_value = False
+        mock_rules.get_pdps.return_value = []
+        list(spider.parse_plp(response))
+
+    mock_rules.get_pdps.assert_called_once_with(response, category="bags")
+
+
+def test_parse_plp_uses_per_url_category_override(spider):
+    """A CSV-provided per-URL category overrides the global --category flag."""
+    spider.category = "bags"
+    base_url = "http://fake.com/plp"
+    spider.url_categories = {base_url: "clothing"}
+    url = f"{base_url}?{constants.PLPSORT_KEY}={constants.PLPSORT}"
+    response = create_mock_response(b'', url=url)
+
+    with patch('ecommercecrawl.spiders.ounass_crawl.rules') as mock_rules:
+        mock_rules.is_first_page.return_value = False
+        mock_rules.get_pdps.return_value = []
+        list(spider.parse_plp(response))
+
+    mock_rules.get_pdps.assert_called_once_with(response, category="clothing")

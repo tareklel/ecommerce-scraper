@@ -10,6 +10,7 @@ def restore_settings_module(monkeypatch):
     yield
     monkeypatch.delenv("ZYTE_API_KEY", raising=False)
     monkeypatch.delenv("ZYTE_API_ENABLED", raising=False)
+    monkeypatch.delenv("SCRAPY_LOG_LEVEL", raising=False)
     importlib.reload(settings)
 
 
@@ -47,3 +48,19 @@ def test_zyte_scrapy_handlers_are_enabled_with_key(monkeypatch):
     assert loaded.DOWNLOAD_HANDLERS["https"] == "scrapy_zyte_api.ScrapyZyteAPIDownloadHandler"
     assert loaded.SPIDER_MIDDLEWARES["scrapy_zyte_api.ScrapyZyteAPISpiderMiddleware"] == 100
     assert loaded.REQUEST_FINGERPRINTER_CLASS == "scrapy_zyte_api.ScrapyZyteAPIRequestFingerprinter"
+
+
+def test_scrapy_log_level_defaults_to_debug(monkeypatch):
+    monkeypatch.delenv("SCRAPY_LOG_LEVEL", raising=False)
+
+    loaded = importlib.reload(settings)
+
+    assert loaded.LOG_LEVEL == "DEBUG"
+
+
+def test_scrapy_log_level_accepts_opt_in_override(monkeypatch):
+    monkeypatch.setenv("SCRAPY_LOG_LEVEL", "WARNING")
+
+    loaded = importlib.reload(settings)
+
+    assert loaded.LOG_LEVEL == "WARNING"

@@ -29,13 +29,39 @@ def get_max_pages(response):
 def is_first_page(response):
     return json.loads(response.text)['page'] == 0
 
-def get_pdps(response):
+def hit_matches_category(hit, category):
+    """
+    True if any breadcrumb segment of this hit's own categorization equals
+    `category` (case-insensitive), e.g. category="bags" matches a hit whose
+    breadcrumbs include {"urlPath": "women/bags/top-handle-bags"}.
+
+    Breadcrumbs are per-hit and reflect the product's actual category, unlike
+    the PLP's own designer-scoped URL — needed because the brand+category API
+    path (e.g. /api/women/designers/{brand}/{category}) no longer exists
+    upstream, so brand PLPs now return every category mixed together.
+    """
+    category = (category or "").strip().lower()
+    if not category:
+        return True
+    for crumb in hit.get('breadcrumbs') or []:
+        url_path = (crumb.get('urlPath') or '').lower()
+        if category in url_path.split('/'):
+            return True
+    return False
+
+
+def get_pdps(response, category=None):
     """
     Extracts all unique product detail page (PDP) URLs from a PLP response.
     This includes both the main product slugs and slugs for configurable variations.
+
+    When `category` is given, hits whose breadcrumbs don't match it are
+    excluded before slugs (including variation slugs) are extracted.
     """
     data = json.loads(response.text)
     hits = data.get('hits', [])
+    if category:
+        hits = [hit for hit in hits if hit_matches_category(hit, category)]
 
     # Extract primary slugs
     slugs = [hit.get('slug') for hit in hits]
@@ -180,10 +206,11 @@ def get_discount(state):
         return None
 
 def get_primary_label(state):
-    try:
-        return state['pdp']['badge']['value']
-    except Exception:
+    value = safe_get(state, ['pdp', 'badge', 'value'])
+    if not isinstance(value, str):
         return None
+    label = " ".join(value.split()).strip()
+    return [label] if label else None
     
 def get_image_urls(state) -> list[str] | None:
     if not isinstance(state, dict):

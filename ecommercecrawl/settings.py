@@ -122,7 +122,9 @@ ITEM_PIPELINES = {
 
 # Logging
 LOG_FORMAT = '%(asctime)s [%(name)s] %(levelname)s: %(message)s'
-LOG_LEVEL = "DEBUG"
+# Keep DEBUG as the project default while allowing focused local commands to
+# reduce Scrapy and downloader-middleware noise without changing global output.
+LOG_LEVEL = os.getenv("SCRAPY_LOG_LEVEL", "DEBUG")
 
 
 # Enable and configure the AutoThrottle extension (disabled by default)
@@ -144,7 +146,7 @@ OUNASS_CRAWLER_API_PLP_REQUEST_TYPE = os.getenv(
 )
 OUNASS_CRAWLER_API_PDP_REQUEST_TYPE = os.getenv(
     "OUNASS_CRAWLER_API_PDP_REQUEST_TYPE",
-    "rendered_html",
+    "http_response",
 )
 
 # Used only when Ounass falls back to requests mode.

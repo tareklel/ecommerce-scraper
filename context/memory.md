@@ -139,6 +139,13 @@
 - Smoke: 19 items, 0 errors, quality_gate=pass.
 - Quality gate exclusions added for bloomingdales (color, sizes, price_discount, primary_label).
 
+## 2026-07-20 - `e6ba2ab` - Emit ordered Ounass and Level product galleries
+- Changed Ounass and Level Shoes crawler output from a single image to an ordered, deduplicated `image_urls` array with the retailer's hero first.
+- Added shared HTTPS URL normalization and explicit `null` versus `[]` gallery semantics, including direct Level PDP fallbacks and spider propagation tests.
+- Added ordered array-to-scalar backfill fanout and a local-only smoke command that crawls one PDP per site, downloads every image, validates saved bytes, and refuses S3-enabled runs.
+- Updated the product schema, crawling methodology, downloader contract, and implementation ticket for the V2 gallery boundary.
+- Validation: 142 focused tests and 225 full-suite tests passed; the live network smoke remains pending before deployment.
+
 ## 2026-07-15 - `fabadb0` - Add Bloomingdales.sa crawl ticket, site methodology, and product schema
 - Added `context/crawling_methodology.md`: reusable phase-by-phase guide for onboarding new sites — WAF/SSR probe, API discovery, data source priority, raw HTML vs extract-on-crawl decision, language derivation, pagination types, and implementation file checklist.
 - Added `ecommercecrawl/constants/product_schema.py`: site-agnostic canonical field contract with per-field type, required flag, and description; `REQUIRED_FIELDS`/`OPTIONAL_FIELDS` frozensets for quality checks and LLM evaluation.
@@ -146,6 +153,37 @@
 - Added `scripts/probe_bloomingdales.py`: feasibility probe (6/6 checks passed). `--en` flag for English subdomain.
 - Added `resources/bloomingdales_urls.csv`: EN + AR PLP seeds for bags/shoes/clothing categories plus one EN/AR PDP for smoke testing.
 - Moved Farfetch crawl ticket to `tickets/blocked/` — Akamai WAF blocks httpResponseBody even via Zyte; browserHtml only viable mode but prohibitively expensive at scale.
+
+## 2026-07-28 - Deploy Bloomingdales to dev; canonical seeds; image downloader fix
+
+### Image downloader blob_prefix fix (`e6ba2ab` already had the scaffolding; fixed in this session)
+- `canonical_blob_key` returned `/{sha256}.jpg` when `blob_prefix` was omitted. Fixed default: `blob_prefix or "bronze/images/by-hash"`.
+- Note on path: images are stored as `bronze/{env}/images/by-hash/{sha256}` — CloudFront OAC policy covers both `dev` and `prod` prefixes.
+
+### Bloomingdales V2 contract wired + deployed
+- `run_crawler.py`: added `from ecommercecrawl.spiders.bloomingdales_crawl import BloomingdalesSpider` and `'bloomingdales': BloomingdalesSpider` entry — critical for ECS launch.
+- Added `tests/test_bloomingdales_rules.py` (36 tests) covering language derivation, URL classification, PID extraction, pagination URL construction, color/price/label extraction, and AR fixture integration test.
+- ECR image pushed (`sha256:600863c4...`). `make tf-apply APP_ENV=dev` confirmed no infrastructure drift.
+- All local commits pushed: `c0faed4` (run_crawler + tests + tickets) on `main`.
+
+### Canonical seeds (in scraper-pipeline, committed + pushed)
+- `dim_map_brand.csv`: +36 bloomingdales rows (413→449). 8 new canonical slugs: `anya_hindmarch`, `gianvito_rossi`, `july`, `krivokoso`, `kurt_geiger`, `moncler`, `pucci`, `verafied`; 28 reuse ounass/level slugs.
+- `dim_map_site_category_subcategory.csv`: +22 bloomingdales rows (35→56). EN + AR bag subcategory pairs. `Lanyards and Keyrings` and its AR equivalent both mapped to `bag_accessories`.
+- `dim_map_gender.csv`: +2 rows (`women,Women,bloomingdales,0` and `women,النساء,bloomingdales,0`).
+- Arabic brand i18n is a separate later task — brands are Latin-script only in bloom source.
+
+### Image serving (tickets/image_serving.md updated)
+- CloudFront live at `https://d2wbzj01hegmbm.cloudfront.net` (implemented in `price-comparison-web`, 2026-06-27).
+- URL scheme: `/i/{sha256}.{ext}` → `bronze/{env}/images/by-hash/{sha256}.{ext}` via CloudFront Function.
+- Placeholder domain is temporary — pending custom `images.{domain}` once site name confirmed.
+- Remaining: custom domain + image resizing (separate ticket).
+
+### GCC expansion notes (in bloomingdales_crawl.md)
+- `get_language` is GCC-ready (`en.` prefix, not SA-specific).
+- Two SA-specific constants to update per country: `LOCALE_MAP` (`ar_SA`/`en_SA`) and `SFCC_SITE_ID` (`BloomingDales_SA-Site`).
+
+### Bloomingdales data quality bug (not yet fixed)
+- 18 items (9 EN + 9 AR) from sub-PLP filter pages emit category label as gender value and product name as subcategory — breadcrumb depth shifts on these pages. Fix: breadcrumb depth guard in `bloomingdales_rules.py`. Tracked in ticket open questions.
 
 ## 2026-06-08 - Establish product vision and reorganise project context
 - Completed product brief: Arabic-first luxury fashion discovery for Saudi Arabia/GCC, aspiring Saudi women buyers first, widest range available in Saudi as core value proposition, discovery/range identity (not cheapest-price messaging), mobile-first, clean like Farfetch, new arrivals default sort, sale surfaced via filters not front-and-centre, SAR pricing, mid-term: cross-site comparison + price alerts.

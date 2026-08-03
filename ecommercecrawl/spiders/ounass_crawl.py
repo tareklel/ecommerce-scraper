@@ -26,7 +26,7 @@ class OunassSpider(MasterCrawl, scrapy.Spider):
     default_urls_path_setting = 'OUNASS_URLS_PATH'
     default_urls_path_constant = constants.OUNASS_URLS
 
-    def __init__(self, urlpath=None, urls=None, limit=None, *args, **kwargs):
+    def __init__(self, urlpath=None, urls=None, limit=None, category=None, url_categories=None, *args, **kwargs):
         super(OunassSpider, self).__init__(*args, **kwargs)
         self.urlpath = urlpath
         self.start_urls = urls or []
@@ -34,6 +34,30 @@ class OunassSpider(MasterCrawl, scrapy.Spider):
         # Ounass can bypass Scrapy's downloader in requests mode, so keep
         # explicit URL-level dedupe for both fetch backends.
         self._seen_fetch_urls = set()
+        # Global category filter (--category), overridable per seed URL via
+        # a "category" CSV column. Keyed by base URL (no query string) so
+        # pagination pages, which only change the query, keep the same
+        # category without needing to thread it through request meta.
+        self.category = self._normalize_category(category)
+        self.url_categories = {
+            self._base_url(url): normalized
+            for url, raw_category in (url_categories or {}).items()
+            if (normalized := self._normalize_category(raw_category))
+        }
+
+    @staticmethod
+    def _normalize_category(category):
+        if not category:
+            return None
+        normalized = str(category).strip().lower()
+        return normalized or None
+
+    @staticmethod
+    def _base_url(url):
+        return url.split("?", 1)[0]
+
+    def _get_category_for_url(self, url):
+        return self.url_categories.get(self._base_url(url), self.category)
 
     def _get_setting(self, name, default):
         settings = getattr(self, "settings", None)
@@ -198,8 +222,9 @@ class OunassSpider(MasterCrawl, scrapy.Spider):
                 yield from self._handle_seed_url(url)
 
         # Always process the current PLP for products
-        pdps = rules.get_pdps(response)
-        
+        category = self._get_category_for_url(response.url)
+        pdps = rules.get_pdps(response, category=category)
+
         for pdp in pdps:
             yield from self._handle_seed_url(pdp)
         
@@ -207,9 +232,32 @@ class OunassSpider(MasterCrawl, scrapy.Spider):
         """
         This method parses a product detail page, extracts the product information,
         and returns an Item.
+
+        Ounass PDPs are usually server-rendered, so `state` is present in the
+        plain http_response body (cheap). Some pages may not inline it; on a
+        miss we retry once, forcing a Zyte browser render, before giving up.
         """
         try:
             state = rules.get_state(response)
+            if state is None:
+                meta = getattr(response, "meta", None) or {}
+                if meta.get("force_rendered_pdp"):
+                    self.logger.error(
+                        f"Failed to parse PDP {response.url}: no state found even with rendered_html"
+                    )
+                    return
+                self.logger.info(
+                    f"No inline state in http_response for {response.url}; retrying with rendered_html."
+                )
+                yield build_crawler_api_request(
+                    url=response.url,
+                    callback=self.parse_pdp,
+                    settings=getattr(self, "settings", None),
+                    request_type=REQUEST_TYPE_RENDERED_HTML,
+                    meta={"force_rendered_pdp": True},
+                )
+                return
+
             data = rules.get_data(state)
 
             date_string = date.today().strftime("%Y-%m-%d")

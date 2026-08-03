@@ -109,3 +109,26 @@ def test_download_validator_checks_saved_bytes(monkeypatch, tmp_path):
     monkeypatch.setattr(smoke.subprocess, "run", fake_downloader)
 
     assert smoke._download_and_validate_jobs(jobs_path, "level", tmp_path) == 1
+
+
+def test_run_crawl_suppresses_verbose_logs_and_disables_s3(monkeypatch, tmp_path):
+    captured_env = {}
+
+    def fake_crawl(_command, *, cwd, env, check):
+        assert check is True
+        captured_env.update(env)
+        artifact = Path(cwd) / "output" / "2026" / "07" / "20" / "run"
+        artifact.mkdir(parents=True)
+        _write_crawl_artifact(artifact / "ounass.jsonl.gz", {"site": "ounass"})
+
+    monkeypatch.setattr(smoke.subprocess, "run", fake_crawl)
+
+    artifact = smoke._run_crawl(
+        "ounass",
+        "https://saudi.ounass.com/example.html",
+        tmp_path,
+    )
+
+    assert artifact.name == "ounass.jsonl.gz"
+    assert captured_env["SCRAPY_LOG_LEVEL"] == "WARNING"
+    assert captured_env["S3_UPLOAD_ENABLED"] == "false"

@@ -24,8 +24,11 @@ def build_zyte_api_params(settings=None, request_type=REQUEST_TYPE_HTTP_RESPONSE
     """
     Convert a generic crawler API request type into Zyte API parameters.
 
-    `http_response` preserves existing JSON/API response parsing. `rendered_html`
-    asks Zyte for browser-rendered HTML, which is needed for Ounass PDP pages.
+    `http_response` preserves existing JSON/API response parsing, and covers
+    Ounass PDPs too: the PDP state is server-rendered into the plain HTML, so
+    no browser is needed to read it. `rendered_html` asks Zyte for a browser
+    render; Ounass only uses it as a one-time retry when a PDP's state is
+    unexpectedly missing from the plain response.
     """
     if request_type == REQUEST_TYPE_RENDERED_HTML:
         params = {"browserHtml": True}
