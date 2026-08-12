@@ -6,7 +6,7 @@
 
 Pipeline adoption (DDL cut, dbt rebuild) is tracked separately in scraper-pipeline:
 - `../scraper-pipeline/ticket/support-multiple-product-images.md`
-- `../scraper-pipeline/ticket/reset-dev-raw-for-product-schema-v2.md`
+- `../scraper-pipeline/ticket/done/reset-dev-raw-for-product-schema-v2.md`
 
 ## Goal
 
