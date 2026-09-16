@@ -148,6 +148,12 @@ OUNASS_CRAWLER_API_PDP_REQUEST_TYPE = os.getenv(
     "OUNASS_CRAWLER_API_PDP_REQUEST_TYPE",
     "http_response",
 )
+# Whether a PDP with no inline state in the http_response should retry once
+# with a Zyte browser render (browserHtml). Explicitly off: browserHtml costs
+# more per request than http_response, so this is opt-in per environment.
+OUNASS_PDP_BROWSER_HTML_FALLBACK = os.getenv(
+    "OUNASS_PDP_BROWSER_HTML_FALLBACK", "false"
+).strip().lower() == "true"
 
 # Used only when Ounass falls back to requests mode.
 OUNASS_REQUEST_DELAY_SECONDS = os.getenv("OUNASS_REQUEST_DELAY_SECONDS", "0.2")

@@ -27,6 +27,7 @@ def configure_spider(spider, **overrides):
             "OUNASS_REQUESTS_TLDS": [],
             "OUNASS_CRAWLER_API_PLP_REQUEST_TYPE": "http_response",
             "OUNASS_CRAWLER_API_PDP_REQUEST_TYPE": "rendered_html",
+            "OUNASS_PDP_BROWSER_HTML_FALLBACK": False,
             "OUNASS_REQUEST_DELAY_SECONDS": "0",
             "OUNASS_REQUEST_JITTER_SECONDS": "0",
             "OUNASS_REQUEST_TIMEOUT_SECONDS": "20",
@@ -239,9 +240,21 @@ def test_parse_pdp_emits_image_gallery_array(mock_get_state, spider):
 
 
 @patch("ecommercecrawl.spiders.ounass_crawl.rules.get_state", return_value=None)
-def test_parse_pdp_retries_with_rendered_html_when_state_missing(mock_get_state, spider):
-    """A plain http_response miss should retry once, forced to rendered_html."""
+def test_parse_pdp_skips_when_state_missing_and_fallback_disabled(mock_get_state, spider):
+    """browserHtml fallback is off by default, so a missing state drops the PDP."""
     configure_spider(spider)
+    url = "https://www.ounass.ae/shop-example-product.html"
+    response = create_mock_response(b"<html></html>", url=url)
+
+    results = list(spider.parse_pdp(response))
+
+    assert results == []
+
+
+@patch("ecommercecrawl.spiders.ounass_crawl.rules.get_state", return_value=None)
+def test_parse_pdp_retries_with_rendered_html_when_state_missing_and_fallback_enabled(mock_get_state, spider):
+    """With OUNASS_PDP_BROWSER_HTML_FALLBACK on, a http_response miss retries once, forced to rendered_html."""
+    configure_spider(spider, OUNASS_PDP_BROWSER_HTML_FALLBACK=True)
     url = "https://www.ounass.ae/shop-example-product.html"
     response = create_mock_response(b"<html></html>", url=url)
 
@@ -256,7 +269,7 @@ def test_parse_pdp_retries_with_rendered_html_when_state_missing(mock_get_state,
 @patch("ecommercecrawl.spiders.ounass_crawl.rules.get_state", return_value=None)
 def test_parse_pdp_gives_up_after_rendered_html_retry_also_misses(mock_get_state, spider):
     """Do not loop forever if rendered_html also fails to surface state."""
-    configure_spider(spider)
+    configure_spider(spider, OUNASS_PDP_BROWSER_HTML_FALLBACK=True)
     url = "https://www.ounass.ae/shop-example-product.html"
     request = scrapy.Request(url=url, meta={"force_rendered_pdp": True})
     response = HtmlResponse(url=url, request=request, body=b"<html></html>", encoding="utf-8")

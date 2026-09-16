@@ -113,12 +113,24 @@ class OunassSpider(MasterCrawl, scrapy.Spider):
         if url.split("?", 1)[0].endswith(".html"):
             return self._get_setting(
                 "OUNASS_CRAWLER_API_PDP_REQUEST_TYPE",
-                REQUEST_TYPE_RENDERED_HTML,
+                REQUEST_TYPE_HTTP_RESPONSE,
             )
         return self._get_setting(
             "OUNASS_CRAWLER_API_PLP_REQUEST_TYPE",
             REQUEST_TYPE_HTTP_RESPONSE,
         )
+
+    def _get_pdp_browser_html_fallback_enabled(self):
+        """
+        Whether a PDP with no inline state should retry once with browserHtml.
+
+        Off by default (OUNASS_PDP_BROWSER_HTML_FALLBACK): browserHtml costs
+        more per request than http_response, so retrying is opt-in.
+        """
+        value = self._get_setting("OUNASS_PDP_BROWSER_HTML_FALLBACK", False)
+        if isinstance(value, bool):
+            return value
+        return str(value).strip().lower() == "true"
 
     def _get_request_tuning(self):
         delay = float(self._get_setting("OUNASS_REQUEST_DELAY_SECONDS", "0.2"))
@@ -235,7 +247,9 @@ class OunassSpider(MasterCrawl, scrapy.Spider):
 
         Ounass PDPs are usually server-rendered, so `state` is present in the
         plain http_response body (cheap). Some pages may not inline it; on a
-        miss we retry once, forcing a Zyte browser render, before giving up.
+        miss, retrying once with a forced Zyte browser render is opt-in via
+        OUNASS_PDP_BROWSER_HTML_FALLBACK (off by default). When off, or when
+        the rendered_html retry also misses, the PDP is dropped.
         """
         try:
             state = rules.get_state(response)
@@ -244,6 +258,12 @@ class OunassSpider(MasterCrawl, scrapy.Spider):
                 if meta.get("force_rendered_pdp"):
                     self.logger.error(
                         f"Failed to parse PDP {response.url}: no state found even with rendered_html"
+                    )
+                    return
+                if not self._get_pdp_browser_html_fallback_enabled():
+                    self.logger.warning(
+                        f"No inline state in http_response for {response.url}; "
+                        "browserHtml fallback disabled (OUNASS_PDP_BROWSER_HTML_FALLBACK), skipping."
                     )
                     return
                 self.logger.info(
