@@ -1,5 +1,11 @@
 # Memory
 
+## 2026-09-16 - `28c7fc7` - Ounass PDP browserHtml fallback made opt-in
+- The `parse_pdp` retry that forces a Zyte `rendered_html` (browserHtml) render when a PDP's plain `httpResponseBody` has no inline `state` was unconditional; gated it behind new setting `OUNASS_PDP_BROWSER_HTML_FALLBACK`, explicitly `False` by default in `settings.py`, since browserHtml costs more per Zyte request than `httpResponseBody`.
+- When the fallback is off (default) and state is missing, the PDP is now logged and dropped instead of retried.
+- Fixed a latent inconsistency in `_get_crawler_api_request_type`'s hardcoded PDP default: it fell back to `rendered_html` when the setting was absent from settings, contradicting `settings.py`'s actual `http_response` default; now both agree.
+- Updated `tests/test_ounass.py` to cover fallback-disabled (default, expects skip) and fallback-enabled (expects retry) cases.
+
 ## 2026-08-03 - `0caf14f`, `2aef7cd` - Bloomingdale's image downloads and Ounass crawl hardening
 - Added Bloomingdale's to the shared image-downloader site registry and send `https://bloomingdales.sa/` as the request referer, preventing valid gallery jobs from being rejected as an unsupported site.
 - Operationally validated the Bloomingdale's downloader change in dev: all 983 previously skipped jobs downloaded successfully; shared `latest` and production targets were not changed.
