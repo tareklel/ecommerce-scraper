@@ -137,6 +137,24 @@ def is_image_content_type(content_type: Optional[str]) -> bool:
     return content_type.lower().strip().startswith("image/")
 
 
+# Canonical media type to persist on the uploaded S3 blob, keyed by the same
+# extension set extension_from_content_type/extension_from_url produce. Fixed
+# domain only -- never the raw upstream header -- so we never persist an
+# arbitrary or malformed Content-Type parameter from a scraped site.
+CONTENT_TYPE_BY_EXTENSION = {
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".webp": "image/webp",
+    ".gif": "image/gif",
+    ".avif": "image/avif",
+}
+
+
+def canonical_content_type_for_extension(ext: Optional[str]) -> Optional[str]:
+    return CONTENT_TYPE_BY_EXTENSION.get(ext)
+
+
 def build_output_path(
     output_dir: str,
     download_run_id: str,
@@ -297,8 +315,15 @@ def extract_jobs_from_jsonl(path: str, site_override: Optional[str] = None) -> L
     return jobs
 
 
-def _upload_blob(s3_client, local_path: str, bucket: str, key: str) -> None:
-    s3_client.upload_file(local_path, bucket, key)
+def _upload_blob(
+    s3_client,
+    local_path: str,
+    bucket: str,
+    key: str,
+    content_type: Optional[str] = None,
+) -> None:
+    extra_args = {"ContentType": content_type} if content_type else None
+    s3_client.upload_file(local_path, bucket, key, ExtraArgs=extra_args)
 
 
 def download_one_job(
@@ -386,7 +411,13 @@ def download_one_job(
 
     if storage_mode in ("s3", "both") and s3_client and s3_bucket:
         try:
-            _upload_blob(s3_client, output_path, s3_bucket, canonical_blob_key)
+            _upload_blob(
+                s3_client,
+                output_path,
+                s3_bucket,
+                canonical_blob_key,
+                content_type=canonical_content_type_for_extension(content_ext),
+            )
         except Exception as e:
             return _result_blob(
                 status=STATUS_ERROR,

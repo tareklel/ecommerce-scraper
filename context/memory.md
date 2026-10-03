@@ -206,3 +206,10 @@
 - Moved `AGENTS.md` and `memory.md` into `context/`; added `context/product-brief.md`.
 - `CLAUDE.md` remains in root as a thin index pointing into `context/`.
 - Updated three frontend tickets (image_serving, product_api, plp_debug_ui) status to blocked on website description; website_description.md now superseded by product-brief.md.
+
+## 2026-10-03 - Set image Content-Type metadata on S3 uploads
+- Fixed `ecommercecrawl/image_downloader.py::_upload_blob` to pass `ExtraArgs={"ContentType": ...}` to `s3_client.upload_file`, so canonical image blobs are no longer stored/served as generic `binary/octet-stream`.
+- Added `CONTENT_TYPE_BY_EXTENSION` and `canonical_content_type_for_extension`, keyed by the same fixed extension set `extension_from_content_type`/`extension_from_url` already use (jpg/jpeg/png/webp/gif/avif), so the uploaded media type is always derived from our own enum, never the raw upstream response header.
+- `download_one_job` now passes `canonical_content_type_for_extension(content_ext)` into `_upload_blob`.
+- Added 4 focused tests covering the uploader's `ExtraArgs` behavior (set when known, omitted when not) and the end-to-end `download_one_job` S3 path for JPEG/PNG/GIF/WebP; all 9 tests in `tests/test_image_downloader.py` pass.
+- Part of `scraper-pipeline/ticket/set-image-content-type-metadata.md`. The dev S3 backfill (existing `bronze/dev/images/by-hash/` objects, 1176 total, currently all `binary/octet-stream`) and the required CloudFront `/i/*` cache invalidation afterward were blocked by a "Modify Shared Resources" permission denial on the in-place `copy-object` call; that part is still open and needs explicit user action.

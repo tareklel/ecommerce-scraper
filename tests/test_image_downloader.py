@@ -93,6 +93,76 @@ def test_download_one_job_writes_file(monkeypatch, tmp_path):
     assert result["job"]["primary_key"] == "ABC123_level-shoes"
 
 
+def test_upload_blob_sets_content_type_extra_arg():
+    calls = []
+
+    class _FakeS3:
+        def upload_file(self, local_path, bucket, key, ExtraArgs=None):
+            calls.append((local_path, bucket, key, ExtraArgs))
+
+    downloader._upload_blob(_FakeS3(), "/tmp/x.jpg", "bucket", "key", content_type="image/jpeg")
+
+    assert calls == [("/tmp/x.jpg", "bucket", "key", {"ContentType": "image/jpeg"})]
+
+
+def test_upload_blob_omits_extra_args_when_content_type_unknown():
+    calls = []
+
+    class _FakeS3:
+        def upload_file(self, local_path, bucket, key, ExtraArgs=None):
+            calls.append(ExtraArgs)
+
+    downloader._upload_blob(_FakeS3(), "/tmp/x.jpg", "bucket", "key")
+
+    assert calls == [None]
+
+
+def test_download_one_job_s3_upload_sets_image_content_type(monkeypatch, tmp_path):
+    def _fake_get(url, headers=None, timeout=None):
+        return _MockResponse(content=b"image-bytes", content_type="image/jpeg")
+
+    monkeypatch.setattr(downloader.requests, "get", _fake_get)
+
+    upload_calls = []
+
+    class _FakeS3:
+        def upload_file(self, local_path, bucket, key, ExtraArgs=None):
+            upload_calls.append((bucket, key, ExtraArgs))
+
+    for content_type, expected_extra_args in (
+        ("image/jpeg", {"ContentType": "image/jpeg"}),
+        ("image/png", {"ContentType": "image/png"}),
+        ("image/gif", {"ContentType": "image/gif"}),
+        ("image/webp", {"ContentType": "image/webp"}),
+    ):
+        def _fake_get(url, headers=None, timeout=None, content_type=content_type):
+            return _MockResponse(content=b"image-bytes", content_type=content_type)
+
+        monkeypatch.setattr(downloader.requests, "get", _fake_get)
+        job = {
+            "site": "level_shoes",
+            "primary_key": "ABC123_level-shoes",
+            "image_url": "https://assets.levelshoes.com/path/file",
+        }
+        result = downloader.download_one_job(
+            job=job,
+            output_dir=str(tmp_path),
+            download_run_id="download-run-1",
+            storage_mode="s3",
+            s3_client=_FakeS3(),
+            s3_bucket="test-bucket",
+            blob_prefix="bronze/images/by-hash",
+        )
+        assert result["status"] == "ok"
+
+    assert [args for (_, _, args) in upload_calls] == [
+        {"ContentType": "image/jpeg"},
+        {"ContentType": "image/png"},
+        {"ContentType": "image/gif"},
+        {"ContentType": "image/webp"},
+    ]
+
+
 def test_download_jobs_dedupes_same_job(monkeypatch, tmp_path):
     call_count = {"count": 0}
 
