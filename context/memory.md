@@ -1,5 +1,13 @@
 # Memory
 
+## 2026-10-05 - `1c19886` - Ounass PLP-efficient crawl mode designed (no behaviour change yet)
+- Designed an opt-in mode that refreshes known Ounass products (from gold) from listing pages instead of product pages, then PDP-crawls only what's left. Cost note `notes/2026-09-17-ounass-zyte-crawl-cost.md` puts women/bags (SA) at ≈ $2/month vs ≈ $181/month for daily full PDP re-crawls.
+- `tickets/ounass_plp_efficient_crawl.md` holds the plan split into Parts 0–7 (0 done; 1 and 6 are scraper-pipeline work), input contracts, guardrails with failure scopes, and a dated decision log.
+- Part 0 parity probe (`scripts/probe_ounass_plp_parity.py`): across 42 SA/AE products, listing `visibleSku`, `priceByCustomerGroupId["-1"]` and a discount computed from the two listing prices match the PDP extractor 42/42; the listing's own discount fields and plain `price` key don't. Sold-out colours appear only as swatches without IDs (11/12 sampled).
+- Found while designing: silver merges with `coalesce(new, previous)`, so PLP-extract rows must copy `url` from gold (never the listing URL), and ended sales can't clear `price_discount` today (existing scraper-pipeline bug, both paths).
+- Added living reference doc `docs/ounass_plp_efficient_crawl.md`, an AGENTS.md rule to update it with any behaviour change, and `tests/test_plp_efficient_docs.py`, which fails if an `OUNASS_PLP_EFFICIENT_*` setting is undocumented.
+- Next: Part 1 (scraper-pipeline inputs); plan proposed, waiting on decisions about registry scope, export scoping, one vs three export Lambdas, and `portal_itemid` reaching the API cache.
+
 ## 2026-09-16 - `28c7fc7` - Ounass PDP browserHtml fallback made opt-in
 - The `parse_pdp` retry that forces a Zyte `rendered_html` (browserHtml) render when a PDP's plain `httpResponseBody` has no inline `state` was unconditional; gated it behind new setting `OUNASS_PDP_BROWSER_HTML_FALLBACK`, explicitly `False` by default in `settings.py`, since browserHtml costs more per Zyte request than `httpResponseBody`.
 - When the fallback is off (default) and state is missing, the PDP is now logged and dropped instead of retried.
