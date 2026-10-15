@@ -1,5 +1,10 @@
 # Memory
 
+## 2026-10-15 - `1435584` - Tests skip when their saved product pages are absent
+- The first crawler-image CI run failed: 15 Farfetch and Bloomingdale's tests read real product pages (`*.html`) that are gitignored, because downloaded product data must not be committed, so they don't exist in CI.
+- Those tests now skip with a stated reason when the page is missing, and still run locally. Simulated CI: 284 passed, 15 skipped.
+- Follow-up in `tickets/cicd_pipeline.md`: a synthetic Bloomingdale's PDP fixture so CI covers its `extract_product`.
+
 ## 2026-10-15 - `f27b920` - Crawler image built in GitHub Actions; promotion needs approval
 - The cloud crawler image (ECR `latest`, 2026-08-03) was missing `28c7fc7` and `2e1a482`, and the laptop can't build images (company HTTPS inspection breaks pip inside `docker build`). Builds moved to GitHub Actions.
 - `.github/workflows/crawler-image.yml`: on pushes to `main` touching crawler code, run pytest, then build and push `sha-<7>` to ECR via OIDC. It never moves `latest`. `.github/workflows/promote-crawler-image.yml`: re-tags a `sha-…` / `legacy-YYYYMMDD` image as `latest` in the `production` environment (required reviewer tareklel, `main` only). Rollback = promote an older tag.
