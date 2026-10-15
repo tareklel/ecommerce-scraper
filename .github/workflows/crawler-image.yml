@@ -1,8 +1,10 @@
 name: Crawler image
 
-# Tests, then builds and pushes the crawler image to ECR as `sha-<7 chars>`.
-# It never moves `latest`, which is what ECS runs; going live is the separate,
-# approved "Promote crawler image" workflow. Plan: tickets/cicd_pipeline.md.
+# Tests, then builds the crawler image, pushes it to ECR as `sha-<7 chars>`,
+# and deploys it by moving `latest` (what ECS runs) to it. Auto-deploy was
+# chosen 2026-10-15 for a solo workflow: tests gate every deploy, and the
+# summary names the previously live image so a rollback is one run of
+# "Promote crawler image" with that tag. Plan: tickets/cicd_pipeline.md.
 
 on:
   push:
@@ -78,14 +80,30 @@ jobs:
       - id: ecr
         uses: aws-actions/amazon-ecr-login@v2
 
+      # Remember what is live before this deploy, for the rollback hint.
+      - name: Record currently live image
+        id: previous
+        run: |
+          prev=$(aws ecr describe-images \
+            --repository-name "$ECR_REPOSITORY" \
+            --image-ids imageTag=latest \
+            --query 'imageDetails[0].[imageDigest, join(`,`, imageTags)]' \
+            --output text 2>/dev/null || true)
+          echo "digest=$(cut -f1 <<<"$prev")" >> "$GITHUB_OUTPUT"
+          echo "tags=$(cut -f2 <<<"$prev")" >> "$GITHUB_OUTPUT"
+
       - uses: docker/setup-buildx-action@v3
 
+      # Pushing both tags in one go: `sha-…` keeps the build addressable for
+      # rollback (ECR keeps the last 20), `latest` is the deploy.
       - uses: docker/build-push-action@v6
         with:
           context: .
           platforms: linux/amd64
           push: true
-          tags: ${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ steps.tag.outputs.tag }}
+          tags: |
+            ${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ steps.tag.outputs.tag }}
+            ${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
           # A plain single-platform image: no attestation manifests, so ECR
           # gets no untagged side-images and promotion can re-tag it directly.
           provenance: false
@@ -94,9 +112,15 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Summary
+        env:
+          PREV_DIGEST: ${{ steps.previous.outputs.digest }}
+          PREV_TAGS: ${{ steps.previous.outputs.tags }}
         run: |
           {
-            echo "### Pushed \`${{ steps.tag.outputs.tag }}\`"
+            echo "### Deployed \`${{ steps.tag.outputs.tag }}\` as \`latest\`"
             echo
-            echo "Not live yet. To deploy, run **Promote crawler image** with \`${{ steps.tag.outputs.tag }}\`."
+            echo "The next ECS crawl / image-pipeline run uses this image."
+            echo
+            echo "- previously live: \`${PREV_TAGS:-unknown}\` (\`${PREV_DIGEST:-unknown}\`)"
+            echo "- to roll back: run **Promote crawler image** with one of the previous \`sha-…\` / \`legacy-…\` tags above"
           } >> "$GITHUB_STEP_SUMMARY"

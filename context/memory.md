@@ -1,5 +1,9 @@
 # Memory
 
+## 2026-10-15 - Crawler image auto-deploys on green CI; cloud updated
+- The user promoted `sha-f3737dd`, so the cloud crawler now runs current `main` (ECR `latest` = `sha256:503f669f…`); the old image is kept as `legacy-20260803`.
+- Switched to auto-deploy: `crawler-image.yml` pushes `sha-<7>` and `latest` once tests pass, and its summary names the previously live image. `promote-crawler-image.yml` is now for rollback only. The required reviewer was removed from the `production` environment (the `main`-only branch rule stays). Crawler-code pushes to `main` now go live at the next crawl.
+
 ## 2026-10-15 - `1435584` - Tests skip when their saved product pages are absent
 - The first crawler-image CI run failed: 15 Farfetch and Bloomingdale's tests read real product pages (`*.html`) that are gitignored, because downloaded product data must not be committed, so they don't exist in CI.
 - Those tests now skip with a stated reason when the page is missing, and still run locally. Simulated CI: 284 passed, 15 skipped.

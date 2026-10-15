@@ -1,10 +1,10 @@
 name: Promote crawler image
 
-# Deploys an already-built image by moving the `latest` tag to it. ECS (the
-# crawler, image pipeline and image quality checker) runs `:latest`, so this
-# IS the deploy. It re-tags; it never rebuilds, so what runs is exactly what
-# CI tested. Rollback = promote an older sha-<7> tag.
-# Runs in the `production` environment, so GitHub asks for approval first.
+# Moves `latest` (what ECS runs: crawler, image pipeline, image quality
+# checker) to an already-built image. Normal deploys happen automatically in
+# "Crawler image"; this workflow is for ROLLBACK, or for deploying a specific
+# older build. It re-tags; it never rebuilds. Runs in the `production`
+# environment (main only; no approval click since 2026-10-15).
 
 on:
   workflow_dispatch:

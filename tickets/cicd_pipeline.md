@@ -185,7 +185,18 @@ the workflows to `main` (which triggers the first build).
   (downloaded product data, `context/AGENTS.md`). Fix: those tests now skip,
   with a stated reason, when the page is absent; locally they still run.
   Simulated CI result: 284 passed, 15 skipped.
-- [ ] Step 6b: CI green → `sha-<HEAD>` in ECR, then promote it.
+- [x] Step 6b: CI green (`38741812757`, 284 passed / 15 skipped), then the
+  user promoted `sha-f3737dd`. **Cloud crawler up to date as of 2026-10-15
+  13:27 UTC** (`latest` = `sha256:503f669f…`); the old image is kept as
+  `legacy-20260803`.
+- [x] **Switched to auto-deploy (option A, 2026-10-15):** a manual approval
+  per deploy was too much friction for a solo workflow. `crawler-image.yml`
+  now pushes `sha-<7>` **and** `latest` once tests pass, and its run
+  summary names the previously live image. `promote-crawler-image.yml` is
+  kept for rollback or deploying an older build. The `production`
+  environment no longer needs a reviewer (branch policy `main` only
+  remains). Consequence: any crawler-code change pushed to `main` goes live
+  at the next crawl, so keep `main` deployable.
 - [ ] Follow-up: replace `tests/fixtures/bloomingdales_pdp.html` with a small
   **synthetic** fixture (Bloomingdale's is a live crawler, so CI should
   cover `extract_product`). Farfetch fixtures can stay local-only; that
