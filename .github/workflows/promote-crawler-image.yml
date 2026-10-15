@@ -1,0 +1,90 @@
+name: Promote crawler image
+
+# Deploys an already-built image by moving the `latest` tag to it. ECS (the
+# crawler, image pipeline and image quality checker) runs `:latest`, so this
+# IS the deploy. It re-tags; it never rebuilds, so what runs is exactly what
+# CI tested. Rollback = promote an older sha-<7> tag.
+# Runs in the `production` environment, so GitHub asks for approval first.
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image to make live: a CI build (sha-84e8277) or a kept pre-CI image (legacy-20260803)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  AWS_REGION: eu-central-1
+  ECR_REPOSITORY: ecommerce-scraper
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      id-token: write # GitHub OIDC token to assume the AWS role
+    steps:
+      # The input reaches the shell only through env vars (never inlined), and
+      # must be a CI build tag (sha-1234abc) or a kept pre-CI image
+      # (legacy-YYYYMMDD, e.g. legacy-20260803), so it can't inject commands
+      # or target `latest`.
+      - name: Validate tag
+        env:
+          IMAGE_TAG: ${{ inputs.image_tag }}
+        run: |
+          if [[ ! "$IMAGE_TAG" =~ ^(sha-[0-9a-f]{7}|legacy-[0-9]{8})$ ]]; then
+            echo "image_tag must look like sha-1234abc or legacy-20260803, got: $IMAGE_TAG" >&2
+            exit 1
+          fi
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_CRAWLER_IMAGE_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Move latest to the chosen image
+        env:
+          IMAGE_TAG: ${{ inputs.image_tag }}
+        run: |
+          set -euo pipefail
+
+          image=$(aws ecr batch-get-image \
+            --repository-name "$ECR_REPOSITORY" \
+            --image-ids imageTag="$IMAGE_TAG" \
+            --output json)
+          manifest=$(jq -r '.images[0].imageManifest // empty' <<<"$image")
+          media_type=$(jq -r '.images[0].imageManifestMediaType // empty' <<<"$image")
+          digest=$(jq -r '.images[0].imageId.imageDigest // empty' <<<"$image")
+          if [ -z "$manifest" ]; then
+            echo "No image tagged $IMAGE_TAG in $ECR_REPOSITORY" >&2
+            exit 1
+          fi
+
+          current=$(aws ecr describe-images \
+            --repository-name "$ECR_REPOSITORY" \
+            --image-ids imageTag=latest \
+            --query 'imageDetails[0].imageDigest' --output text 2>/dev/null || true)
+          if [ "$current" = "$digest" ]; then
+            echo "latest already points to $IMAGE_TAG ($digest); nothing to do."
+            exit 0
+          fi
+
+          aws ecr put-image \
+            --repository-name "$ECR_REPOSITORY" \
+            --image-tag latest \
+            --image-manifest "$manifest" \
+            --image-manifest-media-type "$media_type" > /dev/null
+
+          {
+            echo "### \`latest\` → \`$IMAGE_TAG\`"
+            echo
+            echo "- new digest: \`$digest\`"
+            echo "- previous digest: \`${current:-none}\`"
+            echo
+            echo "The next ECS crawl / image-pipeline run uses this image."
+          } >> "$GITHUB_STEP_SUMMARY"

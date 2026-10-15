@@ -20,6 +20,12 @@ variable "ecr_repository_name" {
 }
 
 # Image tag that ECS should run (kept as a variable so we can bump tags without editing TF).
+variable "github_repository" {
+  description = "GitHub owner/repo whose main branch and production environment may assume the crawler-image CI role"
+  type        = string
+  default     = "tareklel/ecommerce-scraper"
+}
+
 variable "image_tag" {
   description = "Container image tag to run in ECS"
   type        = string

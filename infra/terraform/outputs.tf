@@ -37,3 +37,9 @@ output "default_subnet_ids" {
 output "ecs_image_pipeline_task_definition_arn" {
   value = aws_ecs_task_definition.image_pipeline.arn
 }
+
+# Store as the GitHub repo variable AWS_CRAWLER_IMAGE_ROLE_ARN (used by
+# .github/workflows/crawler-image.yml and promote-crawler-image.yml).
+output "github_actions_crawler_image_role_arn" {
+  value = aws_iam_role.github_actions_crawler_image.arn
+}

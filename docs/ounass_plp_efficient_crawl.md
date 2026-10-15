@@ -33,25 +33,44 @@ With the flag off (the default), the spider behaves exactly as before.
 
 ## 2. Inputs [planned]
 
-Three files, produced daily by scraper-pipeline and read from S3 at startup.
-All values are **canonical** (scraper-pipeline `canonical_seeds/`). The crawler
-never canonicalizes raw Ounass values itself.
+Three files, written fresh **at the start of every crawl**. At startup the
+crawler invokes scraper-pipeline's export Lambda synchronously, waits for it,
+and reads the files from the S3 paths it returns. It isn't triggered after
+dbt or on a clock: dbt runs often and for unrelated reasons, while the crawler
+only needs fresh inputs right before it crawls. If the export fails, the
+crawl stops before any Zyte request. Local files (`--plp-list`, `--pdp-list`,
+`--vocabulary`) skip the invoke, for tests.
 
-| Input | Produced by | Contents |
+All values are **canonical** (scraper-pipeline `canonical_seeds/`). The
+crawler never canonicalizes raw Ounass values itself.
+
+| Input | Source (in scraper-pipeline) | Contents |
 |---|---|---|
-| **PLP list** | scraper-pipeline `crawl_plp_registry` seed, published to S3 | one row per listing page to sweep |
-| **PDP list** | scraper-pipeline daily export of `gold_product_serving_latest` | one row per known product × country × language |
-| **Canonical vocabulary** | scraper-pipeline, published to S3 | `dim_country`, `dim_map_gender`, `dim_canonical_category_subcategory`, `dim_canonical_brand` |
+| **PLP list** | active rows of the `crawl_plp_registry` seed | one row per listing page to sweep |
+| **PDP list** | `gold_product_serving_latest`, scoped to active PLP rows | one row per known product × country × language; its manifest records **when gold was last built** |
+| **Canonical vocabulary** | `dim_country`, `dim_map_gender`, `dim_canonical_category_subcategory`, `dim_canonical_brand` | all allowed canonical values |
 
-S3 paths and the export schedule: _to fill in when Part 1 lands (link
-scraper-pipeline's export doc here)._
+**Export (scraper-pipeline, code written 2026-10-13, not deployed):** Lambda
+`price-comparison-plp-efficient-export-<env>` writes
+`s3://price-comparison-bucket-eu-central-1/resources/plp-efficient/<env>/ounass/<export_id>/`
+`pdp_list.csv`, `plp_list.csv`, `vocabulary.json` and, last, `manifest.json`
+(only a complete export has one; it carries `gold_built_at` and row counts).
+`<prefix>/ounass/latest.json` points at the newest manifest. Full contract:
+scraper-pipeline `docs/PLP_EFFICIENT_EXPORT.md`.
+
+Keys in both lists follow scraper-pipeline's SQL rules: lowercase, with
+`language` as `ar` / `en`. The crawler compares case-insensitively; the
+rows it writes keep `product_schema.py`'s `EN` / `AR`.
 
 ### PLP list columns
 
 ```
-url,site,country,language,gender,category,subcategory,brand
-https://saudi.ounass.com/api/women/bags/tote-bags,ounass,sa,AR,women,bags,tote_bags,
+url,site,country,language,gender,category,subcategory,brand,is_active
+https://saudi.ounass.com/api/women/bags/tote-bags,ounass,sa,ar,women,bags,tote_bags,,true
 ```
+
+- `is_active = false` switches a listing off without deleting the row; it's
+  neither crawled nor used to scope the PDP list.
 
 - `url` must be the `/api/...` endpoint. The human-facing page is HTML the
   spider can't parse. The hostname must match `country` + `language`
@@ -74,8 +93,14 @@ From `gold_product_serving_latest` (`category` ← `category_canonical`,
 `url` is that product's PDP URL for **that** country and language. Every row
 has been crawled before, so it enters the run with `crawled_before = true`.
 
+**What's in it:** only gold Ounass products that match an **active** PLP list
+row on site, country, language, gender, category and subcategory (and brand,
+when the row sets one), minus products sold out for 3+ days. The PLP list is
+therefore the single definition of scope: add or activate a listing row and
+its products join the next export; set `is_active = false` and they drop out.
+
 The crawler does **not** filter this list: everything in it is crawled, via a
-PLP or directly in Phase 2. Scope is set when the list is built.
+PLP or directly in Phase 2. That's why scoping happens in the export.
 
 ---
 
@@ -163,7 +188,7 @@ much as the problem affects.
 | G4 | Known-but-unseen products per PLP (excluding ones gold has as sold out) | Over the cap → that PLP's missing products held back | `OUNASS_PLP_EFFICIENT_MISSING_RATIO_CAP` (0.25) |
 | G6 | PLP-extract `url` = PDP list `url`, not a listing URL | Drop that row → Phase 2 | — |
 | G7 | PLP hostname ↔ country/language; entry `localeCurrency` = country currency | Startup: skip that PLP. Sweep: stop that PLP. | — |
-| G8 | Export age | Warn at the warn age; stop run at the max age | `OUNASS_PLP_EFFICIENT_EXPORT_WARN_DAYS` (2), `OUNASS_PLP_EFFICIENT_EXPORT_MAX_AGE_DAYS` (3) |
+| G8 | Gold age: gold's last build time from the PDP list manifest. The export itself is always fresh. | Warn at the warn age; stop run at the max age (dbt likely stuck) | `OUNASS_PLP_EFFICIENT_GOLD_WARN_AGE_DAYS` (2), `OUNASS_PLP_EFFICIENT_GOLD_MAX_AGE_DAYS` (3) |
 | G9 | Daily parity spot check, per country | Confirmed mismatches ≥ max → stop run, no PLP-extract rows. Too few usable comparisons → no PLP-extract rows for that country. Failed fetches aren't mismatches. | `OUNASS_PLP_EFFICIENT_PARITY_SAMPLE` (20), `OUNASS_PLP_EFFICIENT_PARITY_MIN_COMPARISONS` (10), `OUNASS_PLP_EFFICIENT_PARITY_MAX_MISMATCHES` (2) |
 | G10 | Canonical values exist in the latest vocabulary | Bad PLP row → as G1. Bad PDP row → quarantine that product. Too many bad PDP rows → stop run. | `OUNASS_PLP_EFFICIENT_MAX_BAD_PDP_ROWS_RATIO` (0.05) |
 | G11 | ID matched but fields differ (drift / reclassification) | Over the share → stop that PLP | `OUNASS_PLP_EFFICIENT_FIELD_MISMATCH_RATIO` (0.05) |
@@ -177,6 +202,7 @@ Other settings:
 |---|---|---|
 | `OUNASS_PLP_EFFICIENT_CRAWL` | `False` | Turns the mode on |
 | `OUNASS_PLP_EFFICIENT_SHADOW` | `False` | Shadow mode: full run, no rows written, outcomes logged to the manifest |
+| `OUNASS_PLP_EFFICIENT_EXPORT_LAMBDA` | _set in Part 2_ | Name of scraper-pipeline's export Lambda, invoked at crawl start |
 
 Setting names are planned and may change in Part 2. The drift test
 (`tests/test_plp_efficient_docs.py`) fails if a setting in `settings.py`
@@ -226,7 +252,7 @@ isn't listed in this doc.
 
 | Step | Command |
 |---|---|
-| Check inputs before spending budget | `make preflight-ounass-plp-efficient` (zero Zyte requests; `--probe-one-page` = 1 request) |
+| Check inputs before spending budget | `make preflight-ounass-plp-efficient`: invokes the export exactly as a crawl would (small Athena queries), then runs every startup check. Zero Zyte requests; `--probe-one-page` = 1 request. |
 | Shadow run | _to fill in (Part 4/7)_ |
 | Live run | _to fill in (Part 3)_ |
 | Re-verify listing ↔ product-page parity | `.venv/bin/python scripts/probe_ounass_plp_parity.py --plp-url <api listing url>` (needs `ZYTE_API_KEY`; ~30 Zyte requests) **[built]** |
@@ -237,7 +263,8 @@ isn't listed in this doc.
 
 | Symptom | Likely cause | Check |
 |---|---|---|
-| Run stopped at startup | G2 / G8 / G1 or G10 over threshold | Run preflight: it lists every failed check with the offending rows |
+| Run stopped at startup | Export Lambda failed, or G2 / G8 / G1 or G10 over threshold | Run preflight: it lists every failed check with the offending rows. For an export failure, check the Lambda's logs in scraper-pipeline. |
+| Run stopped on G8 | gold hasn't been rebuilt for 3+ days | Check scraper-pipeline's dbt runs |
 | A PLP was skipped | Bad PLP row (non-canonical value, missing subcategory, hostname ≠ country) | Fix the row in `crawl_plp_registry` |
 | Products quarantined | Gold row with a value not in the vocabulary, often mid-rename | Wait for the dbt rebuild, or fix the seed |
 | A country has no PLP-extract rows | G9 inconclusive: too few parity comparisons, usually Ounass blocking (seen on Saudi) | Manifest parity block; `--probe-one-page` |
@@ -269,3 +296,7 @@ isn't listed in this doc.
 | Date | Change | Commit |
 |---|---|---|
 | 2026-10-05 | Doc created from the agreed design (all sections planned) | — |
+| 2026-10-13 | PDP list scoped to active PLP list rows; `is_active` column added to the PLP list | — |
+| 2026-10-13 | Export prefix moved under `resources/` (`resources/plp-efficient/<env>/`), next to the hand-maintained `resources/crawl-lists/` | — |
+| 2026-10-13 | Export written in scraper-pipeline (not deployed): one manifest per export, written last; `vocabulary.json`; input keys lowercase (`language` `ar`/`en`) | — |
+| 2026-10-13 | Inputs exported on demand at crawl start (crawler invokes scraper-pipeline's export Lambda); G8 now measures gold's last build time, with settings renamed `…_GOLD_WARN_AGE_DAYS` / `…_GOLD_MAX_AGE_DAYS`; added `…_EXPORT_LAMBDA` | — |

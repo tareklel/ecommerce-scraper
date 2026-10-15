@@ -1,0 +1,102 @@
+name: Crawler image
+
+# Tests, then builds and pushes the crawler image to ECR as `sha-<7 chars>`.
+# It never moves `latest`, which is what ECS runs; going live is the separate,
+# approved "Promote crawler image" workflow. Plan: tickets/cicd_pipeline.md.
+
+on:
+  push:
+    branches: [main]
+    # Only code that ends up in the image; docs-only commits don't build.
+    paths:
+      - "ecommercecrawl/**"
+      - "run_*.py"
+      - "scripts/**"
+      - "Dockerfile"
+      - ".dockerignore"
+      - "pyproject.toml"
+      - "poetry.lock"
+      - ".github/workflows/crawler-image.yml"
+  workflow_dispatch:
+
+# One build at a time per branch; a newer push waits rather than racing.
+concurrency:
+  group: crawler-image-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  AWS_REGION: eu-central-1
+  ECR_REPOSITORY: ecommerce-scraper
+  # Same Poetry version the Dockerfile installs.
+  POETRY_VERSION: "1.8.5"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          # Same Python as the image (python:3.11-slim).
+          python-version: "3.11"
+
+      - name: Install Poetry
+        run: pip install "poetry==${POETRY_VERSION}"
+
+      - name: Install dependencies
+        run: poetry install --no-root --no-interaction
+
+      # `python -m pytest` puts the repo root on sys.path, as when run
+      # locally; the repo has no pytest config telling it where to look.
+      - name: Run tests
+        run: poetry run python -m pytest -q
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    # The AWS role only trusts main (public repo: never PRs or other branches).
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      id-token: write # lets the job get a GitHub OIDC token to assume the AWS role
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compute image tag
+        id: tag
+        run: echo "tag=sha-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_CRAWLER_IMAGE_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ steps.tag.outputs.tag }}
+          # A plain single-platform image: no attestation manifests, so ECR
+          # gets no untagged side-images and promotion can re-tag it directly.
+          provenance: false
+          sbom: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Summary
+        run: |
+          {
+            echo "### Pushed \`${{ steps.tag.outputs.tag }}\`"
+            echo
+            echo "Not live yet. To deploy, run **Promote crawler image** with \`${{ steps.tag.outputs.tag }}\`."
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,6 +1,60 @@
 # Ticket: Ounass PLP-Efficient Crawl — Refresh Known Products From Listings, Not Product Pages
 
-**Status: design agreed 2026-10-05; Part 0 done, Parts 1–7 not started.**
+**Status: Part 0 done; Part 1 deployed to dev except step 5; Parts 2–7 not started.**
+
+## ▶ Where we are / next steps (handoff, updated 2026-10-15)
+
+Read this first when resuming.
+
+**Done:**
+- Part 0 (parity proof); design, reference doc, drift test. Committed and
+  pushed (`1c19886`, `84e8277`).
+- Part 1 steps 1–4 in **dev** (details under Part 1):
+  - registry seed loaded, gold has `portal_itemid`, dbt tests pass;
+  - `plp_extract_flag` column added to dev raw;
+  - export Lambda `price-comparison-plp-efficient-export-dev` deployed by a
+    targeted apply, writing under `resources/plp-efficient/dev/`;
+  - `gold_built_at` confirmed to track gold rebuilds.
+
+**Next, in order:**
+1. **Part 1 step 5:** `make plp-efficient-export-dev` (scraper-pipeline). It
+   reads dev tables and writes only under `resources/plp-efficient/dev/ounass/`.
+   Expect `plp_list.csv` = the 4 registry rows; `pdp_list.csv` = SA tote and
+   shoulder bags in `ar`/`en`, minus products sold out 3+ days (may be small:
+   dev gold has 248 rows); `vocabulary.json`; `manifest.json` with
+   `gold_built_at` ≈ the last gold rebuild.
+2. **Commit both repos.** Uncommitted as of 2026-10-15:
+   - **scraper-pipeline:** all Part 1 code, tests, Terraform and docs, plus
+     the note in `ticket/migrate-validated-dev-to-prod.md`. Its rule: update
+     `memory.md` in the same commit. Don't touch its untracked `context/`
+     folder (not ours).
+   - **here:** this ticket, `docs/ounass_plp_efficient_crawl.md`,
+     `tickets/cicd_pipeline.md`.
+3. **Pin dbt** in scraper-pipeline `requirements.txt` (installed:
+   dbt-core 1.12.5, dbt-athena 1.11.1). Optional but recommended.
+4. **Part 2** (this repo): loaders, validation, `make preflight`; build
+   against hand-made CSVs. The crawler must compare `language`
+   case-insensitively (inputs use `ar`/`en`, output rows keep `EN`/`AR`).
+5. **Part 1 step 6 (prod):** only after prod gold and the registry exist;
+   see `../scraper-pipeline/ticket/migrate-validated-dev-to-prod.md`. Apply
+   prod export resources **targeted**.
+
+**In parallel:** the **cloud crawler image is stale** (ECR `latest` pushed
+2026-08-03; missing `28c7fc7` and `2e1a482`). Building on the laptop fails
+(company HTTPS inspection). Fix in progress via GitHub Actions; see
+`tickets/cicd_pipeline.md` → "In progress: crawler image".
+
+**Session gotchas:**
+- AWS CLI and Terraform work from the agent shell once you're logged in to
+  SSO in your own terminal.
+- pip and Docker builds fail on `CERTIFICATE_VERIFY_FAILED`. Never work
+  around it with certificate tricks (`context/AGENTS.md`).
+- scraper-pipeline Terraform state is local (`terraform/terraform.tfstate`).
+  **A full apply would also redeploy the API-cache Lambdas** with undeployed
+  2026-07-30 code, so always use `-target`.
+- Run scraper-pipeline's Python tests with
+  `../ecommerce-scraper/.venv/bin/python -m pytest tests -q -p no:cacheprovider`
+  if its own `.venv` breaks (OneDrive turns its symlinks into text files).
 
 Cost case: `notes/2026-09-17-ounass-zyte-crawl-cost.md`. Listing (PLP) entries
 already carry each product's ID, price and badges, so refreshing products we
@@ -31,7 +85,7 @@ depends on it starts.
 | Part | What | Repo | Depends on | Status |
 |---|---|---|---|---|
 | **0** | Prove PLP values match PDP values (parity probe) | this | — | ✅ done (2026-10-01) |
-| **1** | Inputs: exports, registry, vocabulary, flag column in raw | scraper-pipeline | 0 | not started |
+| **1** | Inputs: exports, registry, vocabulary, flag column in raw | scraper-pipeline | 0 | code written 2026-10-13, not deployed |
 | **2** | Input loading, validation and `make preflight` | this | 0 (build with hand-made CSVs; verify against Part 1 exports) | not started |
 | **3** | Crawler core: Phase 1 / Phase 2, PLP-extract rows, runtime guardrails | this | 2 | not started |
 | **4** | Run observability: manifest block, quality-gate split, run status | this (+ verifier Lambda) | 3 | not started |
@@ -132,9 +186,9 @@ Rules the diagram relies on:
 One row per listing page to sweep. **Canonical values only.**
 
 ```
-url,site,country,language,gender,category,subcategory,brand
-https://saudi.ounass.com/api/women/bags/tote-bags,ounass,sa,AR,women,bags,tote_bags,
-https://www.ounass.ae/api/women/bags/shoulder-bags,ounass,ae,EN,women,bags,shoulder_bags,
+url,site,country,language,gender,category,subcategory,brand,is_active
+https://saudi.ounass.com/api/women/bags/tote-bags,ounass,sa,ar,women,bags,tote_bags,,true
+https://www.ounass.ae/api/women/bags/shoulder-bags,ounass,ae,en,women,bags,shoulder_bags,,true
 ```
 
 | Column | Required | Rule / canonical source (scraper-pipeline `canonical_seeds/`) |
@@ -142,11 +196,12 @@ https://www.ounass.ae/api/women/bags/shoulder-bags,ounass,ae,EN,women,bags,shoul
 | `url` | yes | The `/api/...` PLP endpoint; the human-facing page returns HTML the spider can't parse (seen 2026-09-16). Hostname must match `country` + `language` (`ounass_constants.TLD_LANGUAGE_MAP`). |
 | `site` | yes | `dim_canonical_site.csv` |
 | `country` | yes | `dim_country.csv` (lowercase: `ae`, `kw`, `qa`, `sa`) |
-| `language` | yes | `EN` / `AR`, per `product_schema.py` |
+| `language` | yes | `ar` / `en`, lowercase per scraper-pipeline's `docs/SQL_RULE_MANIFEST.md`. The crawler compares case-insensitively; the rows it writes keep `product_schema.py`'s `EN` / `AR`. |
 | `gender` | **yes** | `gender_canonical` in `dim_map_gender.csv` (`women`, `men`) |
 | `category` | **yes** | `category_canonical` in `dim_canonical_category_subcategory.csv` |
 | `subcategory` | **yes** | `subcategory_canonical` in the same file; the pair must exist together |
 | `brand` | no (null = any brand) | `dim_canonical_brand.csv` |
+| `is_active` | yes | `true` / `false`. `false` switches a listing off without deleting it; inactive rows are neither crawled nor used to scope the PDP list. |
 
 - **Category and subcategory are both required.** A broad `women/bags` seed
   would pull in canonical-`bags` products that Ounass lists under
@@ -166,7 +221,7 @@ already used by `run_crawler.py` (`_rows_from_csv_text`,
 
 ```
 portal_itemid,primary_key,site,country,language,url,gender,category,subcategory,brand,out_of_stock,last_available_date
-219036032,219036032_ounass,ounass,ae,EN,https://www.ounass.ae/shop-chloe-...-219035998_19.html,women,bags,tote_bags,chloe,false,2026-10-04
+219036032,219036032_ounass,ounass,ae,en,https://www.ounass.ae/shop-chloe-...-219035998_19.html,women,bags,tote_bags,chloe,false,2026-10-04
 ```
 
 | Contract column | Gold serving column |
@@ -222,7 +277,7 @@ day's refresh; a global problem (bad inputs, broken price mapping) should.
 | G5 | Part 0 parity passed for every extracted field | before enabling | Mode can't be enabled | 0 ✅ |
 | G6 | PLP-extract row `url` = PDP list `url`, not a listing URL | each row | **Drop that row**, log; product goes to Phase 2 | 3 |
 | G7 | PLP hostname ↔ country/language (startup); hit `localeCurrency` = country's currency (`sa` SAR, `ae` AED, `kw` KWD, `qa` QAR) (sweep) | startup + sweep | Startup: **skip that PLP** (counts toward G1's 25%). Sweep: **stop that PLP**, hold back its products. | 2, 3 |
-| G8 | Export freshness (`dt=` / manifest date) | startup | ≤ 1 day old: ok. 2 days: warn. **≥ 3 days: stop run.** | 2 |
+| G8 | Gold freshness: gold's last build time from the PDP list manifest (the export itself is always fresh, since it runs at crawl start) | startup | ≤ 1 day old: ok. 2 days: warn. **≥ 3 days: stop run** (dbt is likely stuck). | 2 |
 | G9 | Daily parity spot check (Part 5) | Phase 1 | **≥ 2 confirmed price/discount mismatches → stop run, no PLP-extract rows** (a mapping break is global). **< 10 usable comparisons for a country → no PLP-extract rows for that country**; other countries proceed. | 5 |
 | G10 | Every canonical value in both lists exists in the latest published vocabulary | startup | Bad PLP row → as G1. **Bad PDP row → quarantine that product** (no refresh, no PDP crawl; skipped if seen on a listing). **> 5% PDP rows bad → stop run.** | 2 |
 | G11 | Field-mismatch counter: ID in PDP list but fields differ from the PLP | sweep | **> 5% of a PLP's matched IDs → stop that PLP**, hold back its products | 3 |
@@ -255,43 +310,116 @@ starting values and tuned during shadow mode (Part 7).
 
 ## Part 1 — Inputs (scraper-pipeline)
 
-**Goal:** the three files the crawler reads exist in S3, daily, documented.
+**Goal:** an on-demand export that writes the three files the crawler reads
+to S3, documented.
 
-- [ ] Expose `portal_itemid` as its own column in gold (serving and export).
-- [ ] **Revive `crawl_plp_registry`** as the Contract 1 PLP list (canonical
-  values, one row per subcategory listing × country × language), published
-  to S3.
-- [ ] **dbt `relationships` test on `crawl_plp_registry`:** every gender,
+**Export timing (decided 2026-10-13): export at crawl start (option B).** The
+export is a scraper-pipeline Lambda that the crawl invokes synchronously at
+startup (and `make preflight` invokes too). It is not triggered after dbt
+runs or on a clock. dbt fires often and for unrelated reasons, while the
+crawler only needs fresh files right before a crawl. So there's exactly one
+export per crawl, always reflecting gold as of crawl start. The SQL stays in
+scraper-pipeline; the crawler only needs permission to invoke the Lambda.
+If the export fails, the crawl stops before any Zyte request.
+
+Rejected alternatives: export after every dbt success (redundant exports,
+fires on runs that didn't touch gold); on a clock (can miss a dbt run before
+the crawl); only when gold's build time changed (extra logic, still tied to
+dbt); a dbt post-hook on the gold model (export failure would fail dbt).
+
+- [x] Expose `portal_itemid` as its own column in gold (serving and export).
+  This also adds the field to the Product API cache, which exports
+  `SELECT *` from the same table: accepted 2026-10-13.
+- [x] **Revive `crawl_plp_registry`** as the Contract 1 PLP list (canonical
+  values, one row per subcategory listing × country × language, with
+  `is_active`). The export writes its active rows to S3.
+- [x] **dbt `relationships` test on `crawl_plp_registry`:** every gender,
   category/subcategory pair and brand exists in `dim_map_gender`,
   `dim_canonical_category_subcategory` and `dim_canonical_brand`. A rename
   then fails the dbt build before anything is published.
-- [ ] **Publish the canonical vocabulary** (`dim_country`, `dim_map_gender`,
-  `dim_canonical_category_subcategory`, `dim_canonical_brand`) to S3.
-- [ ] **Daily PDP list export** from `gold_product_serving_latest` (Contract
-  2) to S3, e.g. `s3://…/plp-efficient/ounass/dt=YYYY-MM-DD/pdp_list.csv`,
-  same pattern as `tickets/recrawl_loop.md`.
-  - Proposed: scope it to products matching a `crawl_plp_registry` row, plus
-    any special PDPs (open question 1).
+- [x] **On-demand export Lambda** (`scripts/export_plp_efficient_inputs.py`,
+  modelled on `scripts/export_api_cache.py`, which already runs an Athena
+  `UNLOAD` and writes stable S3 files). Invoked synchronously; returns the S3
+  paths it wrote. One invocation writes three files plus **one manifest,
+  written last** (its presence marks the export complete):
+  - **PDP list** from `gold_product_serving_latest` (Contract 2), e.g.
+    `s3://…/resources/plp-efficient/<env>/ounass/<export_id>/pdp_list.csv`;
+  - **PLP list:** active `crawl_plp_registry` rows;
+  - **vocabulary:** `dim_country`, `dim_map_gender`,
+    `dim_canonical_category_subcategory`, `dim_canonical_brand`.
+
+  The PDP list manifest records **when gold was last built** (read from the
+  gold table, not the export time), so G8 measures the age of the data.
+- [x] PDP list contents:
+  - **Only products matching an active `crawl_plp_registry` row** (decided
+    2026-10-13) on site, country, language, gender, category and
+    subcategory, plus brand when the row sets one. Rows with
+    `is_active = false` or invalid values match nothing. Special PDPs can be
+    added later through a small extra seed appended to the export.
   - Drop products sold out for 3+ days (`current_date - last_available_date
     >= 3`); this is the 3-day cutoff's export side (decided to ship with
     this ticket, 2026-10-03).
-- [ ] **Document the exports** next to `docs/RECRAWL_FLOW.md`: what each
-  queries, S3 paths and layout, columns, schedule, and that this crawler
-  consumes them. Link the doc here.
-- [ ] **Add `plp_extract_flag` to raw:** column in
+- [x] Terraform for the Lambda and its IAM role (Athena read on gold and the
+  seed tables, S3 write under the export prefix). Unlike the API-cache
+  export, **no EventBridge rule**.
+- [x] **Document the export** next to `docs/RECRAWL_FLOW.md`: what it
+  queries, how it's invoked, S3 paths and layout, columns, the manifest's
+  gold-build-time stamp, and that this crawler consumes it. Link the doc
+  here.
+- [x] **Add `plp_extract_flag` to raw:** column in
   `sql/athena/bronze_ounass_raw.sql`, and alter the dev and prod tables
   (older files read as null).
 
-**Done when:** all three files land in S3 daily with today's date, and the
-dbt test runs in CI.
+**Written 2026-10-13 (scraper-pipeline, uncommitted at time of writing):**
+`canonical_seeds/crawl_plp_registry.csv` (your 4 SA tote/shoulder rows,
+language lowercased), `dbt/tests/test_crawl_plp_registry_canonical.sql`,
+`dbt/tests/test_crawl_plp_registry_ounass_url.sql`, `portal_itemid` in
+`gold_product_serving_latest` (+ valid-rows test), `plp_extract_flag` in
+`sql/athena/bronze_ounass_raw.sql` + migration
+`sql/athena/migrations/2026-10-13_bronze_ounass_raw_add_plp_extract_flag.sql`,
+`scripts/export_plp_efficient_inputs.py` + 13 unit tests,
+`terraform/lambda_plp_efficient_export.tf` (validates), `make
+plp-efficient-export-dev`, `docs/PLP_EFFICIENT_EXPORT.md`, lineage doc
+updated.
+
+**Left to do (needs AWS, run by you):**
+1. ✅ (2026-10-13) Repair scraper-pipeline's `.venv`. OneDrive had turned its
+   `python` symlink into a 10-byte text file. Recreated; dbt installed.
+2. ✅ (2026-10-13) dev: `make dbt-seed`, gold rebuilt
+   (`--select gold_product_serving_latest`), and `make dbt-test`: all tests
+   passed, including both registry tests and the stricter `valid_rows`.
+3. ✅ (2026-10-13, dev) `make athena-ddl DDL_FILE=sql/athena/migrations/2026-10-13_bronze_ounass_raw_add_plp_extract_flag.sql`:
+   the column exists, old partitions still read, and
+   `count(plp_extract_flag) = 0` (null on existing rows, as expected).
+4. ✅ (2026-10-13, dev only) Targeted `terraform apply`: created the dev
+   export Lambda, its IAM role and policy (3 added, 0 changed). Prod was left
+   out until step 6. Not untargeted, because a full apply would also redeploy
+   the Product API cache Lambdas with undeployed 2026-07-30 code. That's
+   recorded in scraper-pipeline's `ticket/migrate-validated-dev-to-prod.md`.
+5. `make plp-efficient-export-dev`. Check the three files and the manifest.
+   ✅ Already confirmed (2026-10-13): Glue `UpdateTime` on
+   `gold_product_serving_latest` moved from 17:23:37 to 17:30:46 (+04:00)
+   across a gold rebuild that finished 13:30:48 UTC, so `gold_built_at`
+   tracks rebuilds. Dev gold had 248 rows.
+6. Repeat 2–4 for prod.
+
+**Done when:** invoking the Lambda writes all three files and the manifest
+to S3 and returns their paths, `gold_built_at` is confirmed to track gold
+rebuilds, and the dbt tests pass in dev.
 
 ## Part 2 — Input loading, validation and preflight (this repo)
 
 **Goal:** before any Zyte request, the crawler knows its inputs are sound,
 and you can check that yourself with one command.
 
-- [ ] Loaders for the PLP list, PDP list and vocabulary (local path or
-  `s3://`, reusing `run_crawler.py`'s loaders).
+- [ ] At startup, invoke the Part 1 export Lambda synchronously and wait for
+  it. Then load the three files from the S3 paths it returns, reusing
+  `run_crawler.py`'s loaders. Local paths (`--plp-list`, `--pdp-list`,
+  `--vocabulary`) skip the invoke, for tests and hand-made CSVs. An export
+  failure stops the run before any Zyte request.
+- [ ] IAM: the crawler's ECS task role gets `lambda:InvokeFunction` on the
+  export Lambda and read access to its S3 prefix
+  (`infra/terraform/iam_ecs.tf`).
 - [ ] Validation as plain functions (no Scrapy): G1, G2, G7 hostname, G8,
   G10, returning **every** problem plus the resulting skip / quarantine /
   stop decision.
@@ -299,10 +427,13 @@ and you can check that yourself with one command.
   `settings.py`), plus the thresholds as settings.
 - [ ] **`make preflight-ounass-plp-efficient`:** runs the same validation
   functions as the spider (no copy), with zero Zyte requests by default.
+  - Invokes the export Lambda exactly as a crawl would (a few small Athena
+    queries, no Zyte), so it checks what the crawl would actually see. Local
+    `--plp-list` / `--pdp-list` / `--vocabulary` skip the invoke.
   - Reports every problem grouped by check, with offending rows/values.
   - Prints a summary: PLPs (valid / skipped), PDP rows by country ×
-    language, quarantined count, export dates, and how many PDPs no PLP
-    covers (and whether the 10,000 ceiling is already exceeded).
+    language, quarantined count, gold's last build time, and how many PDPs
+    no PLP covers (and whether the 10,000 ceiling is already exceeded).
   - Exits non-zero on any run-stopping failure.
   - `--probe-one-page` fetches one PLP page to check the API isn't blocked
     (1 Zyte request).
@@ -489,7 +620,8 @@ made-up values. Real captures stay in ignored local paths.
 | `ecommercecrawl/plp_efficient.py` (new) | loaders, validation, matching, Phase 2 selection as plain functions | 2, 3 |
 | `scripts/preflight_ounass_plp_efficient.py` + `Makefile` | preflight target | 2 |
 | `ecommercecrawl/settings.py` | flag and threshold settings | 2 |
-| `run_crawler.py` / `Makefile` | PLP list / PDP list sources (`--plp-list`, `--pdp-list`) | 2 |
+| `run_crawler.py` / `Makefile` | invoke the export at startup; local overrides `--plp-list`, `--pdp-list`, `--vocabulary` | 2 |
+| `infra/terraform/iam_ecs.tf` | crawler role may invoke the export Lambda and read its S3 prefix | 2 |
 | `ecommercecrawl/rules/ounass_rules.py` | PLP-extract extractor | 3 |
 | `ecommercecrawl/spiders/ounass_crawl.py` | Phase 1 / Phase 2 wiring, errback, `spider_idle` | 3 |
 | `ecommercecrawl/constants/product_schema.py` | `plp_extract_flag`, null carve-out | 3 |
@@ -602,13 +734,16 @@ explicit approval under `context/AGENTS.md`).
 | 2026-10-05 | Failure scopes narrowed: skip a bad PLP, quarantine bad gold rows, per-country parity inconclusive; whole-run stops reserved for global problems. |
 | 2026-10-05 | Quality gate split by row type; manifest `plp_efficient` block; degraded runs still `_SUCCESS`. |
 | 2026-10-05 | Shadow mode before go-live; work split into Parts 0–7. |
+| 2026-10-13 | PDP list export contains only gold products matching an active `crawl_plp_registry` row (plus the 3-day sold-out cutoff). The registry is the single definition of scope. |
+| 2026-10-13 | `portal_itemid` in gold serving is fine even though it also lands in the Product API cache. |
+| 2026-10-13 | Export at crawl start (option B): the crawl invokes scraper-pipeline's export Lambda synchronously; no post-dbt or clock trigger. One Lambda writes all three files. G8 now measures gold's last build time. |
+| 2026-10-13 | Registry CSV template agreed: `url,site,country,language,gender,category,subcategory,brand,is_active`; a blank subcategory is rejected (G1), and broad listings run with the mode off. |
 
 ## Open Questions
 
-- [ ] **1. Export scoping.** Should the PDP list export keep only gold
-  products matching a `crawl_plp_registry` row (plus special PDPs)? Proposed:
-  yes. Otherwise a whole-gold export sends every out-of-scope product to
-  Phase 2.
+- [x] **1. Export scoping.** Decided 2026-10-13: only gold products matching
+  an active `crawl_plp_registry` row. Without this, a whole-gold export
+  would send every out-of-scope product to Phase 2.
 - [ ] **2. `gold_pdp_recrawl_ounass_daily` for Ounass.** Running it alongside
   this mode double-crawls. Proposed: stop using it for Ounass once Part 7
   goes live.
