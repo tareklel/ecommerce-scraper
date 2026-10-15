@@ -1,5 +1,13 @@
 # Memory
 
+## 2026-10-15 - `f27b920` - Crawler image built in GitHub Actions; promotion needs approval
+- The cloud crawler image (ECR `latest`, 2026-08-03) was missing `28c7fc7` and `2e1a482`, and the laptop can't build images (company HTTPS inspection breaks pip inside `docker build`). Builds moved to GitHub Actions.
+- `.github/workflows/crawler-image.yml`: on pushes to `main` touching crawler code, run pytest, then build and push `sha-<7>` to ECR via OIDC. It never moves `latest`. `.github/workflows/promote-crawler-image.yml`: re-tags a `sha-…` / `legacy-YYYYMMDD` image as `latest` in the `production` environment (required reviewer tareklel, `main` only). Rollback = promote an older tag.
+- Applied `infra/terraform/github_actions.tf` (GitHub OIDC provider + role `ecommerce-scraper-github-actions`, trusted only by `main` and the `production` environment, ECR push/re-tag on this repo only) and a new ECR lifecycle policy. Rule 1 protects `latest`; the old "keep last 10, any tag" rule could have expired the live image.
+- GitHub settings (run by the user): `production` environment and repo variable `AWS_CRAWLER_IMAGE_ROLE_ARN`. No secrets exist: OIDC issues short-lived credentials per run.
+- The live 2026-08-03 image is also tagged `legacy-20260803` (never expires) as a rollback target.
+- Added `tickets/cicd_pipeline.md` (CI/CD roadmap across all three repos, with evidence of deploy drift) and "▶" handoff sections in it and in `tickets/ounass_plp_efficient_crawl.md`.
+
 ## 2026-10-05 - `1c19886` - Ounass PLP-efficient crawl mode designed (no behaviour change yet)
 - Designed an opt-in mode that refreshes known Ounass products (from gold) from listing pages instead of product pages, then PDP-crawls only what's left. Cost note `notes/2026-09-17-ounass-zyte-crawl-cost.md` puts women/bags (SA) at ≈ $2/month vs ≈ $181/month for daily full PDP re-crawls.
 - `tickets/ounass_plp_efficient_crawl.md` holds the plan split into Parts 0–7 (0 done; 1 and 6 are scraper-pipeline work), input contracts, guardrails with failure scopes, and a dated decision log.
