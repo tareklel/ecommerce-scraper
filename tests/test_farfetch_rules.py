@@ -1,3 +1,5 @@
+import os
+
 import pytest
 from ecommercecrawl.rules import farfetch_rules as rules
 from scrapy.http import HtmlResponse
@@ -5,11 +7,25 @@ from farfetch_html_fixtures import pdp, sold_out_pdp, plp
 from ecommercecrawl.constants import farfetch_constants as constants
 
 
+def _read_local_fixture(path, **open_kwargs):
+    """
+    Read a saved real product page used as a fixture.
+
+    These pages are gitignored on purpose (*.html; downloaded product data
+    must not be committed, see context/AGENTS.md), so they exist only on
+    machines that captured them. Elsewhere (e.g. CI) the test is skipped
+    rather than failed, and the skip reason shows in the test report.
+    """
+    if not os.path.exists(path):
+        pytest.skip(f"local-only fixture not present: {path} (gitignored real product page)")
+    with open(path, **open_kwargs) as f:
+        return f.read()
+
+
 
 @pytest.fixture
 def pdp_response():
-    with open("tests/farfetch_html_fixtures/pdp.html", "r") as f:
-        html_content = f.read()
+    html_content = _read_local_fixture("tests/farfetch_html_fixtures/pdp.html", mode="r")
     return HtmlResponse(url=pdp['url'], body=html_content, encoding='utf-8')
 
 # Test pdp 
@@ -80,8 +96,7 @@ def test_get_text(pdp_response):
 # Test sold out PDP
 @pytest.fixture
 def sold_out_pdp_response():
-    with open("tests/farfetch_html_fixtures/sold_out_pdp.html", "r") as f:
-        html_content = f.read()
+    html_content = _read_local_fixture("tests/farfetch_html_fixtures/sold_out_pdp.html", mode="r")
     return HtmlResponse(url=sold_out_pdp["url"], body=html_content, encoding='utf-8')
 
 def test_get_product_name_sold_out(sold_out_pdp_response):
@@ -101,8 +116,7 @@ def test_is_sold_out_sold_out(sold_out_pdp_response):
 # Test PLP
 @pytest.fixture
 def plp_response():
-    with open("tests/farfetch_html_fixtures/plp.html", "r") as f:
-        html_content = f.read()
+    html_content = _read_local_fixture("tests/farfetch_html_fixtures/plp.html", mode="r")
     return HtmlResponse(url=plp['url'], body=html_content, encoding='utf-8')
                         
 def test_get_pdp_urls(plp_response):

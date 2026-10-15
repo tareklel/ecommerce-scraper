@@ -1,7 +1,24 @@
+import os
+
 import pytest
 from scrapy.http import HtmlResponse, Request
 
 from ecommercecrawl.rules import bloomingdales_rules as rules
+
+
+def _read_local_fixture(path, **open_kwargs):
+    """
+    Read a saved real product page used as a fixture.
+
+    These pages are gitignored on purpose (*.html; downloaded product data
+    must not be committed, see context/AGENTS.md), so they exist only on
+    machines that captured them. Elsewhere (e.g. CI) the test is skipped
+    rather than failed, and the skip reason shows in the test report.
+    """
+    if not os.path.exists(path):
+        pytest.skip(f"local-only fixture not present: {path} (gitignored real product page)")
+    with open(path, **open_kwargs) as f:
+        return f.read()
 
 
 def make_response(html: str, url: str) -> HtmlResponse:
@@ -212,8 +229,7 @@ def test_extract_primary_label_returns_none_when_no_badges():
 # ── extract_product (integration — AR fixture) ────────────────────────────────
 
 def test_extract_product_from_ar_fixture():
-    with open("tests/fixtures/bloomingdales_pdp.html", encoding="utf-8") as f:
-        html = f.read()
+    html = _read_local_fixture("tests/fixtures/bloomingdales_pdp.html", encoding="utf-8")
     url = "https://bloomingdales.sa/marc-jacobs-BAG219542223xBLK.html"
     resp = make_response(html, url)
     p = rules.extract_product(resp)

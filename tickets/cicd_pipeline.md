@@ -178,7 +178,18 @@ the workflows to `main` (which triggers the first build).
   `sha256:751475c4…`) is also tagged **`legacy-20260803`**. No lifecycle rule
   matches `legacy-`, so it's kept permanently as a rollback target; the
   promote workflow accepts `legacy-YYYYMMDD` as well as `sha-…`.
-- [ ] Step 6: commit and push (first CI build → `sha-<HEAD>`), then promote.
+- [x] Step 6a: pushed `f27b920` + `6dee88c`. First CI run (`38741337257`) failed
+  in the test job: 15 tests read saved real product pages
+  (`tests/farfetch_html_fixtures/*.html`, `tests/fixtures/bloomingdales_pdp.html`)
+  that are gitignored and so absent in CI. They must not be committed
+  (downloaded product data, `context/AGENTS.md`). Fix: those tests now skip,
+  with a stated reason, when the page is absent; locally they still run.
+  Simulated CI result: 284 passed, 15 skipped.
+- [ ] Step 6b: CI green → `sha-<HEAD>` in ECR, then promote it.
+- [ ] Follow-up: replace `tests/fixtures/bloomingdales_pdp.html` with a small
+  **synthetic** fixture (Bloomingdale's is a live crawler, so CI should
+  cover `extract_product`). Farfetch fixtures can stay local-only; that
+  crawler is blocked.
 
 ## Known constraints and pitfalls
 
