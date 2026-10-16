@@ -160,6 +160,40 @@ OUNASS_REQUEST_DELAY_SECONDS = os.getenv("OUNASS_REQUEST_DELAY_SECONDS", "0.2")
 OUNASS_REQUEST_JITTER_SECONDS = os.getenv("OUNASS_REQUEST_JITTER_SECONDS", "0.1")
 OUNASS_REQUEST_TIMEOUT_SECONDS = os.getenv("OUNASS_REQUEST_TIMEOUT_SECONDS", "20")
 
+# Ounass PLP-efficient crawl (docs/ounass_plp_efficient_crawl.md). Off by
+# default: with it off, the spider behaves exactly as before. Any change here
+# must also update that doc (tests/test_plp_efficient_docs.py enforces it).
+OUNASS_PLP_EFFICIENT_CRAWL = _env_bool("OUNASS_PLP_EFFICIENT_CRAWL", False)
+# scraper-pipeline's on-demand export Lambda, invoked at crawl start.
+OUNASS_PLP_EFFICIENT_EXPORT_LAMBDA = os.getenv(
+    "OUNASS_PLP_EFFICIENT_EXPORT_LAMBDA",
+    f"price-comparison-plp-efficient-export-{ENV}",
+)
+# Startup checks: share of bad PLP rows (G1/G7) and PDP rows (G10) above which
+# the whole run stops instead of skipping/quarantining row by row.
+OUNASS_PLP_EFFICIENT_MAX_BAD_PLP_ROWS_RATIO = float(
+    os.getenv("OUNASS_PLP_EFFICIENT_MAX_BAD_PLP_ROWS_RATIO", "0.25")
+)
+OUNASS_PLP_EFFICIENT_MAX_BAD_PDP_ROWS_RATIO = float(
+    os.getenv("OUNASS_PLP_EFFICIENT_MAX_BAD_PDP_ROWS_RATIO", "0.05")
+)
+# G8: age of gold's last rebuild (export manifest gold_built_at).
+OUNASS_PLP_EFFICIENT_GOLD_WARN_AGE_DAYS = float(
+    os.getenv("OUNASS_PLP_EFFICIENT_GOLD_WARN_AGE_DAYS", "2")
+)
+OUNASS_PLP_EFFICIENT_GOLD_MAX_AGE_DAYS = float(
+    os.getenv("OUNASS_PLP_EFFICIENT_GOLD_MAX_AGE_DAYS", "3")
+)
+# Stale-crawl warning: in-scope products whose last_crawl_date is older than
+# this many days (warn only; refreshing them is what the crawl is for).
+OUNASS_PLP_EFFICIENT_STALE_CRAWL_DAYS = int(
+    os.getenv("OUNASS_PLP_EFFICIENT_STALE_CRAWL_DAYS", "7")
+)
+# Phase 2 ceiling; preflight also reports if the inputs alone would exceed it.
+OUNASS_PLP_EFFICIENT_MAX_PHASE2_PDPS = int(
+    os.getenv("OUNASS_PLP_EFFICIENT_MAX_PHASE2_PDPS", "10000")
+)
+
 # Quality gate (executed automatically in PostCrawlPipeline on spider close)
 QUALITY_GATE_ENABLED = os.getenv("QUALITY_GATE_ENABLED", "true")
 QUALITY_GATE_BLANK_THRESHOLD = os.getenv("QUALITY_GATE_BLANK_THRESHOLD", "0.2")

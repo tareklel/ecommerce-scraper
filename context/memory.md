@@ -1,5 +1,16 @@
 # Memory
 
+## 2026-10-16 - PLP-efficient Part 2: inputs, startup checks and preflight
+- New `ecommercecrawl/plp_efficient.py` (plain functions shared by the future spider wiring and preflight):
+  - `invoke_export` calls scraper-pipeline's export Lambda; any failure raises `ExportError`, so the run stops before Zyte spend.
+  - `load_inputs[_from_manifest]` reads local or s3:// files.
+  - `validate` runs G2 (files/columns: stop), G1/G7 (listing rows canonical, host ↔ country/language: skip, >25% stop), G10 (product rows: quarantine, >5% stop), G8 (gold rebuild age: warn 2d, stop 3d), a stale-crawl warning (`last_crawl_date` > 7 days, warn only), and coverage (held back / uncovered, Phase 2 ceiling hint).
+- Settings `OUNASS_PLP_EFFICIENT_*` (mode off by default, thresholds overridable through env vars) and `TLD_COUNTRY_MAP`.
+- `make preflight-ounass-plp-efficient` (and `-probe` for 1 Zyte request): exit 0 = would start, 1 = would stop.
+- 44 new tests on synthetic data; full suite 343 passed.
+- Live preflight on the dev export: 4 listings and 5 products valid; warned about gold age (2.9 days) and 5 stale products (last crawled 2026-08-08).
+- Next: Part 3 (wire into the spider).
+
 ## 2026-10-16 - PLP-efficient Part 1 verified in dev; scraper-pipeline pushed
 - Dev export test passed (`2026-10-15T13-32-21Z-dec3e27c`): 4 PLP rows, 5 PDP rows (exactly the in-scope dev products), 19 bag pairs, `gold_built_at` correct, 13 KB scanned.
 - Auto-deploy verified: `latest` = `sha-6f94c7f`.

@@ -1,6 +1,6 @@
 # Ticket: Ounass PLP-Efficient Crawl — Refresh Known Products From Listings, Not Product Pages
 
-**Status: Part 0 done; Part 1 deployed to dev except step 5; Parts 2–7 not started.**
+**Status: Parts 0–2 done (Part 1 dev only; prod pending); Parts 3–7 not started.**
 
 ## ▶ Where we are / next steps (handoff, updated 2026-10-15)
 
@@ -34,10 +34,15 @@ Read this first when resuming.
    Part 1) and `9ca7bfb` (`requirements.txt`, previously gitignored by
    `*.txt`, now tracked and pinned to dbt-core 1.12.5 / dbt-athena 1.11.1).
 3. ✅ dbt pinned (see 2).
-4. **Part 2** (this repo): loaders, validation, `make preflight`; build
-   against hand-made CSVs. The crawler must compare `language`
-   case-insensitively (inputs use `ar`/`en`, output rows keep `EN`/`AR`).
-5. **Part 1 step 6 (prod):** only after prod gold and the registry exist;
+4. ✅ **Part 2 done (2026-10-16):** `make preflight-ounass-plp-efficient`
+   works against the dev export (see Part 2). Before the next dev run, gold
+   needs a dbt rebuild: it's ~3 days old, so G8 will stop.
+5. **Next: Part 3** (crawler core): wire `plp_efficient` into the Ounass
+   spider. Phase 1 matching in `parse_plp`, Phase 2 via `spider_idle`, the
+   PLP-extract row, runtime checks G3/G4/G6/G7-currency/G11, the ceiling,
+   and the ECS role permission to invoke the export (moved here from
+   Part 2).
+6. **Part 1 step 6 (prod):** only after prod gold and the registry exist;
    see `../scraper-pipeline/ticket/migrate-validated-dev-to-prod.md`. Apply
    prod export resources **targeted**.
 
@@ -87,8 +92,8 @@ depends on it starts.
 | Part | What | Repo | Depends on | Status |
 |---|---|---|---|---|
 | **0** | Prove PLP values match PDP values (parity probe) | this | — | ✅ done (2026-10-01) |
-| **1** | Inputs: exports, registry, vocabulary, flag column in raw | scraper-pipeline | 0 | code written 2026-10-13, not deployed |
-| **2** | Input loading, validation and `make preflight` | this | 0 (build with hand-made CSVs; verify against Part 1 exports) | not started |
+| **1** | Inputs: exports, registry, vocabulary, flag column in raw | scraper-pipeline | 0 | ✅ dev (2026-10-13–16); prod pending |
+| **2** | Input loading, validation and `make preflight` | this | 0 (build with hand-made CSVs; verify against Part 1 exports) | ✅ done 2026-10-16 |
 | **3** | Crawler core: Phase 1 / Phase 2, PLP-extract rows, runtime guardrails | this | 2 | not started |
 | **4** | Run observability: manifest block, quality-gate split, run status | this (+ verifier Lambda) | 3 | not started |
 | **5** | Daily parity spot check | this | 3 | not started |
@@ -222,7 +227,7 @@ already used by `run_crawler.py` (`_rows_from_csv_text`,
 `_read_s3_urls_source`); all fields are flat, so no JSON.
 
 ```
-portal_itemid,primary_key,site,country,language,url,gender,category,subcategory,brand,out_of_stock,last_available_date
+portal_itemid,primary_key,site,country,language,url,gender,category,subcategory,brand,out_of_stock,last_available_date,last_crawl_date
 219036032,219036032_ounass,ounass,ae,en,https://www.ounass.ae/shop-chloe-...-219035998_19.html,women,bags,tote_bags,chloe,false,2026-10-04
 ```
 
@@ -415,20 +420,22 @@ rebuilds, and the dbt tests pass in dev.
 **Goal:** before any Zyte request, the crawler knows its inputs are sound,
 and you can check that yourself with one command.
 
-- [ ] At startup, invoke the Part 1 export Lambda synchronously and wait for
+- [x] At startup, invoke the Part 1 export Lambda synchronously and wait for
   it. Then load the three files from the S3 paths it returns, reusing
   `run_crawler.py`'s loaders. Local paths (`--plp-list`, `--pdp-list`,
   `--vocabulary`) skip the invoke, for tests and hand-made CSVs. An export
   failure stops the run before any Zyte request.
-- [ ] IAM: the crawler's ECS task role gets `lambda:InvokeFunction` on the
-  export Lambda and read access to its S3 prefix
-  (`infra/terraform/iam_ecs.tf`).
-- [ ] Validation as plain functions (no Scrapy): G1, G2, G7 hostname, G8,
+- [x] **Stale-crawl warning** (decided 2026-10-16): warn when products'
+  `last_crawl_date` is older than `OUNASS_PLP_EFFICIENT_STALE_CRAWL_DAYS`
+  (7). Warn only, never stop. Prerequisite done 2026-10-16:
+  `last_crawl_date` added to the export (scraper-pipeline `0345c2b`, dev
+  Lambda redeployed; all 5 dev products show 2026-08-08).
+- [x] Validation as plain functions (no Scrapy): G1, G2, G7 hostname, G8,
   G10, returning **every** problem plus the resulting skip / quarantine /
   stop decision.
-- [ ] Settings: `OUNASS_PLP_EFFICIENT_CRAWL = False` (explicit in
+- [x] Settings: `OUNASS_PLP_EFFICIENT_CRAWL = False` (explicit in
   `settings.py`), plus the thresholds as settings.
-- [ ] **`make preflight-ounass-plp-efficient`:** runs the same validation
+- [x] **`make preflight-ounass-plp-efficient`:** runs the same validation
   functions as the spider (no copy), with zero Zyte requests by default.
   - Invokes the export Lambda exactly as a crawl would (a few small Athena
     queries, no Zyte), so it checks what the crawl would actually see. Local
@@ -440,15 +447,39 @@ and you can check that yourself with one command.
   - Exits non-zero on any run-stopping failure.
   - `--probe-one-page` fetches one PLP page to check the API isn't blocked
     (1 Zyte request).
-- [ ] Unit tests for every validation rule and failure scope (synthetic
+- [x] Unit tests for every validation rule and failure scope (synthetic
   fixtures, see Testing).
 
 **Done when:** preflight passes on hand-made CSVs covering every check, and
 on the real Part 1 exports once they exist.
 
+**✅ Done 2026-10-16.**
+- Code: `ecommercecrawl/plp_efficient.py` (`invoke_export`,
+  `load_inputs[_from_manifest]`, `validate`, `format_report`, plus
+  `plp_covers_pdp` for Part 3); settings in `ecommercecrawl/settings.py`;
+  `TLD_COUNTRY_MAP` in `ounass_constants.py`;
+  `scripts/preflight_ounass_plp_efficient.py`; make targets
+  `preflight-ounass-plp-efficient` and `-probe`.
+- `tests/test_plp_efficient.py` (44 tests, synthetic data, including the
+  preflight exit codes). Full suite: 343 passed.
+- Live run against the dev export (`2026-10-16T10-48-24Z-cda11827`):
+  4 listings and 5 products valid, 0 skipped / quarantined / held back /
+  uncovered; WARN G8 (gold 2.9 days old: it stops at 3, so dbt needs a
+  rebuild before the next run) and WARN STALE (5 products last crawled
+  2026-08-08); exit 0.
+- Deviation from the original plan: `run_crawler.py`'s loaders weren't
+  reused. The new module reads CSV and JSON from local or s3:// itself,
+  with injectable clients for tests. `run_crawler.py` flags come in Part 3.
+
 ## Part 3 — Crawler core (this repo)
 
 **Goal:** Phase 1 and Phase 2 working end to end behind the flag.
+
+- [ ] IAM (moved from Part 2, 2026-10-16): the crawler's ECS task role gets
+  `lambda:InvokeFunction` on the export Lambda and read access to
+  `resources/plp-efficient/*` (`infra/terraform/iam_ecs.tf`). Nothing in
+  ECS invokes the export before Part 3; preflight runs locally with the
+  user's own AWS login.
 
 - [ ] PLP-extract extractor in `ounass_rules.py` using the Part 0 rules
   (computed discount with round-half-up).
@@ -740,6 +771,9 @@ explicit approval under `context/AGENTS.md`).
 | 2026-10-13 | PDP list export contains only gold products matching an active `crawl_plp_registry` row (plus the 3-day sold-out cutoff). The registry is the single definition of scope. |
 | 2026-10-13 | `portal_itemid` in gold serving is fine even though it also lands in the Product API cache. |
 | 2026-10-13 | Export at crawl start (option B): the crawl invokes scraper-pipeline's export Lambda synchronously; no post-dbt or clock trigger. One Lambda writes all three files. G8 now measures gold's last build time. |
+| 2026-10-16 | Crawler ECS role permission to invoke the export moves from Part 2 to Part 3 (nothing in ECS invokes it before then). |
+| 2026-10-16 | Stale-crawl warning added (warn only), based on per-product `last_crawl_date`, which survives gold rebuilds; requires adding that column to the export. G8 stays as a safety net for a skipped or failed dbt step. |
+| 2026-10-16 | Preflight usage and the startup checks documented in plain terms in `docs/ounass_plp_efficient_crawl.md`. |
 | 2026-10-13 | Registry CSV template agreed: `url,site,country,language,gender,category,subcategory,brand,is_active`; a blank subcategory is rejected (G1), and broad listings run with the mode off. |
 
 ## Open Questions

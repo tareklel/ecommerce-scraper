@@ -157,6 +157,23 @@ run-with-env:
 	APP_ENV=$(APP_ENV) \
 	$(COMMAND)
 
+# Ounass PLP-efficient crawl: dry run of the crawler's startup checks
+# (docs/ounass_plp_efficient_crawl.md, "Preflight"). Invokes scraper-pipeline's
+# export like a crawl would; no Zyte requests, no writes. Exit 1 = would stop.
+# Local files instead of the export:
+#   make preflight-ounass-plp-efficient PREFLIGHT_ARGS="--plp-list plp.csv --pdp-list pdp.csv --vocabulary vocabulary.json"
+PREFLIGHT_ARGS ?=
+preflight-ounass-plp-efficient:
+	AWS_PROFILE=$(AWS_PROFILE) AWS_DEFAULT_REGION=$(AWS_REGION) \
+	poetry run python3 scripts/preflight_ounass_plp_efficient.py --env $(APP_ENV) $(PREFLIGHT_ARGS)
+
+# Same, plus fetching page 0 of one listing through Zyte (1 request) to check
+# Ounass isn't blocking us. Loads secrets only because it needs ZYTE_API_KEY.
+preflight-ounass-plp-efficient-probe:
+	$(LOAD_AWS_SECRET_ENV); \
+	AWS_PROFILE=$(AWS_PROFILE) AWS_DEFAULT_REGION=$(AWS_REGION) \
+	poetry run python3 scripts/preflight_ounass_plp_efficient.py --env $(APP_ENV) --probe-one-page $(PREFLIGHT_ARGS)
+
 # image downloader
 run-image-downloader-local:
 	poetry run python3 run_image_downloader.py \

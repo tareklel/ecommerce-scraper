@@ -5,7 +5,8 @@ Keep it current: any behaviour change updates this doc in the same commit,
 with a change-log line (rule in `context/AGENTS.md`). History, rejected
 options and the build plan live in `tickets/ounass_plp_efficient_crawl.md`.
 
-**Build status (2026-10-05): planned, not yet built.** Each section is marked
+**Build status (2026-10-16): inputs, startup checks and preflight built
+(Part 2); the crawl itself (Parts 3–5) not yet.** Each section is marked
 **[planned]** or **[built]**. Flip a marker when the matching ticket part
 lands, and correct the section if the build differs from the plan.
 
@@ -31,7 +32,7 @@ With the flag off (the default), the spider behaves exactly as before.
 
 ---
 
-## 2. Inputs [planned]
+## 2. Inputs [built: export + loader; used by the crawl from Part 3]
 
 Three files, written fresh **at the start of every crawl**. At startup the
 crawler invokes scraper-pipeline's export Lambda synchronously, waits for it,
@@ -85,7 +86,7 @@ https://saudi.ounass.com/api/women/bags/tote-bags,ounass,sa,ar,women,bags,tote_b
 ### PDP list columns
 
 ```
-portal_itemid,primary_key,site,country,language,url,gender,category,subcategory,brand,out_of_stock,last_available_date
+portal_itemid,primary_key,site,country,language,url,gender,category,subcategory,brand,out_of_stock,last_available_date,last_crawl_date
 ```
 
 From `gold_product_serving_latest` (`category` ← `category_canonical`,
@@ -175,7 +176,7 @@ format, re-run the probe before trusting these mappings.
 
 ---
 
-## 5. Guardrails [planned]
+## 5. Guardrails [startup checks G1, G2, G7, G8, G10 + stale-crawl warning built; the rest planned]
 
 Principle: fail closed, never fall back to a mass PDP recrawl, and stop only as
 much as the problem affects.
@@ -202,11 +203,99 @@ Other settings:
 |---|---|---|
 | `OUNASS_PLP_EFFICIENT_CRAWL` | `False` | Turns the mode on |
 | `OUNASS_PLP_EFFICIENT_SHADOW` | `False` | Shadow mode: full run, no rows written, outcomes logged to the manifest |
-| `OUNASS_PLP_EFFICIENT_EXPORT_LAMBDA` | _set in Part 2_ | Name of scraper-pipeline's export Lambda, invoked at crawl start |
+| `OUNASS_PLP_EFFICIENT_EXPORT_LAMBDA` | `price-comparison-plp-efficient-export-<APP_ENV>` | Name of scraper-pipeline's export Lambda, invoked at crawl start |
+| `OUNASS_PLP_EFFICIENT_STALE_CRAWL_DAYS` | `7` | Stale-crawl warning: products not crawled for more than this many days |
 
-Setting names are planned and may change in Part 2. The drift test
+Settings live in `ecommercecrawl/settings.py`; thresholds can be overridden
+with environment variables of the same name. The startup checks read them
+through `plp_efficient.Config.from_settings`. The drift test
 (`tests/test_plp_efficient_docs.py`) fails if a setting in `settings.py`
 isn't listed in this doc.
+
+### Startup checks, in detail [built]
+
+Code: `ecommercecrawl/plp_efficient.py` (`validate()`), tests:
+`tests/test_plp_efficient.py`.
+
+These run before the crawler makes any Zyte request (in a real crawl and
+in preflight). There are three possible outcomes, from mild to severe:
+
+- **warn:** the crawl runs; the warning is logged and shown by preflight.
+- **skip / quarantine:** the crawl runs without that listing or product.
+- **stop:** the crawl doesn't start, and no Zyte money is spent.
+
+A single **stop** means the crawl doesn't start. Otherwise it runs without
+the skipped listings and quarantined products, and with all warnings
+recorded.
+
+**G2: all three files present and complete**
+- *Checks:* the PLP list, the PDP list and the vocabulary all exist, with
+  every expected column.
+- *Why:* without the PDP list, every product on every listing would look
+  new and get a full PDP crawl, which is the expensive case this mode avoids.
+- *Example:* `pdp_list.csv` lost its `subcategory` column.
+- *Outcome:* **stop.**
+
+**G1: each listing row is valid**
+- *Checks:* every value in a PLP list row is canonical (in the vocabulary),
+  and gender, category and subcategory are filled in.
+- *Why:* listings match products by exact value. A typo matches nothing,
+  and a missing subcategory makes the listing too broad (it would pull in
+  products Ounass lists elsewhere).
+- *Example:* subcategory `tote-bags` instead of `tote_bags`, or empty.
+- *Outcome:* **skip that listing** and hold back its products. They're
+  neither refreshed nor PDP-crawled, so a typo can't trigger a burst of
+  PDP crawls. **Over 25% of listing rows bad → stop**: that signals a broken
+  registry or vocabulary, not a one-off typo.
+
+**G7: listing URL matches its country and language**
+- *Checks:* the URL's hostname belongs to the row's country and language
+  (`saudi.ounass.com` = Saudi Arabic, `en-saudi.ounass.com` = Saudi English,
+  …, per `ounass_constants.TLD_LANGUAGE_MAP`).
+- *Why:* PLP-extract rows carry prices but no currency, so a UAE page tagged
+  as Saudi would silently write UAE prices onto Saudi products.
+- *Example:* `https://www.ounass.ae/api/women/bags/tote-bags` tagged
+  `country=sa`.
+- *Outcome:* **skip that listing**, like G1; it counts toward G1's 25%.
+  During the sweep, a second check compares each entry's currency.
+
+**G8: gold was rebuilt recently**
+- *Checks:* `gold_built_at` from the export manifest: when gold was last
+  **rebuilt**.
+- *Why:* if dbt is stuck, the PDP list reflects an outdated picture. If the
+  scheduled flow runs dbt right before each crawl (dbt → export → crawl),
+  this is a safety net for that step failing or being skipped.
+- *Outcome:* within 1 day OK; **2 days → warn**; **3+ days, or missing →
+  stop.**
+- *Note:* this says nothing about how fresh each product's data is. A gold
+  rebuild doesn't refresh product dates; see the next check.
+
+**Stale-crawl warning** (decided 2026-10-16)
+- *Checks:* each product's `last_crawl_date`, i.e. when it was last observed
+  at all. It's kept per product through silver (`greatest(new, previous)`),
+  so rebuilding gold without a new crawl leaves it unchanged.
+- *Why:* G8 only knows when gold was rebuilt. Dev showed the gap: gold
+  rebuilt 2026-10-13, but its products were last crawled 2026-08-08. Once
+  PLP-efficient runs, it also surfaces products that keep falling through
+  the gaps (repeatedly quarantined or held back, so never refreshed).
+- *Outcome:* **warn only**, with the count and oldest date (e.g. "5 products
+  not crawled for more than 7 days; oldest 2026-08-08"). It never stops a run,
+  because refreshing stale products is what the crawl is for. Threshold:
+  `OUNASS_PLP_EFFICIENT_STALE_CRAWL_DAYS` (7).
+- *Source:* the PDP list export's `last_crawl_date` column (added
+  2026-10-16, scraper-pipeline `0345c2b`; dev Lambda redeployed).
+
+**G10: every product row uses known values**
+- *Checks:* each PDP list row's country, language, gender,
+  category/subcategory and brand exist in the vocabulary.
+- *Why:* catches a rename caught halfway, e.g. the vocabulary already says
+  `totes` while gold still says `tote_bags` until dbt rebuilds.
+- *Outcome:* **quarantine that product.** It isn't refreshed or PDP-crawled
+  this run, and if seen on a listing it's skipped rather than treated as
+  new. **Over 5% of product rows bad → stop**: good gold has almost none.
+
+Language is compared case-insensitively: inputs use `ar` / `en`
+(scraper-pipeline convention), output rows keep `EN` / `AR`.
 
 ---
 
@@ -252,12 +341,51 @@ isn't listed in this doc.
 
 | Step | Command |
 |---|---|
-| Check inputs before spending budget | `make preflight-ounass-plp-efficient`: invokes the export exactly as a crawl would (small Athena queries), then runs every startup check. Zero Zyte requests; `--probe-one-page` = 1 request. |
+| Check inputs before spending budget **[built]** | `make preflight-ounass-plp-efficient` (exit 0 = would start, 1 = would stop). With the 1-request Zyte probe: `make preflight-ounass-plp-efficient-probe`. Local files: `make preflight-ounass-plp-efficient PREFLIGHT_ARGS="--plp-list plp.csv --pdp-list pdp.csv --vocabulary vocabulary.json [--manifest manifest.json]"`. Prod: `APP_ENV=prod make preflight-ounass-plp-efficient`. |
 | Shadow run | _to fill in (Part 4/7)_ |
 | Live run | _to fill in (Part 3)_ |
 | Re-verify listing ↔ product-page parity | `.venv/bin/python scripts/probe_ounass_plp_parity.py --plp-url <api listing url>` (needs `ZYTE_API_KEY`; ~30 Zyte requests) **[built]** |
 
 ---
+
+### Preflight (`make preflight-ounass-plp-efficient`) [built 2026-10-16]
+
+**What it is:** a dry run of the crawler's startup. It does everything a
+real PLP-efficient crawl does before its first Zyte request, then stops and
+reports whether the crawl would start, and what it would skip or hold back.
+It uses the same code as the crawl, so the two can't disagree.
+
+**When to use it:**
+- before a crawl you care about (e.g. the first run after a registry or
+  dbt change);
+- right after editing `crawl_plp_registry`, to see a rejected row and why
+  immediately, not as a skipped listing the next day;
+- after a crawl stopped or skipped something, to see the full list of
+  problems (a crawl acts on them; preflight lists them all);
+- later, the scheduled crawl runs the same checks at startup automatically.
+
+**What it does:**
+1. Invokes scraper-pipeline's export Lambda, exactly as a crawl would (a
+   few seconds, a fraction of a cent of Athena). Or it uses local files
+   passed with `--plp-list`, `--pdp-list`, `--vocabulary`.
+2. Reads the three files and the manifest.
+3. Runs every startup check (section 5, "Startup checks, in detail") and
+   collects **all** problems.
+4. Prints the problems grouped by check, with the exact rows, then a
+   summary: listings valid/skipped, products per country × language,
+   quarantined products, gold age, stale-crawl count, and products no
+   listing covers (plus whether the 10,000 Phase 2 ceiling is already
+   exceeded).
+5. Exits 0 if the crawl would start, non-zero if it would stop.
+
+It makes **no Zyte requests** and writes nothing, except with
+`--probe-one-page` (`make preflight-ounass-plp-efficient-probe`), which
+fetches one listing page to check Ounass isn't blocking requests (1 Zyte
+request).
+
+Code: `scripts/preflight_ounass_plp_efficient.py`. First real run, 2026-10-16
+(dev): 4 listings and 5 products valid; warnings G8 (gold rebuilt 2.9 days
+ago) and STALE (5 products last crawled 2026-08-08); exit 0.
 
 ## 9. Troubleshooting [planned]
 
@@ -297,6 +425,9 @@ isn't listed in this doc.
 |---|---|---|
 | 2026-10-05 | Doc created from the agreed design (all sections planned) | — |
 | 2026-10-13 | PDP list scoped to active PLP list rows; `is_active` column added to the PLP list | — |
+| 2026-10-16 | **Part 2 built:** startup checks (G1, G2, G7, G8, G10, stale-crawl), settings, `make preflight-ounass-plp-efficient` (+ `-probe`). Verified against the dev export | — |
+| 2026-10-16 | PDP list contract gains `last_crawl_date` (scraper-pipeline `0345c2b`, dev Lambda redeployed) | — |
+| 2026-10-16 | Added "Startup checks, in detail" and "Preflight" sections; new stale-crawl warning (`…_STALE_CRAWL_DAYS`, based on `last_crawl_date`, pending an export column) | — |
 | 2026-10-13 | Export prefix moved under `resources/` (`resources/plp-efficient/<env>/`), next to the hand-maintained `resources/crawl-lists/` | — |
 | 2026-10-13 | Export written in scraper-pipeline (not deployed): one manifest per export, written last; `vocabulary.json`; input keys lowercase (`language` `ar`/`en`) | — |
 | 2026-10-13 | Inputs exported on demand at crawl start (crawler invokes scraper-pipeline's export Lambda); G8 now measures gold's last build time, with settings renamed `…_GOLD_WARN_AGE_DAYS` / `…_GOLD_MAX_AGE_DAYS`; added `…_EXPORT_LAMBDA` | — |
