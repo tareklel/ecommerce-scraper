@@ -385,6 +385,19 @@ class PostCrawlPipeline:
                 "report_path": os.path.join(self.output_dir, "metadata", "quality_report.json"),
             }
 
+        # PLP-efficient runs (docs/ounass_plp_efficient_crawl.md): what the run
+        # was given, what it skipped and why. Written even when the run stopped
+        # at startup, so a stopped run is explained in Athena.
+        block_builder = getattr(spider, "plp_efficient_manifest_block", None)
+        if callable(block_builder):
+            try:
+                block = block_builder()
+            except Exception as e:
+                spider.logger.error(f"Could not build the plp_efficient manifest block: {e}")
+                block = {"error": str(e)}
+            if block is not None:
+                manifest["plp_efficient"] = block
+
         # add manifest bronze_verification
         manifest["bronze_verification"] = {
             "expected": {

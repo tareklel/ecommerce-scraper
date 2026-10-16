@@ -869,3 +869,90 @@ class PlpEfficientRun:
             "per_listing": self.stats,
             "phase2": self.phase2,
         }
+
+
+# ---------------------------------------------------------------------------
+# Run manifest block (Part 4)
+# ---------------------------------------------------------------------------
+
+MANIFEST_MAX_MESSAGES = 50
+
+
+def manifest_block(inputs=None, result=None, run=None, startup_error=None, mode="live"):
+    """
+    The run manifest's `plp_efficient` block: what the run was given, what the
+    startup checks decided, what each listing did and what Phase 2 got.
+
+    `degradations` lists every piece of work a guardrail chose to skip in a run
+    that otherwise completed (a skipped or held-back listing, quarantined or
+    held-back products, Phase 2 skipped by the ceiling). `startup_stopped`
+    means the run made no request at all. Both feed the run status (Part 4b).
+    """
+    block = {
+        "mode": mode,
+        "startup_stopped": bool(startup_error) or bool(result is not None and result.stop),
+        "startup_error": str(startup_error) if startup_error else None,
+        "inputs": None,
+        "startup": None,
+        "listings": None,
+        "phase2": None,
+        "refreshed_from_listing": None,
+        "new_products": None,
+        "degradations": [],
+    }
+    degradations = block["degradations"]
+
+    if inputs is not None:
+        export = inputs.manifest or {}
+        block["inputs"] = {
+            "sources": dict(inputs.sources),
+            "export_id": export.get("export_id"),
+            "app_env": export.get("app_env"),
+            "gold_built_at": export.get("gold_built_at"),
+            "plp_rows": len(inputs.plp_rows) if inputs.plp_rows is not None else None,
+            "pdp_rows": len(inputs.pdp_rows) if inputs.pdp_rows is not None else None,
+        }
+
+    if result is not None:
+        by_check = {}
+        for problem in result.problems:
+            by_check.setdefault(problem.check, {}).setdefault(problem.severity, 0)
+            by_check[problem.check][problem.severity] += 1
+        block["startup"] = {
+            "gold_age_days": result.gold_age_days,
+            "listings_valid": len(result.valid_plp_rows),
+            "listings_skipped": [row.get("url") for row in result.skipped_plp_rows],
+            "products_valid": len(result.valid_pdp_rows),
+            "products_quarantined": len(result.quarantined_pdp_rows),
+            "products_held_back": len(result.held_back_pdp_rows),
+            "products_uncovered": len(result.uncovered_pdp_rows),
+            "products_stale": len(result.stale_pdp_rows),
+            "problems_by_check": by_check,
+            "stop_messages": [p.message for p in result.by_severity(STOP)][:MANIFEST_MAX_MESSAGES],
+        }
+        if result.skipped_plp_rows:
+            degradations.append(f"{len(result.skipped_plp_rows)} listing(s) skipped at startup")
+        if result.quarantined_pdp_rows:
+            degradations.append(f"{len(result.quarantined_pdp_rows)} product(s) quarantined")
+        if result.held_back_pdp_rows:
+            degradations.append(
+                f"{len(result.held_back_pdp_rows)} product(s) held back (only skipped listings cover them)")
+
+    if run is not None:
+        health = run.phase2["listing_health"] if run.phase2 else {}
+        listings = []
+        for stats in run.stats:
+            reason = health.get(stats["url"]) if run.phase2 else stats["stopped"]
+            listings.append({**stats, "held_back_reason": reason})
+            if reason:
+                degradations.append(f"listing held back: {stats['url']} ({reason})")
+        block["listings"] = listings
+        block["refreshed_from_listing"] = len(run.crawled)
+        block["new_products"] = len(run.new_urls)
+        if run.phase2:
+            block["phase2"] = {k: v for k, v in run.phase2.items() if k not in ("urls", "listing_health")}
+            if run.phase2["phase2_ceiling_exceeded"]:
+                degradations.append(
+                    f"Phase 2 skipped: {run.phase2['candidates']} product pages exceed the ceiling "
+                    f"of {run.config.max_phase2_pdps}")
+    return block

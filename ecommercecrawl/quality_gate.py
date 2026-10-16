@@ -13,6 +13,14 @@ PASS = "pass"
 RULE_SET_ID = "default"
 
 
+# PLP-extract rows (Ounass PLP-efficient crawl, docs/ounass_plp_efficient_crawl.md)
+# leave name, images, category etc. blank on purpose: "not observed", kept from
+# the previous crawl downstream. They're checked with their own rule instead of
+# the blank-ratio rule, which would otherwise fail every such run.
+PLP_EXTRACT_FLAG_FIELD = "plp_extract_flag"
+PLP_EXTRACT_REQUIRED_FIELDS = ("portal_itemid", "url", "price", "site", "country", "language")
+PLP_EXTRACT_MAX_EXAMPLES = 20
+
 # Normalize known site aliases so checks are consistent per site.
 SITE_ALIASES = {
     "level": "level-shoes",
@@ -107,6 +115,48 @@ def load_blank_field_exceptions(
     return {}
 
 
+def is_plp_extract_row(row: dict) -> bool:
+    return str(row.get(PLP_EXTRACT_FLAG_FIELD)).strip() == "1"
+
+
+def _plp_extract_row_errors(row: dict) -> List[str]:
+    """Why a PLP-extract row is unusable; empty when it's fine."""
+    errors = [f"{field} blank" for field in PLP_EXTRACT_REQUIRED_FIELDS if is_blank(row.get(field))]
+    price = row.get("price")
+    if not is_blank(price):
+        try:
+            if float(price) <= 0:
+                errors.append("price <= 0")
+        except (TypeError, ValueError):
+            errors.append("price not a number")
+    url = row.get("url")
+    if not is_blank(url):
+        # URL rule (G6): the row must carry the product's own page URL. A
+        # listing URL would overwrite the product's link downstream.
+        if "/api/" in str(url) or url == row.get("plp_source_url"):
+            errors.append("url is a listing URL")
+    return errors
+
+
+def evaluate_plp_extract_rows(rows: List[dict]) -> dict:
+    """
+    Rule for PLP-extract rows: every row must be usable on its own. The
+    crawler only writes rows that pass these checks, so any violation means a
+    bug, and the run fails rather than letting bad rows reach raw.
+    """
+    invalid = []
+    for idx, row in enumerate(rows):
+        errors = _plp_extract_row_errors(row)
+        if errors:
+            invalid.append({"row_index": idx, "portal_itemid": row.get("portal_itemid"), "errors": errors})
+    return {
+        "row_count": len(rows),
+        "required_fields": list(PLP_EXTRACT_REQUIRED_FIELDS),
+        "invalid_count": len(invalid),
+        "invalid_examples": invalid[:PLP_EXTRACT_MAX_EXAMPLES],
+    }
+
+
 @dataclass(frozen=True)
 class QualityGateParams:
     # Fail when blank ratio for a field is >= this value.
@@ -125,7 +175,8 @@ def evaluate_fail_quality(
     Evaluate stateless FAIL_QUALITY checks for one run.
 
     Current rule set:
-    - field_blankness_threshold per site.
+    - field_blankness_threshold per site, on product-page rows only;
+    - plp_extract_required_fields on PLP-extract rows (plp_extract_flag = 1).
     """
     params = params or QualityGateParams()
     if not (0 <= params.blank_threshold <= 1):
@@ -134,8 +185,10 @@ def evaluate_fail_quality(
         raise ValueError("min_rows_for_blank_check must be >= 1.")
 
     normalized_exceptions = _normalize_exception_map(blank_field_exceptions)
+    plp_extract_rows = [row for row in rows if is_plp_extract_row(row)]
+    page_rows = [row for row in rows if not is_plp_extract_row(row)]
     grouped_by_site: Dict[str, List[dict]] = defaultdict(list)
-    for row in rows:
+    for row in page_rows:
         # Rule evaluation is per normalized site.
         grouped_by_site[normalize_site_name(row.get("site"))].append(row)
 
@@ -212,14 +265,34 @@ def evaluate_fail_quality(
         site_report["checked_fields"] = checked_fields
         report_sites[site] = site_report
 
-    return {
+    blank_violations = violation_count
+    plp_extract_report = None
+    if plp_extract_rows:
+        plp_extract_report = evaluate_plp_extract_rows(plp_extract_rows)
+        if plp_extract_report["invalid_count"]:
+            violation_count += 1
+
+    if blank_violations and violation_count > blank_violations:
+        reason = "blank_field_threshold_breach_and_invalid_plp_extract_rows"
+    elif blank_violations:
+        reason = "blank_field_threshold_breach"
+    elif violation_count:
+        reason = "invalid_plp_extract_rows"
+    else:
+        reason = "all_rules_passed"
+
+    report = {
         "status": FAIL_QUALITY if violation_count > 0 else PASS,
         "event_time_utc": _utc_now_iso(),
         "rule_set": RULE_SET_ID,
-        "reason": "blank_field_threshold_breach" if violation_count > 0 else "all_rules_passed",
+        "reason": reason,
         "total_rows": len(rows),
         "blank_threshold": params.blank_threshold,
         "min_rows_for_blank_check": params.min_rows_for_blank_check,
+        # Product-page rows only; PLP-extract rows are reported separately.
         "sites": report_sites,
         "violations_count": violation_count,
     }
+    if plp_extract_report is not None:
+        report["plp_extract_rows"] = plp_extract_report
+    return report

@@ -338,3 +338,61 @@ def test_spider_failed_listing_page_holds_back_its_products():
     spider._plp_efficient_on_idle()              # nothing to schedule: no DontCloseSpider
     assert spider.crawler.engine.requests == []
     assert "G3" in spider.plp_run.phase2["listing_health"][TOTE]
+
+
+# --- Run manifest block (Part 4) ----------------------------------------------
+
+def test_manifest_block_startup_stop_explains_why():
+    spider = _spider([plp(subcategory="nope")], [pdp("1")])
+    list(spider.start_requests())
+    block = spider.plp_efficient_manifest_block()
+    json.dumps(block)                                  # must be JSON-serialisable
+    assert block["startup_stopped"] is True
+    assert block["startup"]["stop_messages"]
+    assert block["inputs"]["export_id"] == "t"
+    assert block["listings"] is None and block["phase2"] is None
+
+
+def test_manifest_block_export_failure():
+    spider = OunassSpider(plp_efficient=True)
+    spider.settings = _settings()
+
+    def fail():
+        raise pe.ExportError("lambda timed out")
+    spider._load_plp_efficient_inputs = fail
+    assert list(spider.start_requests()) == []
+    block = spider.plp_efficient_manifest_block()
+    assert block["startup_stopped"] is True and "lambda timed out" in block["startup_error"]
+    assert block["inputs"] is None
+
+
+def test_manifest_block_clean_run_has_no_degradations():
+    spider = _spider([plp()], [pdp(str(i)) for i in range(3)])
+    list(spider.start_requests())
+    list(spider.parse(_listing_response(f"{TOTE}?{constants.PLPSORT_KEY}={constants.PLPSORT}&p=0", 0,
+                                        [hit(str(i)) for i in range(3)])))
+    spider._plp_efficient_on_idle()                    # nothing left for Phase 2
+    block = spider.plp_efficient_manifest_block()
+    json.dumps(block)
+    assert block["startup_stopped"] is False
+    assert block["degradations"] == []
+    assert block["refreshed_from_listing"] == 3
+    assert block["phase2"]["scheduled"] == 0
+    [listing] = block["listings"]
+    assert listing["emitted"] == 3 and listing["held_back_reason"] is None
+
+
+def test_manifest_block_names_held_back_listing_and_ceiling():
+    rows = [pdp(str(i)) for i in range(4)] + [pdp(f"s{i}", subcategory="shoulder_bags") for i in range(5)]
+    run = make_run([plp()], rows, max_phase2_pdps=3)
+    run.page_requested(0)
+    run.page_failed(0)                                 # G3
+    run.select_phase2()
+    block = pe.manifest_block(result=None, run=run)
+    assert any("listing held back" in d and "G3" in d for d in block["degradations"])
+    assert any("Phase 2 skipped" in d for d in block["degradations"])
+    assert block["phase2"]["phase2_ceiling_exceeded"] is True
+
+
+def test_manifest_block_is_none_in_normal_mode():
+    assert OunassSpider().plp_efficient_manifest_block() is None

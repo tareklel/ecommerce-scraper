@@ -7,9 +7,9 @@ options and the build plan live in `tickets/ounass_plp_efficient_crawl.md`.
 
 **Build status (2026-10-16): inputs, startup checks, preflight (Part 2) and
 the crawl itself (Part 3: sweep, PLP-extract rows, Phase 2) built and
-smoke-tested locally. Not yet safe for cloud runs: the run manifest, quality
-gate split and run status (Part 4) and the daily parity check (Part 5) are
-still planned.** Each section is marked
+smoke-tested locally; the manifest block and quality-gate split (Part 4a)
+built. Not yet safe for cloud runs: run status (Part 4b) and the daily parity
+check (Part 5) are still planned.** Each section is marked
 **[planned]** or **[built]**. Flip a marker when the matching ticket part
 lands, and correct the section if the build differs from the plan.
 
@@ -177,12 +177,13 @@ and go to raw like any other: each one passed the ID, scope and price checks
 on its own. Only the listing's leftovers are held back. The listing's outcome
 and counts are in the run log now and go in the manifest from Part 4.
 
-**Partial and stopped runs.** A run that held back products, skipped
-Phase 2, or was stopped/killed partway still writes the rows it produced.
-From Part 4 such a run must be **recorded as a failure-type status
-("incomplete")**, even when its quality gate passes, so it's never mistaken
-for a clean run when debugging. Until Part 4 lands, only the logs show it:
-another reason the mode isn't used in the cloud yet.
+**Partial and stopped runs** (status rules in section 6, "Run status").
+A run that reached its end but held back products or skipped Phase 2 is
+**degraded**: its rows reach dbt and the manifest names every skip. A run
+stopped or killed partway is **failed** (`aborted` / `killed`), even when its
+rows pass quality, and its rows never reach dbt. Until Part 4b lands, an
+aborted run still gets `_SUCCESS`: another reason the mode isn't used in the
+cloud yet.
 
 ### Colour variants
 
@@ -342,26 +343,53 @@ Language is compared case-insensitively: inputs use `ar` / `en`
 
 ---
 
-## 6. Outputs [rows built; manifest, quality gate split and markers planned (Part 4)]
+## 6. Outputs [rows, manifest block, quality gate built; run status planned (Part 4b)]
 
-- **Rows [built]:** PLP-extract rows (`plp_extract_flag = 1`) and normal PDP rows
-  (`plp_extract_flag = 0`) in the same output file, landing in
+- **Rows [built]:** PLP-extract rows (`plp_extract_flag = 1`) and normal PDP
+  rows (`plp_extract_flag = 0`) in the same output file, landing in
   `bronze_ounass_raw`.
-- **Manifest:** a `plp_efficient` block with mode, input paths and dates;
-  counts (PLPs swept / skipped / partial / stopped, refreshed, new,
-  quarantined, held back, Phase 2 crawled, sold-out excluded from G4); and
-  guardrail outcomes (per-PLP missing ratio, G11 trips, ceiling, parity per
-  country). Written **even when a run stops at startup**.
-- **Quality gate**, split by row type: PDP rows use the standard blank-ratio
-  rules; PLP-extract rows only require `portal_itemid`, `url`, `price`,
-  `site`, `country`, `language`, with `price > 0` and `url` not a listing
-  URL.
-- **Markers (verifier Lambda):** a degraded run (a PLP skipped, Phase 2
-  skipped, a country without PLP rows) still gets `_SUCCESS`, with the
-  degradation in the manifest. Global stops get a failure marker. Shadow runs
-  must not produce `_FAIL_QUALITY`; how is open (ticket, open question 3).
+- **Manifest `plp_efficient` block [built]** (`plp_efficient.manifest_block`,
+  added by `PostCrawlPipeline`). Written **even when the run stops at
+  startup**: the output folder exists from spider open, so the manifest
+  explains the stop.
+  - `startup_stopped`, `startup_error` (export failure);
+  - `inputs`: file paths, export id, `gold_built_at`, row counts;
+  - `startup`: gold age, listings valid / skipped (with URLs), products
+    valid / quarantined / held back / uncovered / stale, problem counts per
+    check and severity, the stop messages;
+  - `listings`: per listing, pages requested / parsed / failed, rows
+    emitted, matched, mismatched, unusable, new, and `held_back_reason`;
+  - `phase2`: candidates, `phase2_ceiling_exceeded`, counts (known unseen,
+    uncovered, new, held back), `scheduled`;
+  - `refreshed_from_listing`, `new_products`;
+  - `degradations`: one line per piece of work a guardrail chose to skip.
+    Empty = nothing skipped. Feeds the run status (below).
+- **Quality gate, split by row type [built]** (`quality_gate.py`):
+  - product-page rows (`plp_extract_flag` not 1): the standard per-site
+    blank-ratio rule, unchanged, counted over product-page rows only;
+  - PLP-extract rows: every row must have `portal_itemid`, `url`, `price`,
+    `site`, `country`, `language`, with `price > 0` and `url` not a listing
+    URL (no `/api/`, not the `plp_source_url`). **One bad row fails the run**:
+    the crawler never writes such rows, so one means a bug. Reported under
+    `plp_extract_rows` in the quality report.
 
----
+### Run status [planned, Part 4b; applies to all crawls]
+
+One question decides it: **did the crawler reach its own end, and did it
+skip anything on purpose?**
+
+| `run_status` | When | Marker | Reaches dbt |
+|---|---|---|---|
+| `success` | Reached its own end, nothing skipped | `_SUCCESS` | yes |
+| `degraded` | Reached its own end, but a guardrail skipped work (a listing skipped or held back, products quarantined or held back, Phase 2 skipped by the ceiling). The manifest's `degradations` names each one. | `_SUCCESS` | yes |
+| `failed` | Rows can't be trusted or the run didn't finish. `failure_reason`: `aborted` (closed for any reason other than `finished`: Ctrl+C, ECS stop, timeout), `startup_check` (stopped before any request), `quality` (quality gate failed), `verification` (file check failed) | a failure marker per reason | **no** |
+| `killed` | A "run started" record with no manifest (hard kill, out-of-memory) | none | no |
+
+An aborted run is **failed**, never "partly saved", like an edit abandoned
+before saving: its rows may be genuine, but a half-finished day reads as
+misleading data. Its file is still uploaded next to the failure marker for
+inspection; nothing registers it. The next day's crawl refreshes those
+products.
 
 ## 7. Downstream behaviour (scraper-pipeline) [planned]
 
@@ -441,7 +469,7 @@ ago) and STALE (5 products last crawled 2026-08-08); exit 0.
 | A country has no PLP-extract rows | G9 inconclusive: too few parity comparisons, usually Ounass blocking (seen on Saudi) | Manifest parity block; `--probe-one-page` |
 | Run stopped on parity | G9 confirmed mismatches: listing format likely changed | Re-run the parity probe; update section 4 |
 | A PLP's leftovers held back | G3 page failure, G7 currency mismatch, G11 field-mismatch spike or G4 missing spike | Manifest per-PLP outcomes; check for a canonical rename or Ounass reclassification |
-| Phase 2 skipped | G4 cap or the 10,000 ceiling | Manifest counts; check the PDP list's scope |
+| Phase 2 skipped | G4 cap or the 10,000 ceiling | Manifest `plp_efficient.phase2` and `degradations`; check the PDP list's scope |
 | Many products refreshed every day via PDP instead of PLP | Unmapped products (absent from gold) or swatch-only sold-out colours | Accepted losses; see section 10 |
 
 ---
@@ -469,6 +497,7 @@ ago) and STALE (5 products last crawled 2026-08-08); exit 0.
 | 2026-10-05 | Doc created from the agreed design (all sections planned) | — |
 | 2026-10-13 | PDP list scoped to active PLP list rows; `is_active` column added to the PLP list | — |
 | 2026-10-16 | **Part 2 built:** startup checks (G1, G2, G7, G8, G10, stale-crawl), settings, `make preflight-ounass-plp-efficient` (+ `-probe`). Verified against the dev export | — |
+| 2026-10-16 | **Part 4a built:** manifest `plp_efficient` block (also on startup stops), quality gate split by row type. Run-status definitions agreed (success / degraded / failed with reason / killed; an aborted run is failed and never reaches dbt) | — |
 | 2026-10-16 | Crawler ECS task role may invoke the export Lambda (dev + prod names), applied (`infra/terraform/iam_ecs.tf`) | — |
 | 2026-10-16 | **Part 3 built:** listing sweep, PLP-extract rows, Phase 2 selection (G3, G4, G6, G7 currency, G11, ceiling), `run_crawler.py --plp-efficient`, `plp_extract_flag = 0` on every normal PDP row. G11 judged after the sweep (not mid-sweep): rows already written stay, leftovers held back. Partial runs to be recorded as "incomplete" (Part 4). Smoke run: 1 Saudi listing, 29/29 pages, 1 row refreshed, correct against gold | — |
 | 2026-10-16 | PDP list contract gains `last_crawl_date` (scraper-pipeline `0345c2b`, dev Lambda redeployed) | — |

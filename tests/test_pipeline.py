@@ -377,3 +377,18 @@ class TestS3Upload:
         }
 
         assert uploaded_keys == expected_keys
+
+
+def test_manifest_includes_plp_efficient_block(pipeline_setup, tmp_path):
+    pipeline, spider, mock_crawler = pipeline_setup
+    spider.entry_points = {}
+    mock_crawler.stats.get_stats.return_value = {"start_time": datetime.now(timezone.utc)}
+    spider.plp_efficient_manifest_block = lambda: {"mode": "live", "startup_stopped": True}
+    pipeline.spider_closed(spider=spider, reason="finished")
+    with open(tmp_path / "metadata" / "manifest.json") as f:
+        manifest = json.load(f)
+    assert manifest["plp_efficient"] == {"mode": "live", "startup_stopped": True}
+
+
+def test_manifest_has_no_plp_efficient_block_for_other_spiders(manifest_test_setup):
+    assert "plp_efficient" not in manifest_test_setup["manifest_data"]

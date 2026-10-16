@@ -39,10 +39,12 @@ Read this first when resuming.
    needs a dbt rebuild: it's ~3 days old, so G8 will stop.
 5. ✅ **Part 3 code done (2026-10-16)**, smoke-tested locally (see Part 3).
    ECS task-role IAM change applied 2026-10-16 (targeted, 1 added).
-   **The mode is local-only until Part 4 lands:** no manifest block, no
-   quality-gate split, and partial runs aren't yet recorded as
-   "incomplete".
-   **Next: Part 4** (run observability).
+6. ✅ **Part 4a done (2026-10-16):** manifest `plp_efficient` block (also
+   on startup stops) and quality gate split by row type.
+   **Next: Part 4b** (run status for all crawls: `run_status` /
+   `failure_reason` in the manifest, verifier markers, "run started" record,
+   `crawl_manifest_raw` columns). The mode stays local-only until 4b lands:
+   an aborted run still gets `_SUCCESS` today.
 6. **Part 1 step 6 (prod):** only after prod gold and the registry exist;
    see `../scraper-pipeline/ticket/migrate-validated-dev-to-prod.md`. Apply
    prod export resources **targeted**.
@@ -96,7 +98,7 @@ depends on it starts.
 | **1** | Inputs: exports, registry, vocabulary, flag column in raw | scraper-pipeline | 0 | ✅ dev (2026-10-13–16); prod pending |
 | **2** | Input loading, validation and `make preflight` | this | 0 (build with hand-made CSVs; verify against Part 1 exports) | ✅ done 2026-10-16 |
 | **3** | Crawler core: Phase 1 / Phase 2, PLP-extract rows, runtime guardrails | this | 2 | ✅ done 2026-10-16 (code, local smoke, IAM applied) |
-| **4** | Run observability: manifest block, quality-gate split, run status | this (+ verifier Lambda) | 3 | not started |
+| **4** | Run observability: manifest block, quality-gate split, run status | this (+ verifier Lambda) | 3 | 4a ✅ 2026-10-16; 4b next |
 | **5** | Daily parity spot check | this | 3 | not started |
 | **6** | Downstream readiness: discount-clearing fix, label pickup, flag kept in silver, 3-day sold-out cutoff | scraper-pipeline | 1 | not started |
 | **7** | Shadow mode (1–2 weeks), tune thresholds, then go live | both | 1–6 | not started |
@@ -532,7 +534,26 @@ pages + Phase 2 count.
 **Goal:** every run, including stopped and degraded ones, is visible and
 correctly classified in S3 / Athena.
 
-- [ ] **Quality gate split by row type** in `ecommercecrawl/quality_gate.py`.
+Split into **4a** (crawler side, adds information only: quality-gate split,
+manifest block; ✅ 2026-10-16) and **4b** (run status for all crawls:
+manifest `run_status` / `failure_reason`, verifier markers, "run started"
+record, Athena columns).
+
+**Run status, agreed 2026-10-16** (replaces "incomplete" and "pass / fail"
+below; full table in the reference doc, section 6). One question decides
+it: did the crawler reach its own end, and did it skip anything on purpose?
+- `success`: reached its end, nothing skipped → `_SUCCESS`.
+- `degraded`: reached its end, a guardrail skipped work (listing skipped or
+  held back, products quarantined / held back, **Phase 2 skipped by the
+  ceiling**) → `_SUCCESS`, the manifest's `degradations` names each skip.
+- `failed`, with `failure_reason` `aborted` (exit reason not `finished`),
+  `startup_check`, `quality` or `verification` → a failure marker, rows
+  **never** reach dbt. An aborted run is failed like an unsaved edit: no
+  "incomplete" category, and no manual "register anyway" target.
+- `killed`: a "run started" record with no manifest.
+
+- [x] **Quality gate split by row type** in `ecommercecrawl/quality_gate.py`
+  (4a). Built: one invalid PLP-extract row fails the run (it would be a bug).
   The current gate fails a field if it's blank in ≥ 20% of the file's rows
   (`QUALITY_GATE_BLANK_THRESHOLD = 0.2`). Listing rows leave name, images,
   category etc. blank, so as-is **every PLP-efficient run would fail**, and
@@ -542,7 +563,7 @@ correctly classified in S3 / Athena.
     `country`, `language` filled; `price > 0`; `url` not a listing URL.
   - When fewer than the gate's minimum (20) PDP rows exist, the report says
     the blank check was skipped for them.
-- [ ] **Manifest `plp_efficient` block:**
+- [x] **Manifest `plp_efficient` block** (4a; parity fields come with Part 5):
   - mode (live / shadow) and input paths with export dates;
   - counts: PLPs swept / skipped / partial / stopped; PDP list rows;
     quarantined; refreshed from listing; new; Phase 2 crawled; held back;
@@ -589,9 +610,10 @@ correctly classified in S3 / Athena.
     because they matched exactly. That's correct, but the manifest must name
     the stopped listings. The parity stop (G9) is the exception: listing
     rows already written must **not** reach raw (see Part 5).
-- [ ] **A manifest is written even when the run stops at startup**, with the
-  failed checks. Today `_generate_manifest` only runs once the spider has
-  opened, so input failures would be invisible in Athena.
+- [x] **A manifest is written even when the run stops at startup**, with the
+  failed checks (4a). The spider has already opened by the time startup
+  checks run, so the manifest was always written; it now says why.
+  Verified with a local run on a deliberately broken listing row.
 - [ ] **Shadow runs don't read as failures.** They write no rows, so the
   gate is skipped and the verifier (which requires status `pass`) would
   write `_FAIL_QUALITY` daily. Either use an output location the verifier
@@ -840,6 +862,7 @@ explicit approval under `context/AGENTS.md`).
 | 2026-10-16 | A run that stops partway (any `exit_reason` other than `finished`) must be recorded as a failure-type status (`incomplete`), never as a success, even if its rows pass quality; this applies to all crawls (Part 4). Hard kills get a "run started" record so they show as killed. A G9 parity stop must keep already-written listing rows out of raw (Part 5). |
 | 2026-10-16 | G11 (field-mismatch drift) is only known after a listing's last page: rows already written for it stay (they matched exactly); its leftovers are held back from Phase 2 and the listing is named in the manifest. |
 | 2026-10-16 | Every Ounass row gets `plp_extract_flag` (0 for product-page rows), including normal-mode crawls. |
+| 2026-10-16 | Run status: success / degraded / failed (`aborted`, `startup_check`, `quality`, `verification`) / killed. Boundary = did the crawler reach its own end, and did it skip work on purpose. Phase 2 skipped by the ceiling is degraded. An aborted run is **failed**, rows never reach dbt (no "incomplete" status, no manual register target). Replaces the earlier "incomplete" entry. |
 | 2026-10-16 | Crawler ECS role permission to invoke the export moves from Part 2 to Part 3 (nothing in ECS invokes it before then). |
 | 2026-10-16 | Stale-crawl warning added (warn only), based on per-product `last_crawl_date`, which survives gold rebuilds; requires adding that column to the export. G8 stays as a safety net for a skipped or failed dbt step. |
 | 2026-10-16 | Preflight usage and the startup checks documented in plain terms in `docs/ounass_plp_efficient_crawl.md`. |

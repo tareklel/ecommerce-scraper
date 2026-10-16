@@ -40,7 +40,9 @@ class OunassSpider(MasterCrawl, scrapy.Spider):
         self.plp_efficient = plp_efficient
         self.plp_efficient_local_inputs = (plp_list, pdp_list, vocabulary, plp_manifest)
         self.plp_run = None
+        self.plp_efficient_inputs = None
         self.plp_efficient_result = None
+        self.plp_efficient_startup_error = None
         self.urlpath = urlpath
         self.start_urls = urls or []
         self.limit = limit
@@ -365,8 +367,10 @@ class OunassSpider(MasterCrawl, scrapy.Spider):
         try:
             inputs = self._load_plp_efficient_inputs()
         except pe.ExportError as exc:
+            self.plp_efficient_startup_error = exc
             self.logger.error(f"PLP-efficient run stopped before any request: {exc}")
             return
+        self.plp_efficient_inputs = inputs
         config = pe.Config.from_settings(getattr(self, "settings", None) or {})
         result = pe.validate(inputs, config)
         self.plp_efficient_result = result
@@ -457,8 +461,20 @@ class OunassSpider(MasterCrawl, scrapy.Spider):
                 request_type=self._get_crawler_api_request_type(url),
             ))
             scheduled += 1
+        phase2["scheduled"] = scheduled
         if scheduled:
             raise DontCloseSpider
+
+    def plp_efficient_manifest_block(self):
+        """The run manifest's plp_efficient block (PostCrawlPipeline); None in normal mode."""
+        if not self.plp_efficient_enabled():
+            return None
+        return pe.manifest_block(
+            inputs=self.plp_efficient_inputs,
+            result=self.plp_efficient_result,
+            run=self.plp_run,
+            startup_error=self.plp_efficient_startup_error,
+        )
 
     def closed(self, reason):
         if self.plp_run is not None:

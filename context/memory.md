@@ -1,5 +1,11 @@
 # Memory
 
+## 2026-10-16 - PLP-efficient Part 4a: manifest block and quality-gate split
+- `quality_gate.py`: rows with `plp_extract_flag = 1` skip the blank-ratio rule (which only counts product-page rows now) and must each have ID, url, price > 0, site, country, language, with a non-listing url; one bad row fails the run.
+- `plp_efficient.manifest_block` + `OunassSpider.plp_efficient_manifest_block`: the manifest gets a `plp_efficient` block (inputs, startup decisions, per-listing outcomes, Phase 2, `degradations`), also when the run stops at startup.
+- Run status agreed for Part 4b (all crawls): success / degraded / failed (aborted, startup_check, quality, verification) / killed. Aborted runs are failed and never reach dbt.
+- 15 new tests; suite 381 passed.
+
 ## 2026-10-16 - PLP-efficient Part 3: crawler core (local only until Part 4)
 - `ecommercecrawl/plp_efficient.py` gains `PlpEfficientRun` (Scrapy-free bookkeeping: match listing entries by country + language + `visibleSku`, PLP-extract row with the URL copied from gold, per-listing stats, `listing_health()` for G3/G7/G11/G4, `select_phase2()` with hold-backs and the 10k ceiling) and the `plp_hit_*` price/discount/label helpers.
 - Ounass spider: `--plp-efficient` (or `OUNASS_PLP_EFFICIENT_CRAWL`) loads the export (or local files), runs the startup checks, sweeps listings with an errback per page, then schedules Phase 2 PDPs from `spider_idle`. Every normal PDP row now carries `plp_extract_flag: 0`.
