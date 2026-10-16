@@ -33,4 +33,13 @@ TLD_COUNTRY_MAP = {
     'www.ounass.qa': 'qa',
     'ar.ounass.qa': 'qa',
 }
+# Currency each country's listing prices are in (PLP hit `localeCurrency`).
+# PLP-extract rows carry no currency, so the sweep checks this (G7) to avoid
+# writing one country's prices onto another country's products.
+COUNTRY_CURRENCY = {
+    'ae': 'AED',
+    'sa': 'SAR',
+    'kw': 'KWD',
+    'qa': 'QAR',
+}
     

@@ -5,16 +5,20 @@ Keep it current: any behaviour change updates this doc in the same commit,
 with a change-log line (rule in `context/AGENTS.md`). History, rejected
 options and the build plan live in `tickets/ounass_plp_efficient_crawl.md`.
 
-**Build status (2026-10-16): inputs, startup checks and preflight built
-(Part 2); the crawl itself (Parts 3–5) not yet.** Each section is marked
+**Build status (2026-10-16): inputs, startup checks, preflight (Part 2) and
+the crawl itself (Part 3: sweep, PLP-extract rows, Phase 2) built and
+smoke-tested locally. Not yet safe for cloud runs: the run manifest, quality
+gate split and run status (Part 4) and the daily parity check (Part 5) are
+still planned.** Each section is marked
 **[planned]** or **[built]**. Flip a marker when the matching ticket part
 lands, and correct the section if the build differs from the plan.
 
 ---
 
-## 1. What it is [planned]
+## 1. What it is [built]
 
-An opt-in mode of the Ounass spider (`OUNASS_PLP_EFFICIENT_CRAWL = True`) that
+An opt-in mode of the Ounass spider (`OUNASS_PLP_EFFICIENT_CRAWL = True`, or
+`run_crawler.py ounass --plp-efficient`) that
 refreshes products we already know about from **listing pages (PLPs)** instead
 of their **product pages (PDPs)**. A listing entry already carries the
 product's ID, price and badges, so one listing request refreshes ~48 products.
@@ -105,7 +109,7 @@ PLP or directly in Phase 2. That's why scoping happens in the export.
 
 ---
 
-## 3. How a run works [planned]
+## 3. How a run works [built]
 
 ```mermaid
 flowchart TD
@@ -143,6 +147,43 @@ flowchart TD
 - A product **quarantined** at startup (bad PDP list row) is skipped if seen,
   not treated as new.
 
+### After the sweep: what Phase 2 gets [built]
+
+When every listing page has been fetched (or failed), the crawler checks
+each listing's health once, then decides Phase 2:
+
+- **Healthy listing:** its known-but-unseen products and its new products
+  are PDP-crawled.
+- **Unhealthy listing:** its leftovers are **held back**: neither refreshed
+  nor PDP-crawled this run, and logged with the reason. A listing is
+  unhealthy if, in this order:
+  - it was stopped during the sweep (G7 currency);
+  - a page failed or no page was parsed (G3);
+  - more than 5% of the products it matched by ID disagree with it on
+    gender/category/subcategory/brand (G11);
+  - more than 25% of the products it should show (ignoring ones gold has
+    as sold out) weren't on it (G4).
+- A known product covered by several listings is crawled if **any** of them
+  is healthy.
+- Known products **no listing covers** (e.g. special PDPs) are always
+  PDP-crawled.
+- If the total exceeds the Phase 2 ceiling, **nothing** is PDP-crawled
+  (`phase2_ceiling_exceeded`). Rows already written from listings stay.
+
+**Rows already written stay.** Health is judged after the sweep, so a listing
+that trips G11 or G4 (or is stopped by G7 partway) has usually already
+written PLP-extract rows for the products that did match. Those rows are kept
+and go to raw like any other: each one passed the ID, scope and price checks
+on its own. Only the listing's leftovers are held back. The listing's outcome
+and counts are in the run log now and go in the manifest from Part 4.
+
+**Partial and stopped runs.** A run that held back products, skipped
+Phase 2, or was stopped/killed partway still writes the rows it produced.
+From Part 4 such a run must be **recorded as a failure-type status
+("incomplete")**, even when its quality gate passes, so it's never mistaken
+for a clean run when debugging. Until Part 4 lands, only the logs show it:
+another reason the mode isn't used in the cloud yet.
+
 ### Colour variants
 
 In-stock colours each have their own listing entry and ID. **Sold-out colours
@@ -153,7 +194,7 @@ until the 3-day sold-out cutoff drops them from the PDP list.
 
 ---
 
-## 4. PLP-extract row [planned]
+## 4. PLP-extract row [built]
 
 Only these fields are set. Everything else (`product_name`, `image_urls`,
 `text`, `out_of_stock`, `was_price`, `sizes`, `color`, …) is **null**, meaning
@@ -166,8 +207,10 @@ Only these fields are set. Everything else (`product_name`, `image_urls`,
 | `price_discount` | `round_half_up((1 − priceByCustomerGroupId["-1"] / price) × 100)`; null when 0 | Equals the PDP discount (42/42). The listing's own discount fields were 5 points too high on some sale items. `discountText` is translated display text. |
 | `primary_label` | highest-priority `badges[].value` | Equals the PDP badge (41/42). Promotion-campaign labels (e.g. `EXTRA25`) exist only on the PDP: accepted loss. |
 | `url` | **copied from the product's PDP list row** | Never the listing URL. Downstream keeps the latest non-blank `url` as the website link and the recrawl address (section 7). |
-| `site`, `country`, `language` | the PLP row | |
-| `plp_extract_flag` | `1` | PDP rows always carry `0` |
+| `site`, `country` | the PLP row | |
+| `language` | from the product URL's hostname (`TLD_LANGUAGE_MAP`), `EN` / `AR` | Same derivation as PDP rows |
+| `run_id`, `crawl_date` | the run | As PDP rows |
+| `plp_extract_flag` | `1` | PDP rows always carry `0`, in normal mode too |
 | `plp_source_url` (optional) | the listing page | Analysis only |
 
 Evidence: parity probe runs 2026-09-30 (Saudi Arabic bags) and 2026-10-01 (UAE
@@ -176,7 +219,7 @@ format, re-run the probe before trusting these mappings.
 
 ---
 
-## 5. Guardrails [startup checks G1, G2, G7, G8, G10 + stale-crawl warning built; the rest planned]
+## 5. Guardrails [built except G9 parity (Part 5) and shadow mode (Part 7)]
 
 Principle: fail closed, never fall back to a mass PDP recrawl, and stop only as
 much as the problem affects.
@@ -185,15 +228,15 @@ much as the problem affects.
 |---|---|---|---|
 | G1 | PLP row canonical; gender/category/subcategory set | Skip that PLP, hold back its products. Too many bad rows → stop run. | `OUNASS_PLP_EFFICIENT_MAX_BAD_PLP_ROWS_RATIO` (0.25) |
 | G2 | PLP list and PDP list present, all columns | Stop run | — |
-| G3 | Every page of a PLP fetched | That PLP's products get no Phase 2 | — |
-| G4 | Known-but-unseen products per PLP (excluding ones gold has as sold out) | Over the cap → that PLP's missing products held back | `OUNASS_PLP_EFFICIENT_MISSING_RATIO_CAP` (0.25) |
-| G6 | PLP-extract `url` = PDP list `url`, not a listing URL | Drop that row → Phase 2 | — |
-| G7 | PLP hostname ↔ country/language; entry `localeCurrency` = country currency | Startup: skip that PLP. Sweep: stop that PLP. | — |
+| G3 | Every page of a PLP fetched | After the sweep: that PLP's leftovers held back (rows already written stay) | — |
+| G4 | Known-but-unseen products per PLP (excluding ones gold has as sold out) | After the sweep: over the cap → that PLP's leftovers held back (rows already written stay) | `OUNASS_PLP_EFFICIENT_MISSING_RATIO_CAP` (0.25) |
+| G6 | PLP-extract `url` = PDP list `url`, not a listing URL | Don't write that row; product left for Phase 2 | — |
+| G7 | PLP hostname ↔ country/language; entry `localeCurrency` = country currency | Startup: skip that PLP. Sweep: stop that PLP at the first wrong-currency entry; its leftovers held back (rows already written stay). | — |
 | G8 | Gold age: gold's last build time from the PDP list manifest. The export itself is always fresh. | Warn at the warn age; stop run at the max age (dbt likely stuck) | `OUNASS_PLP_EFFICIENT_GOLD_WARN_AGE_DAYS` (2), `OUNASS_PLP_EFFICIENT_GOLD_MAX_AGE_DAYS` (3) |
 | G9 | Daily parity spot check, per country | Confirmed mismatches ≥ max → stop run, no PLP-extract rows. Too few usable comparisons → no PLP-extract rows for that country. Failed fetches aren't mismatches. | `OUNASS_PLP_EFFICIENT_PARITY_SAMPLE` (20), `OUNASS_PLP_EFFICIENT_PARITY_MIN_COMPARISONS` (10), `OUNASS_PLP_EFFICIENT_PARITY_MAX_MISMATCHES` (2) |
 | G10 | Canonical values exist in the latest vocabulary | Bad PLP row → as G1. Bad PDP row → quarantine that product. Too many bad PDP rows → stop run. | `OUNASS_PLP_EFFICIENT_MAX_BAD_PDP_ROWS_RATIO` (0.05) |
-| G11 | ID matched but fields differ (drift / reclassification) | Over the share → stop that PLP | `OUNASS_PLP_EFFICIENT_FIELD_MISMATCH_RATIO` (0.05) |
-| — | Phase 2 ceiling | Over → skip Phase 2, `phase2_ceiling_exceeded = true` | `OUNASS_PLP_EFFICIENT_MAX_PHASE2_PDPS` (10000) |
+| G11 | ID matched but fields differ (drift / reclassification) | After the sweep: over the share → that PLP's leftovers held back (rows already written stay) | `OUNASS_PLP_EFFICIENT_FIELD_MISMATCH_RATIO` (0.05) |
+| — | Phase 2 ceiling | Over → skip Phase 2 entirely, `phase2_ceiling_exceeded = true` (logged as an error) | `OUNASS_PLP_EFFICIENT_MAX_PHASE2_PDPS` (10000) |
 
 "Hold back" = neither refreshed nor PDP-crawled this run, and logged.
 
@@ -202,7 +245,7 @@ Other settings:
 | Setting | Current value | Meaning |
 |---|---|---|
 | `OUNASS_PLP_EFFICIENT_CRAWL` | `False` | Turns the mode on |
-| `OUNASS_PLP_EFFICIENT_SHADOW` | `False` | Shadow mode: full run, no rows written, outcomes logged to the manifest |
+| `OUNASS_PLP_EFFICIENT_SHADOW` [planned, Part 7] | `False` | Shadow mode: full run, no rows written, outcomes logged to the manifest |
 | `OUNASS_PLP_EFFICIENT_EXPORT_LAMBDA` | `price-comparison-plp-efficient-export-<APP_ENV>` | Name of scraper-pipeline's export Lambda, invoked at crawl start |
 | `OUNASS_PLP_EFFICIENT_STALE_CRAWL_DAYS` | `7` | Stale-crawl warning: products not crawled for more than this many days |
 
@@ -299,9 +342,9 @@ Language is compared case-insensitively: inputs use `ar` / `en`
 
 ---
 
-## 6. Outputs [planned]
+## 6. Outputs [rows built; manifest, quality gate split and markers planned (Part 4)]
 
-- **Rows:** PLP-extract rows (`plp_extract_flag = 1`) and normal PDP rows
+- **Rows [built]:** PLP-extract rows (`plp_extract_flag = 1`) and normal PDP rows
   (`plp_extract_flag = 0`) in the same output file, landing in
   `bronze_ounass_raw`.
 - **Manifest:** a `plp_efficient` block with mode, input paths and dates;
@@ -343,7 +386,7 @@ Language is compared case-insensitively: inputs use `ar` / `en`
 |---|---|
 | Check inputs before spending budget **[built]** | `make preflight-ounass-plp-efficient` (exit 0 = would start, 1 = would stop). With the 1-request Zyte probe: `make preflight-ounass-plp-efficient-probe`. Local files: `make preflight-ounass-plp-efficient PREFLIGHT_ARGS="--plp-list plp.csv --pdp-list pdp.csv --vocabulary vocabulary.json [--manifest manifest.json]"`. Prod: `APP_ENV=prod make preflight-ounass-plp-efficient`. |
 | Shadow run | _to fill in (Part 4/7)_ |
-| Live run | _to fill in (Part 3)_ |
+| Live run, local (Part 3) | `ZYTE_API_KEY=… .venv/bin/python run_crawler.py ounass --plp-efficient` invokes the export Lambda. With local files: `… --plp-efficient --plp-list plp.csv --pdp-list pdp.csv --vocabulary vocabulary.json [--plp-manifest manifest.json]`. Not with `--urls` / `--urls-source`. Cap Phase 2 for a test with `OUNASS_PLP_EFFICIENT_MAX_PHASE2_PDPS=20`. **Local only until Part 4.** |
 | Re-verify listing ↔ product-page parity | `.venv/bin/python scripts/probe_ounass_plp_parity.py --plp-url <api listing url>` (needs `ZYTE_API_KEY`; ~30 Zyte requests) **[built]** |
 
 ---
@@ -397,7 +440,7 @@ ago) and STALE (5 products last crawled 2026-08-08); exit 0.
 | Products quarantined | Gold row with a value not in the vocabulary, often mid-rename | Wait for the dbt rebuild, or fix the seed |
 | A country has no PLP-extract rows | G9 inconclusive: too few parity comparisons, usually Ounass blocking (seen on Saudi) | Manifest parity block; `--probe-one-page` |
 | Run stopped on parity | G9 confirmed mismatches: listing format likely changed | Re-run the parity probe; update section 4 |
-| A PLP stopped mid-sweep | G7 currency mismatch or G11 field-mismatch spike | Manifest per-PLP outcomes; check for a canonical rename or Ounass reclassification |
+| A PLP's leftovers held back | G3 page failure, G7 currency mismatch, G11 field-mismatch spike or G4 missing spike | Manifest per-PLP outcomes; check for a canonical rename or Ounass reclassification |
 | Phase 2 skipped | G4 cap or the 10,000 ceiling | Manifest counts; check the PDP list's scope |
 | Many products refreshed every day via PDP instead of PLP | Unmapped products (absent from gold) or swatch-only sold-out colours | Accepted losses; see section 10 |
 
@@ -426,6 +469,7 @@ ago) and STALE (5 products last crawled 2026-08-08); exit 0.
 | 2026-10-05 | Doc created from the agreed design (all sections planned) | — |
 | 2026-10-13 | PDP list scoped to active PLP list rows; `is_active` column added to the PLP list | — |
 | 2026-10-16 | **Part 2 built:** startup checks (G1, G2, G7, G8, G10, stale-crawl), settings, `make preflight-ounass-plp-efficient` (+ `-probe`). Verified against the dev export | — |
+| 2026-10-16 | **Part 3 built:** listing sweep, PLP-extract rows, Phase 2 selection (G3, G4, G6, G7 currency, G11, ceiling), `run_crawler.py --plp-efficient`, `plp_extract_flag = 0` on every normal PDP row. G11 judged after the sweep (not mid-sweep): rows already written stay, leftovers held back. Partial runs to be recorded as "incomplete" (Part 4). Smoke run: 1 Saudi listing, 29/29 pages, 1 row refreshed, correct against gold | — |
 | 2026-10-16 | PDP list contract gains `last_crawl_date` (scraper-pipeline `0345c2b`, dev Lambda redeployed) | — |
 | 2026-10-16 | Added "Startup checks, in detail" and "Preflight" sections; new stale-crawl warning (`…_STALE_CRAWL_DAYS`, based on `last_crawl_date`, pending an export column) | — |
 | 2026-10-13 | Export prefix moved under `resources/` (`resources/plp-efficient/<env>/`), next to the hand-maintained `resources/crawl-lists/` | — |

@@ -135,7 +135,30 @@ def main():
         ),
     )
 
+    parser.add_argument(
+        '--plp-efficient',
+        action='store_true',
+        help=(
+            'Ounass only: PLP-efficient mode (docs/ounass_plp_efficient_crawl.md). '
+            'Listings come from scraper-pipeline\'s export (or --plp-list etc.), '
+            'so --urls / --urls-source are not used.'
+        ),
+    )
+    parser.add_argument('--plp-list', help='PLP-efficient: local/s3 PLP list instead of invoking the export.')
+    parser.add_argument('--pdp-list', help='PLP-efficient: local/s3 PDP list instead of invoking the export.')
+    parser.add_argument('--vocabulary', help='PLP-efficient: local/s3 vocabulary instead of invoking the export.')
+    parser.add_argument('--plp-manifest', help='PLP-efficient: optional local manifest.json to go with local files.')
+
     args = parser.parse_args()
+
+    local_plp_inputs = [args.plp_list, args.pdp_list, args.vocabulary]
+    if args.plp_efficient or any(local_plp_inputs):
+        if args.spider != 'ounass':
+            parser.error('--plp-efficient is only supported for the ounass spider')
+        if args.urls or args.urls_source:
+            parser.error('--plp-efficient takes its listings from the export; drop --urls / --urls-source')
+        if any(local_plp_inputs) and not all(local_plp_inputs):
+            parser.error('--plp-list, --pdp-list and --vocabulary must be given together')
 
     spider_class = spider_map.get(args.spider)
     if not spider_class:
@@ -178,6 +201,13 @@ def main():
 
     if args.spider == 'ounass' and args.category:
         spider_kwargs['category'] = args.category
+
+    if args.plp_efficient or any(local_plp_inputs):
+        spider_kwargs['plp_efficient'] = True
+        spider_kwargs['plp_list'] = args.plp_list
+        spider_kwargs['pdp_list'] = args.pdp_list
+        spider_kwargs['vocabulary'] = args.vocabulary
+        spider_kwargs['plp_manifest'] = args.plp_manifest
     
     process.crawl(spider_class, **spider_kwargs)
     process.start()

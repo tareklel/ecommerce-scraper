@@ -2,7 +2,7 @@
 
 **Status: Parts 0–2 done (Part 1 dev only; prod pending); Parts 3–7 not started.**
 
-## ▶ Where we are / next steps (handoff, updated 2026-10-15)
+## ▶ Where we are / next steps (handoff, updated 2026-10-16)
 
 Read this first when resuming.
 
@@ -37,11 +37,14 @@ Read this first when resuming.
 4. ✅ **Part 2 done (2026-10-16):** `make preflight-ounass-plp-efficient`
    works against the dev export (see Part 2). Before the next dev run, gold
    needs a dbt rebuild: it's ~3 days old, so G8 will stop.
-5. **Next: Part 3** (crawler core): wire `plp_efficient` into the Ounass
-   spider. Phase 1 matching in `parse_plp`, Phase 2 via `spider_idle`, the
-   PLP-extract row, runtime checks G3/G4/G6/G7-currency/G11, the ceiling,
-   and the ECS role permission to invoke the export (moved here from
-   Part 2).
+5. ✅ **Part 3 code done (2026-10-16)**, smoke-tested locally (see Part 3).
+   Still open in Part 3: the ECS task-role IAM change
+   (`infra/terraform/iam_ecs.tf`), which needs the user's approval before
+   `terraform apply`.
+   **The mode is local-only until Part 4 lands:** no manifest block, no
+   quality-gate split, and partial runs aren't yet recorded as
+   "incomplete".
+   **Next: Part 4** (run observability).
 6. **Part 1 step 6 (prod):** only after prod gold and the registry exist;
    see `../scraper-pipeline/ticket/migrate-validated-dev-to-prod.md`. Apply
    prod export resources **targeted**.
@@ -94,7 +97,7 @@ depends on it starts.
 | **0** | Prove PLP values match PDP values (parity probe) | this | — | ✅ done (2026-10-01) |
 | **1** | Inputs: exports, registry, vocabulary, flag column in raw | scraper-pipeline | 0 | ✅ dev (2026-10-13–16); prod pending |
 | **2** | Input loading, validation and `make preflight` | this | 0 (build with hand-made CSVs; verify against Part 1 exports) | ✅ done 2026-10-16 |
-| **3** | Crawler core: Phase 1 / Phase 2, PLP-extract rows, runtime guardrails | this | 2 | not started |
+| **3** | Crawler core: Phase 1 / Phase 2, PLP-extract rows, runtime guardrails | this | 2 | ✅ code + local smoke 2026-10-16; IAM pending approval |
 | **4** | Run observability: manifest block, quality-gate split, run status | this (+ verifier Lambda) | 3 | not started |
 | **5** | Daily parity spot check | this | 3 | not started |
 | **6** | Downstream readiness: discount-clearing fix, label pickup, flag kept in silver, 3-day sold-out cutoff | scraper-pipeline | 1 | not started |
@@ -481,20 +484,45 @@ on the real Part 1 exports once they exist.
   ECS invokes the export before Part 3; preflight runs locally with the
   user's own AWS login.
 
-- [ ] PLP-extract extractor in `ounass_rules.py` using the Part 0 rules
-  (computed discount with round-half-up).
-- [ ] `plp_extract_flag` on every row; `plp_extract_flag` and the null
-  carve-out in `product_schema.py`.
-- [ ] Phase 1 in `parse_plp`: the PLP row travels in request `meta` through
+- [x] PLP-extract extractor using the Part 0 rules (computed discount with
+  round-half-up). Built in `ecommercecrawl/plp_efficient.py`
+  (`plp_hit_*` helpers, `PlpEfficientRun._extract_row`) rather than
+  `ounass_rules.py`, so all mode logic sits in one Scrapy-free module.
+- [x] `plp_extract_flag` on every row (`0` on every PDP row, normal mode
+  too). This repo has no `product_schema.py`; the null carve-out for
+  PLP-extract rows is the quality-gate split in Part 4.
+- [x] Phase 1 in `parse_plp`: the PLP row travels in request `meta` through
   pagination; quarantine check, ID lookup, overlap, field match, URL rule
   (G6), currency check (G7), field-mismatch counter (G11). **No PDP requests
   in Phase 1.**
-- [ ] `errback` on listing requests to record failed pages per PLP (G3).
-- [ ] Phase 2 via Scrapy's `spider_idle` signal: hold back skipped / partial
+- [x] `errback` on listing requests to record failed pages per PLP (G3).
+- [x] Phase 2 via Scrapy's `spider_idle` signal: hold back skipped / partial
   / stopped PLPs' products, apply G4 (excluding sold-out) and the 10,000
   ceiling, then schedule the remaining PDPs and keep the spider alive until
   they finish.
-- [ ] Unit and spider tests (see Testing), plus a local live smoke run.
+- [x] Unit and spider tests (`tests/test_ounass_plp_efficient.py`, 23
+  tests; full suite 366 passed), plus a local live smoke run.
+- [x] `run_crawler.py ounass --plp-efficient [--plp-list … --pdp-list …
+  --vocabulary … --plp-manifest …]`.
+
+Built as agreed, with one clarification: G11 (and G4) can only be judged
+after a listing's last page, so they don't stop a listing mid-sweep. Rows
+already written for it stay; its leftovers are held back. G7 currency does
+stop a listing at the first wrong entry, with the same rule for rows already
+written. See the reference doc, section 3, "After the sweep".
+
+**Smoke run 2026-10-16** (local, dev export files, one listing
+`saudi.ounass.com/api/women/bags/tote-bags`, Phase 2 ceiling lowered to 20):
+- 29 listing pages requested, 29 parsed, 0 failed (13 Zyte errors retried
+  successfully).
+- 1 known product refreshed from the listing: `portal_itemid` 219417275,
+  price 8200, no discount, label `["الموسم الجديد"]`, `url` copied from
+  gold (`…219417263_7762.html`), `plp_extract_flag` 1. Gold agreed: sa / ar
+  / tote_bags, in stock.
+- 1,033 new products + 4 uncovered known products = 1,037 Phase 2
+  candidates > 20, so Phase 2 was skipped (`phase2_ceiling_exceeded`),
+  as designed.
+- Quality gate passed; about $0.013 of Zyte. Output stayed local.
 
 **Done when:** a local run on one subcategory PLP with a hand-built ~20-row
 PDP list puts every row where the flow says, and Zyte requests ≈ listing
@@ -529,6 +557,39 @@ correctly classified in S3 / Athena.
     degradation in the manifest.
   - *fail*: whole-run stops (G2, G8 ≥ 3 days, G1/G10 over threshold, G9
     confirmed mismatches) and genuine quality failures.
+- [ ] **A run that stopped partway must never be recorded as a success,
+  even when its rows pass the quality gate** (requirement from the product
+  owner, 2026-10-16, for future debugging). This applies to **all** crawls,
+  not only PLP-efficient ones.
+  - *Today (verified in code, 2026-10-16):* on any clean close, including a
+    single Ctrl+C or a normal ECS stop, `PostCrawlPipeline.spider_closed`
+    runs the quality gate, writes the manifest with Scrapy's `exit_reason`,
+    and uploads to S3. The verifier writes `_SUCCESS`, and so registers the
+    partition, whenever verification and the quality gate pass. It
+    **ignores `exit_reason`**. A run stopped halfway with clean rows
+    therefore looks identical to a full run.
+  - *Required:* any `exit_reason` other than `finished` (e.g. `shutdown`,
+    `closespider_*`, `cancelled`) is classified **incomplete**, a
+    failure-type status. It's written to the manifest
+    (`run_status = "incomplete"`), the verifier writes a distinct marker
+    (e.g. `_INCOMPLETE`, never `_SUCCESS`), and it's queryable in
+    `crawl_manifest_raw`.
+  - *To decide during Part 4:* whether an incomplete run's rows are still
+    registered for dbt (they're genuine observations), with the run flagged
+    incomplete, or held back until someone reviews them. Either way, the
+    run itself must read as a failure. The image-pipeline trigger chains on
+    `_SUCCESS`, so decide whether incomplete runs trigger it too.
+  - *Hard kills leave no trace today:* a second Ctrl+C, out-of-memory, or a
+    forced container kill never closes the spider, so nothing is uploaded
+    and the container's file is lost. Write a small **"run started" record**
+    to S3 at startup (run id, site, mode, entry points). A start with no
+    matching manifest then shows as **killed** in Athena, instead of the run
+    simply not existing.
+  - *PLP-efficient specifics:* startup stops write no rows. Per-listing
+    stops (G7 currency, G11, G4) leave rows already written in place,
+    because they matched exactly. That's correct, but the manifest must name
+    the stopped listings. The parity stop (G9) is the exception: listing
+    rows already written must **not** reach raw (see Part 5).
 - [ ] **A manifest is written even when the run stops at startup**, with the
   failed checks. Today `_generate_manifest` only runs once the spider has
   opened, so input failures would be invisible in Athena.
@@ -561,6 +622,12 @@ marker and a manifest that explains them, queryable in Athena.
 - [ ] ≥ 2 confirmed mismatches → stop the run, no PLP-extract rows. < 10
   usable comparisons for a country → no PLP-extract rows for that country.
   Label mismatches are logged only.
+- [ ] **"No PLP-extract rows" must hold for rows already written** (recorded
+  2026-10-16). Listing rows are written page by page, so a parity failure
+  can come after some are written. Those must not reach raw: either run the
+  parity sample before writing any listing rows (e.g. hold that country's
+  listing rows until its sample passes), or mark the run so the verifier
+  won't register it (a failure-type status per Part 4). Pick one and test it.
 - [ ] Results go in the manifest block (Part 4).
 
 **Done when:** tests prove each outcome (pass, 1 mismatch warning, 2
@@ -771,6 +838,9 @@ explicit approval under `context/AGENTS.md`).
 | 2026-10-13 | PDP list export contains only gold products matching an active `crawl_plp_registry` row (plus the 3-day sold-out cutoff). The registry is the single definition of scope. |
 | 2026-10-13 | `portal_itemid` in gold serving is fine even though it also lands in the Product API cache. |
 | 2026-10-13 | Export at crawl start (option B): the crawl invokes scraper-pipeline's export Lambda synchronously; no post-dbt or clock trigger. One Lambda writes all three files. G8 now measures gold's last build time. |
+| 2026-10-16 | A run that stops partway (any `exit_reason` other than `finished`) must be recorded as a failure-type status (`incomplete`), never as a success, even if its rows pass quality; this applies to all crawls (Part 4). Hard kills get a "run started" record so they show as killed. A G9 parity stop must keep already-written listing rows out of raw (Part 5). |
+| 2026-10-16 | G11 (field-mismatch drift) is only known after a listing's last page: rows already written for it stay (they matched exactly); its leftovers are held back from Phase 2 and the listing is named in the manifest. |
+| 2026-10-16 | Every Ounass row gets `plp_extract_flag` (0 for product-page rows), including normal-mode crawls. |
 | 2026-10-16 | Crawler ECS role permission to invoke the export moves from Part 2 to Part 3 (nothing in ECS invokes it before then). |
 | 2026-10-16 | Stale-crawl warning added (warn only), based on per-product `last_crawl_date`, which survives gold rebuilds; requires adding that column to the export. G8 stays as a safety net for a skipped or failed dbt step. |
 | 2026-10-16 | Preflight usage and the startup checks documented in plain terms in `docs/ounass_plp_efficient_crawl.md`. |

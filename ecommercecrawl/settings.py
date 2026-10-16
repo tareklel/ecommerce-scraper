@@ -193,6 +193,17 @@ OUNASS_PLP_EFFICIENT_STALE_CRAWL_DAYS = int(
 OUNASS_PLP_EFFICIENT_MAX_PHASE2_PDPS = int(
     os.getenv("OUNASS_PLP_EFFICIENT_MAX_PHASE2_PDPS", "10000")
 )
+# G4: per listing, known products expected but not seen (excluding ones gold
+# has as sold out) above this share -> that listing's unseen products are held
+# back from Phase 2 (a spike means a scope/data problem, not real delistings).
+OUNASS_PLP_EFFICIENT_MISSING_RATIO_CAP = float(
+    os.getenv("OUNASS_PLP_EFFICIENT_MISSING_RATIO_CAP", "0.25")
+)
+# G11: per listing, share of ID-matched products whose fields disagree with
+# the listing (drift) above which the listing's leftovers are held back.
+OUNASS_PLP_EFFICIENT_FIELD_MISMATCH_RATIO = float(
+    os.getenv("OUNASS_PLP_EFFICIENT_FIELD_MISMATCH_RATIO", "0.05")
+)
 
 # Quality gate (executed automatically in PostCrawlPipeline on spider close)
 QUALITY_GATE_ENABLED = os.getenv("QUALITY_GATE_ENABLED", "true")

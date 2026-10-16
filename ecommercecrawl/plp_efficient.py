@@ -16,9 +16,11 @@ import io
 import json
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
+from decimal import ROUND_HALF_UP, Decimal
 from urllib.parse import urlparse
 
 from ecommercecrawl.constants.ounass_constants import (
+    COUNTRY_CURRENCY,
     TLD_COUNTRY_MAP,
     TLD_LANGUAGE_MAP,
 )
@@ -81,6 +83,8 @@ class Config:
     gold_max_age_days: float = 3
     stale_crawl_days: int = 7
     max_phase2_pdps: int = 10000
+    missing_ratio_cap: float = 0.25
+    field_mismatch_ratio: float = 0.05
     site: str = "ounass"
 
     @classmethod
@@ -97,6 +101,8 @@ class Config:
             gold_max_age_days=get("OUNASS_PLP_EFFICIENT_GOLD_MAX_AGE_DAYS", 3, float),
             stale_crawl_days=get("OUNASS_PLP_EFFICIENT_STALE_CRAWL_DAYS", 7, int),
             max_phase2_pdps=get("OUNASS_PLP_EFFICIENT_MAX_PHASE2_PDPS", 10000, int),
+            missing_ratio_cap=get("OUNASS_PLP_EFFICIENT_MISSING_RATIO_CAP", 0.25, float),
+            field_mismatch_ratio=get("OUNASS_PLP_EFFICIENT_FIELD_MISMATCH_RATIO", 0.05, float),
         )
 
 
@@ -564,3 +570,302 @@ def format_report(inputs, result, max_rows_per_check=20):
     if result.gold_age_days is not None:
         lines.append(f"  gold last rebuilt: {result.gold_age_days:.1f} days ago")
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Run state (Part 3): Phase 1 decisions per listing entry, Phase 2 selection
+# ---------------------------------------------------------------------------
+
+def _clean_label(value):
+    # Same whitespace normalization as ounass_rules.get_primary_label.
+    if not isinstance(value, str):
+        return None
+    label = " ".join(value.split()).strip()
+    return label or None
+
+
+def _as_number(value):
+    return int(value) if float(value).is_integer() else float(value)
+
+
+def plp_hit_selling_price(hit):
+    """
+    Selling price as the PDP path records it: priceByCustomerGroupId["-1"]
+    (Part 0 parity: 42/42). The entry's plain `price` key is the pre-sale
+    price on sale items, so it must not be used as the price.
+    """
+    value = (hit.get("priceByCustomerGroupId") or {}).get("-1")
+    try:
+        return float(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def plp_hit_discount(hit):
+    """
+    Discount % as the PDP path records it: computed from the entry's two prices,
+    rounded half up (Part 0 parity: 42/42). None when there is no discount, as
+    on the PDP path. Not discountPercentBySaleId, which was 5 points high on
+    some sale items, and not discountText, which is translated display text.
+    """
+    sell = plp_hit_selling_price(hit)
+    try:
+        before = float(hit["price"]) if hit.get("price") is not None else None
+    except (TypeError, ValueError):
+        before = None
+    if not sell or not before or sell >= before:
+        return None
+    percent = (Decimal(1) - Decimal(str(sell)) / Decimal(str(before))) * 100
+    return int(percent.quantize(Decimal(1), rounding=ROUND_HALF_UP)) or None
+
+
+def plp_hit_primary_label(hit):
+    """
+    Highest-priority badge, shaped like the PDP's primary_label ([label] or
+    None). Promotion-campaign labels (e.g. EXTRA25) only exist on the PDP:
+    accepted loss.
+    """
+    badges = [b for b in (hit.get("badges") or [])
+              if isinstance(b, dict) and _clean_label(b.get("value"))]
+    if not badges:
+        return None
+    top = max(badges, key=lambda b: b.get("priority") or 0)
+    return [_clean_label(top["value"])]
+
+
+class PlpEfficientRun:
+    """
+    Bookkeeping for one PLP-efficient crawl. Pure Python (no Scrapy): the
+    spider reports listing pages and entries to it, and asks it what to
+    PDP-crawl in Phase 2. Every decision is counted so it can go in the run
+    manifest (Part 4).
+
+    Products are identified by (country, language, portal_itemid): country and
+    language come from the listing row, portal_itemid is the entry's
+    visibleSku. Nothing is parsed from URLs.
+    """
+
+    def __init__(self, result, config, run_id, crawl_date, site="ounass"):
+        self.config = config
+        self.run_id = run_id
+        self.crawl_date = crawl_date
+        self.site = site
+        self.plps = list(result.valid_plp_rows)
+        self.pdps = {self.pdp_key(p): p for p in result.valid_pdp_rows}
+        self.quarantined = {self.pdp_key(p) for p in result.quarantined_pdp_rows}
+        self.startup_held_back = {self.pdp_key(p) for p in result.held_back_pdp_rows}
+        # Which valid listings cover each known product (scope match, brand
+        # wildcard). Products covered by none go straight to Phase 2.
+        index = {}
+        for idx, plp in enumerate(self.plps):
+            index.setdefault(scope_key(plp), []).append((idx, plp.get("brand")))
+        self.covering = {}
+        for key, pdp in self.pdps.items():
+            self.covering[key] = [idx for idx, brand in index.get(scope_key(pdp), [])
+                                  if brand is None or brand == pdp.get("brand")]
+        self.crawled = set()
+        self.new_urls = {}   # url -> index of the listing it was found on
+        self.stats = [
+            {"url": plp["url"], "pages_requested": 0, "pages_parsed": 0, "pages_failed": 0,
+             "emitted": 0, "matched": 0, "mismatched": 0, "unusable": 0, "new": 0,
+             "stopped": None}
+            for plp in self.plps
+        ]
+        self.phase2 = None
+
+    @staticmethod
+    def pdp_key(row):
+        return (row.get("country"), row.get("language"), row.get("portal_itemid"))
+
+    # --- Phase 1 -------------------------------------------------------------
+
+    def page_requested(self, idx):
+        self.stats[idx]["pages_requested"] += 1
+
+    def page_parsed(self, idx):
+        self.stats[idx]["pages_parsed"] += 1
+
+    def page_failed(self, idx):
+        self.stats[idx]["pages_failed"] += 1
+
+    def stop_plp(self, idx, reason):
+        if not self.stats[idx]["stopped"]:
+            self.stats[idx]["stopped"] = reason
+
+    def is_stopped(self, idx):
+        return bool(self.stats[idx]["stopped"])
+
+    def check_currency(self, idx, hit):
+        """G7 during the sweep: the entry's price currency must be the listing country's."""
+        country = self.plps[idx]["country"]
+        expected = COUNTRY_CURRENCY.get(country)
+        got = hit.get("localeCurrency")
+        if expected and got and got != expected:
+            self.stop_plp(idx, f"G7: {got} prices on a '{country}' listing (expected {expected})")
+            return False
+        return True
+
+    def handle_hit(self, idx, hit, plp_url):
+        """
+        Decide what to do with one listing entry. Returns one of:
+          ("emit", row)       known product, fields match: PLP-extract row, no PDP request
+          ("new", url)        not in the PDP list: PDP-crawl it in Phase 2
+          ("mismatch", None)  known ID, fields differ (G11 drift count): Phase 2 decides
+          ("skip", reason)    quarantined, already refreshed by an overlapping listing, ...
+        """
+        plp = self.plps[idx]
+        stats = self.stats[idx]
+        sku = _clean(hit.get("visibleSku"))
+        if not sku:
+            return ("skip", "entry without visibleSku")
+        key = (plp["country"], plp["language"], sku)
+        if key in self.quarantined:
+            return ("skip", "quarantined product")
+        pdp = self.pdps.get(key)
+        if pdp is None:
+            slug = _clean(hit.get("slug"))
+            if not slug:
+                return ("skip", "new product without slug")
+            parsed = urlparse(plp_url)
+            url = f"{parsed.scheme}://{parsed.netloc}/{slug}.html"
+            if url not in self.new_urls:
+                self.new_urls[url] = idx
+                stats["new"] += 1
+            return ("new", url)
+        if key in self.crawled:
+            return ("skip", "already refreshed by an overlapping listing")
+        if not plp_covers_pdp(plp, pdp):
+            stats["mismatched"] += 1
+            return ("mismatch", None)
+        stats["matched"] += 1
+        row = self._extract_row(hit, plp, pdp, plp_url)
+        if row is None:
+            # No usable price: leave it for a Phase 2 PDP visit.
+            stats["unusable"] += 1
+            return ("skip", "entry has no selling price")
+        self.crawled.add(key)
+        stats["emitted"] += 1
+        return ("emit", row)
+
+    def _extract_row(self, hit, plp, pdp, plp_url):
+        price = plp_hit_selling_price(hit)
+        if price is None or price <= 0:
+            return None
+        url = pdp["url"]
+        # G6 URL rule: the row's url is the product's own PDP URL from gold,
+        # never the listing URL. Downstream keeps the latest non-blank url as
+        # the website link and the recrawl address.
+        parsed = urlparse(url)
+        if parsed.path.startswith("/api/") or url == plp_url:
+            return None
+        return {
+            "run_id": self.run_id,
+            "site": self.site,
+            "crawl_date": self.crawl_date,
+            "url": url,
+            # Same derivation as the PDP path (ounass_rules.get_language).
+            "language": TLD_LANGUAGE_MAP.get(parsed.netloc),
+            "country": plp["country"],
+            "portal_itemid": pdp["portal_itemid"],
+            "price": _as_number(price),
+            "price_discount": plp_hit_discount(hit),
+            "primary_label": plp_hit_primary_label(hit),
+            "plp_extract_flag": 1,
+            # Analysis only; no downstream model may treat it as the product's address.
+            "plp_source_url": plp_url,
+        }
+
+    # --- Phase 2 -------------------------------------------------------------
+
+    def listing_health(self):
+        """
+        Per listing: None if healthy, else why its leftovers are held back.
+        G3 (a page failed / nothing parsed), G7 (currency, set during the sweep),
+        G11 (field-mismatch drift), G4 (too many expected products unseen).
+        """
+        cfg = self.config
+        health = {}
+        for idx, stats in enumerate(self.stats):
+            seen = stats["matched"] + stats["mismatched"]
+            if stats["stopped"]:
+                health[idx] = stats["stopped"]
+            elif stats["pages_failed"]:
+                health[idx] = f"G3: {stats['pages_failed']} listing page(s) failed"
+            elif stats["pages_parsed"] == 0:
+                health[idx] = "G3: no listing page was parsed"
+            elif seen and stats["mismatched"] / seen > cfg.field_mismatch_ratio:
+                health[idx] = (f"G11: {stats['mismatched']} of {seen} matched products disagree "
+                               f"with the listing's fields (> {cfg.field_mismatch_ratio:.0%})")
+            else:
+                health[idx] = None
+        # G4 on listings still healthy: unseen share of expected products,
+        # not counting ones gold already has as sold out (Ounass drops a sold-out
+        # colour's own entry, so those are expected to be missing).
+        expected = {idx: [] for idx in range(len(self.plps))}
+        for key, idxs in self.covering.items():
+            if key in self.quarantined:
+                continue
+            for idx in idxs:
+                expected[idx].append(key)
+        for idx, keys in expected.items():
+            if health[idx] is not None:
+                continue
+            counted = [k for k in keys if str(self.pdps[k].get("out_of_stock")).lower() != "true"]
+            unseen = [k for k in counted if k not in self.crawled]
+            if counted and len(unseen) / len(counted) > cfg.missing_ratio_cap:
+                health[idx] = (f"G4: {len(unseen)} of {len(counted)} expected products not seen "
+                               f"(> {cfg.missing_ratio_cap:.0%})")
+        return health
+
+    def select_phase2(self):
+        """
+        What to PDP-crawl now that every listing has been swept. Products whose
+        only covering listings are unhealthy are held back (not crawled this
+        run), so a broken listing can't trigger a burst of PDP requests.
+        """
+        health = self.listing_health()
+        healthy = {idx for idx, reason in health.items() if reason is None}
+        urls, held_back = [], set(self.startup_held_back)
+        counts = {"known_unseen": 0, "uncovered": 0, "new": 0, "held_back": 0,
+                  "held_back_new": 0}
+        for key, pdp in self.pdps.items():
+            if key in self.crawled or key in self.startup_held_back:
+                continue
+            covering = self.covering.get(key) or []
+            if not covering:
+                urls.append(pdp["url"])
+                counts["uncovered"] += 1
+            elif any(idx in healthy for idx in covering):
+                urls.append(pdp["url"])
+                counts["known_unseen"] += 1
+            else:
+                held_back.add(key)
+        for url, idx in self.new_urls.items():
+            if idx in healthy:
+                urls.append(url)
+                counts["new"] += 1
+            else:
+                counts["held_back_new"] += 1
+        urls = list(dict.fromkeys(urls))
+        counts["held_back"] = len(held_back)
+        exceeded = len(urls) > self.config.max_phase2_pdps
+        self.phase2 = {
+            "urls": [] if exceeded else urls,
+            "candidates": len(urls),
+            "phase2_ceiling_exceeded": exceeded,
+            "counts": counts,
+            "listing_health": {self.plps[idx]["url"]: reason for idx, reason in health.items()},
+        }
+        return self.phase2
+
+    def summary(self):
+        """Counts for logs now and the run manifest's plp_efficient block (Part 4)."""
+        return {
+            "listings": len(self.plps),
+            "known_products": len(self.pdps),
+            "quarantined": len(self.quarantined),
+            "refreshed_from_listing": len(self.crawled),
+            "new_products": len(self.new_urls),
+            "per_listing": self.stats,
+            "phase2": self.phase2,
+        }

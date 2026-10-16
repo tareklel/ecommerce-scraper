@@ -1,3 +1,4 @@
+import json
 import scrapy
 from datetime import date
 import random
@@ -13,7 +14,10 @@ from ecommercecrawl.crawler_api import (
     REQUEST_TYPE_RENDERED_HTML,
     build_crawler_api_request,
 )
+from scrapy import signals
+from scrapy.exceptions import DontCloseSpider
 from scrapy.http import HtmlResponse
+from ecommercecrawl import plp_efficient as pe
 
 
 FETCH_BACKEND_AUTO = "auto"
@@ -26,8 +30,17 @@ class OunassSpider(MasterCrawl, scrapy.Spider):
     default_urls_path_setting = 'OUNASS_URLS_PATH'
     default_urls_path_constant = constants.OUNASS_URLS
 
-    def __init__(self, urlpath=None, urls=None, limit=None, category=None, url_categories=None, *args, **kwargs):
+    def __init__(self, urlpath=None, urls=None, limit=None, category=None, url_categories=None,
+                 plp_efficient=None, plp_list=None, pdp_list=None, vocabulary=None,
+                 plp_manifest=None, *args, **kwargs):
         super(OunassSpider, self).__init__(*args, **kwargs)
+        # PLP-efficient mode (docs/ounass_plp_efficient_crawl.md). On via the
+        # plp_efficient argument or the OUNASS_PLP_EFFICIENT_CRAWL setting; local
+        # input files replace the export invocation (tests, hand-made CSVs).
+        self.plp_efficient = plp_efficient
+        self.plp_efficient_local_inputs = (plp_list, pdp_list, vocabulary, plp_manifest)
+        self.plp_run = None
+        self.plp_efficient_result = None
         self.urlpath = urlpath
         self.start_urls = urls or []
         self.limit = limit
@@ -44,6 +57,25 @@ class OunassSpider(MasterCrawl, scrapy.Spider):
             for url, raw_category in (url_categories or {}).items()
             if (normalized := self._normalize_category(raw_category))
         }
+
+    @classmethod
+    def from_crawler(cls, crawler, *args, **kwargs):
+        spider = super().from_crawler(crawler, *args, **kwargs)
+        if spider.plp_efficient_enabled():
+            # Phase 2 starts when Scrapy's queue empties after the listing sweep.
+            crawler.signals.connect(spider._plp_efficient_on_idle, signal=signals.spider_idle)
+        return spider
+
+    def plp_efficient_enabled(self):
+        if self.plp_efficient is not None:
+            return str(self.plp_efficient).strip().lower() in {"1", "true", "yes", "on"}
+        return str(self._get_setting("OUNASS_PLP_EFFICIENT_CRAWL", False)).strip().lower() in {"1", "true", "yes", "on"}
+
+    def start_requests(self):
+        if not self.plp_efficient_enabled():
+            yield from super().start_requests()
+            return
+        yield from self._plp_efficient_start_requests()
 
     @staticmethod
     def _normalize_category(category):
@@ -221,6 +253,10 @@ class OunassSpider(MasterCrawl, scrapy.Spider):
         This method parses a product listing page, extracts the product URLs,
         and also handles pagination to scrape all pages.
         """
+        if self.plp_run is not None and "plp_idx" in getattr(response, "meta", {}):
+            yield from self._parse_plp_efficient(response)
+            return
+
         if rules.is_first_page(response) and constants.PLPSORT not in response.url:
             plp_urls = self.get_pages(response)
             for url in plp_urls:
@@ -287,7 +323,10 @@ class OunassSpider(MasterCrawl, scrapy.Spider):
                 'site': constants.NAME,
                 'crawl_date': date_string,
                 'url': response.url,
-                'language': rules.get_language(response.url)
+                'language': rules.get_language(response.url),
+                # Every Ounass row carries the flag: 0 = full PDP extraction,
+                # 1 = refreshed from a listing (PLP-efficient mode).
+                'plp_extract_flag': 0,
             }
             merged = data_dict | data
             yield merged
@@ -302,3 +341,125 @@ class OunassSpider(MasterCrawl, scrapy.Spider):
         elif rules.is_pdp(response):
             yield from self.parse_pdp(response)
             return
+
+    # ------------------------------------------------------------------
+    # PLP-efficient mode (docs/ounass_plp_efficient_crawl.md, Part 3)
+    # Decisions live in ecommercecrawl/plp_efficient.py (PlpEfficientRun);
+    # the spider only feeds it pages and schedules what it asks for.
+    # ------------------------------------------------------------------
+
+    def _load_plp_efficient_inputs(self):
+        plp_list, pdp_list, vocabulary, manifest_path = self.plp_efficient_local_inputs
+        if any((plp_list, pdp_list, vocabulary)):
+            manifest = None
+            if manifest_path:
+                with open(manifest_path, encoding="utf-8") as f:
+                    manifest = json.load(f)
+            return pe.load_inputs(plp_list, pdp_list, vocabulary, manifest=manifest)
+        lambda_name = self._get_setting("OUNASS_PLP_EFFICIENT_EXPORT_LAMBDA", None)
+        manifest = pe.invoke_export(lambda_name, site=constants.NAME)
+        return pe.load_inputs_from_manifest(manifest)
+
+    def _plp_efficient_start_requests(self):
+        """Startup checks first; on any stop, no request is made (no Zyte spend)."""
+        try:
+            inputs = self._load_plp_efficient_inputs()
+        except pe.ExportError as exc:
+            self.logger.error(f"PLP-efficient run stopped before any request: {exc}")
+            return
+        config = pe.Config.from_settings(getattr(self, "settings", None) or {})
+        result = pe.validate(inputs, config)
+        self.plp_efficient_result = result
+        self.logger.info("\n" + pe.format_report(inputs, result))
+        if result.stop:
+            self.logger.error("PLP-efficient run stopped by startup checks; no request made.")
+            return
+        self.plp_run = pe.PlpEfficientRun(
+            result, config, self.run_id, date.today().strftime("%Y-%m-%d"), site=constants.NAME)
+        for idx, plp in enumerate(self.plp_run.plps):
+            request = self._plp_efficient_listing_request(idx, plp["url"])
+            if request is not None:
+                yield request
+
+    def _plp_efficient_listing_request(self, idx, url):
+        if url in self._seen_fetch_urls:
+            return None
+        self._seen_fetch_urls.add(url)
+        self.plp_run.page_requested(idx)
+        return build_crawler_api_request(
+            url=url,
+            callback=self.parse,
+            settings=getattr(self, "settings", None),
+            request_type=self._get_crawler_api_request_type(url),
+            # The listing row travels with every page so pagination keeps its scope.
+            meta={"plp_idx": idx},
+            errback=self._plp_efficient_listing_failed,
+        )
+
+    def _plp_efficient_listing_failed(self, failure):
+        idx = failure.request.meta.get("plp_idx")
+        if self.plp_run is not None and idx is not None:
+            # G3: a partially swept listing's products must not go to Phase 2
+            # (they'd falsely look missing).
+            self.plp_run.page_failed(idx)
+        self.logger.error(f"PLP-efficient listing page failed: {failure.request.url}: {failure.value!r}")
+
+    def _parse_plp_efficient(self, response):
+        run = self.plp_run
+        idx = response.meta["plp_idx"]
+        run.page_parsed(idx)
+        if run.is_stopped(idx):
+            return
+        # Pagination, as in normal mode: the unsorted page 0 schedules every
+        # sorted page and is not itself processed; the sorted page 0 schedules
+        # pages 1..N-1 and is processed.
+        if rules.is_first_page(response):
+            for url in self.get_pages(response):
+                request = self._plp_efficient_listing_request(idx, url)
+                if request is not None:
+                    yield request
+            if constants.PLPSORT not in response.url:
+                return
+        for hit in json.loads(response.text).get("hits") or []:
+            if not run.check_currency(idx, hit):
+                self.logger.error(f"PLP-efficient listing stopped: {run.stats[idx]['stopped']} ({response.url})")
+                return
+            action, value = run.handle_hit(idx, hit, response.url)
+            if action == "emit":
+                yield value
+
+    def _plp_efficient_on_idle(self, spider=None):
+        """After the sweep: pick Phase 2 PDPs once, schedule them, keep the spider open."""
+        run = self.plp_run
+        if run is None or run.phase2 is not None:
+            return
+        phase2 = run.select_phase2()
+        self.logger.info(f"PLP-efficient Phase 2: {json.dumps({k: v for k, v in phase2.items() if k != 'urls'})}")
+        stats = getattr(getattr(self, "crawler", None), "stats", None)
+        if stats is not None:
+            stats.set_value("plp_efficient/refreshed_from_listing", len(run.crawled))
+            stats.set_value("plp_efficient/phase2_candidates", phase2["candidates"])
+            stats.set_value("plp_efficient/phase2_ceiling_exceeded", phase2["phase2_ceiling_exceeded"])
+        if phase2["phase2_ceiling_exceeded"]:
+            self.logger.error(
+                f"PLP-efficient Phase 2 skipped: {phase2['candidates']} PDPs exceed the ceiling "
+                f"of {run.config.max_phase2_pdps}")
+            return
+        scheduled = 0
+        for url in phase2["urls"]:
+            if url in self._seen_fetch_urls:
+                continue
+            self._seen_fetch_urls.add(url)
+            self.crawler.engine.crawl(build_crawler_api_request(
+                url=url,
+                callback=self.parse_pdp,
+                settings=getattr(self, "settings", None),
+                request_type=self._get_crawler_api_request_type(url),
+            ))
+            scheduled += 1
+        if scheduled:
+            raise DontCloseSpider
+
+    def closed(self, reason):
+        if self.plp_run is not None:
+            self.logger.info(f"PLP-efficient summary: {json.dumps(self.plp_run.summary(), default=str)}")

@@ -147,8 +147,8 @@ resource "aws_iam_role_policy" "ecs_task_image_pipeline_athena" {
         ]
       },
       {
-        Effect   = "Allow",
-        Action   = ["s3:GetObject", "s3:PutObject", "s3:ListBucket", "s3:GetBucketLocation"],
+        Effect = "Allow",
+        Action = ["s3:GetObject", "s3:PutObject", "s3:ListBucket", "s3:GetBucketLocation"],
         Resource = [
           "${aws_s3_bucket.price_comparison_bucket.arn}/${var.athena_results_prefix}*",
           aws_s3_bucket.price_comparison_bucket.arn
@@ -180,6 +180,31 @@ resource "aws_iam_role_policy" "ecs_task_s3" {
           "s3:ListBucket"
         ],
         Resource = aws_s3_bucket.price_comparison_bucket.arn
+      }
+    ]
+  })
+}
+
+# PLP-efficient crawl (docs/ounass_plp_efficient_crawl.md): at crawl start the
+# scraper synchronously invokes scraper-pipeline's export Lambda, then reads
+# the files it writes under resources/plp-efficient/<env>/ (already readable
+# through ecs_task_s3 above). The Lambda is owned by scraper-pipeline's
+# Terraform, so it's referenced by name; both envs are listed because the same
+# task role runs dev and prod crawls.
+resource "aws_iam_role_policy" "ecs_task_plp_efficient_export" {
+  name = "${var.ecs_name}-plp-efficient-export-policy"
+  role = aws_iam_role.ecs_task.id
+
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect = "Allow",
+        Action = ["lambda:InvokeFunction"],
+        Resource = [
+          "arn:aws:lambda:${var.region}:*:function:price-comparison-plp-efficient-export-dev",
+          "arn:aws:lambda:${var.region}:*:function:price-comparison-plp-efficient-export-prod"
+        ]
       }
     ]
   })
