@@ -1,5 +1,11 @@
 # Memory
 
+## 2026-10-16 - PLP-efficient Part 1 verified in dev; scraper-pipeline pushed
+- Dev export test passed (`2026-10-15T13-32-21Z-dec3e27c`): 4 PLP rows, 5 PDP rows (exactly the in-scope dev products), 19 bag pairs, `gold_built_at` correct, 13 KB scanned.
+- Auto-deploy verified: `latest` = `sha-6f94c7f`.
+- scraper-pipeline pushed: `7335ebd` (Part 1) and `9ca7bfb` (requirements.txt tracked and pinned).
+- Ticket handoffs updated. Next: Part 2 (crawler-side loading, validation, `make preflight`).
+
 ## 2026-10-15 - Crawler image auto-deploys on green CI; cloud updated
 - The user promoted `sha-f3737dd`, so the cloud crawler now runs current `main` (ECR `latest` = `sha256:503f669f…`); the old image is kept as `legacy-20260803`.
 - Switched to auto-deploy: `crawler-image.yml` pushes `sha-<7>` and `latest` once tests pass, and its summary names the previously live image. `promote-crawler-image.yml` is now for rollback only. The required reviewer was removed from the `production` environment (the `main`-only branch rule stays). Crawler-code pushes to `main` now go live at the next crawl.

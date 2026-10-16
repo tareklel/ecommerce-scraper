@@ -17,21 +17,23 @@ Read this first when resuming.
   - `gold_built_at` confirmed to track gold rebuilds.
 
 **Next, in order:**
-1. **Part 1 step 5:** `make plp-efficient-export-dev` (scraper-pipeline). It
-   reads dev tables and writes only under `resources/plp-efficient/dev/ounass/`.
-   Expect `plp_list.csv` = the 4 registry rows; `pdp_list.csv` = SA tote and
-   shoulder bags in `ar`/`en`, minus products sold out 3+ days (may be small:
-   dev gold has 248 rows); `vocabulary.json`; `manifest.json` with
-   `gold_built_at` ≈ the last gold rebuild.
-2. **Commit both repos.** Uncommitted as of 2026-10-15:
-   - **scraper-pipeline:** all Part 1 code, tests, Terraform and docs, plus
-     the note in `ticket/migrate-validated-dev-to-prod.md`. Its rule: update
-     `memory.md` in the same commit. Don't touch its untracked `context/`
-     folder (not ours).
-   - **here:** this ticket, `docs/ounass_plp_efficient_crawl.md`,
-     `tickets/cicd_pipeline.md`.
-3. **Pin dbt** in scraper-pipeline `requirements.txt` (installed:
-   dbt-core 1.12.5, dbt-athena 1.11.1). Optional but recommended.
+1. ✅ **Part 1 step 5 (2026-10-15):** `make plp-efficient-export-dev` ran
+   in AWS (export `2026-10-15T13-32-21Z-dec3e27c`).
+   - `plp_list` = 4 rows; vocabulary = 4 countries, 2 languages, 2 genders,
+     19 bag pairs, 201 brands; `gold_built_at` = 2026-10-13T13:30:46Z.
+   - `pdp_list` = 5 rows: the 4 in-stock SA `ar` shoulder bags plus 1 tote
+     bag. These are exactly the in-scope dev gold products. The 1 sold-out
+     shoulder bag was dropped by the 3-day cutoff, other subcategories were
+     out of scope, and dev has no SA `en` Ounass rows.
+   - Scanned 13 KB.
+   - Note: those products were last crawled 2026-08-08 while gold was
+     rebuilt 2026-10-13. G8 measures gold's **rebuild** time, not crawl
+     freshness. Consider whether Part 2 should also warn on old
+     `last_available_date`s.
+2. ✅ (2026-10-16) scraper-pipeline committed and pushed: `7335ebd` (all of
+   Part 1) and `9ca7bfb` (`requirements.txt`, previously gitignored by
+   `*.txt`, now tracked and pinned to dbt-core 1.12.5 / dbt-athena 1.11.1).
+3. ✅ dbt pinned (see 2).
 4. **Part 2** (this repo): loaders, validation, `make preflight`; build
    against hand-made CSVs. The crawler must compare `language`
    case-insensitively (inputs use `ar`/`en`, output rows keep `EN`/`AR`).
@@ -39,10 +41,10 @@ Read this first when resuming.
    see `../scraper-pipeline/ticket/migrate-validated-dev-to-prod.md`. Apply
    prod export resources **targeted**.
 
-**In parallel:** the **cloud crawler image is stale** (ECR `latest` pushed
-2026-08-03; missing `28c7fc7` and `2e1a482`). Building on the laptop fails
-(company HTTPS inspection). Fix in progress via GitHub Actions; see
-`tickets/cicd_pipeline.md` → "In progress: crawler image".
+**Crawler image:** solved 2026-10-15. GitHub Actions builds on every
+crawler-code push to `main` and **auto-deploys** (`latest` = `sha-6f94c7f`
+as of 17:31 +04). Rollback via the "Promote crawler image" workflow; the
+pre-CI image is kept as `legacy-20260803`. See `tickets/cicd_pipeline.md`.
 
 **Session gotchas:**
 - AWS CLI and Terraform work from the agent shell once you're logged in to
@@ -396,7 +398,8 @@ updated.
    out until step 6. Not untargeted, because a full apply would also redeploy
    the Product API cache Lambdas with undeployed 2026-07-30 code. That's
    recorded in scraper-pipeline's `ticket/migrate-validated-dev-to-prod.md`.
-5. `make plp-efficient-export-dev`. Check the three files and the manifest.
+5. ✅ (2026-10-15) `make plp-efficient-export-dev`: all three files and
+   the manifest are correct (see the handoff section at the top).
    ✅ Already confirmed (2026-10-13): Glue `UpdateTime` on
    `gold_product_serving_latest` moved from 17:23:37 to 17:30:46 (+04:00)
    across a gold rebuild that finished 13:30:48 UTC, so `gold_built_at`

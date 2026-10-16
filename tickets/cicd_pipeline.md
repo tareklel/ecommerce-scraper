@@ -197,6 +197,9 @@ the workflows to `main` (which triggers the first build).
   environment no longer needs a reviewer (branch policy `main` only
   remains). Consequence: any crawler-code change pushed to `main` goes live
   at the next crawl, so keep `main` deployable.
+- [x] Auto-deploy verified 2026-10-15: run `38743279982` (push of
+  `6f94c7f`) tested, built and moved `latest` to `sha-6f94c7f`
+  (`sha256:b440ea60…`) with no manual step.
 - [ ] Follow-up: replace `tests/fixtures/bloomingdales_pdp.html` with a small
   **synthetic** fixture (Bloomingdale's is a live crawler, so CI should
   cover `extract_product`). Farfetch fixtures can stay local-only; that
