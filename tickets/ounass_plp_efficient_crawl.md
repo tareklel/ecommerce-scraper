@@ -38,9 +38,7 @@ Read this first when resuming.
    works against the dev export (see Part 2). Before the next dev run, gold
    needs a dbt rebuild: it's ~3 days old, so G8 will stop.
 5. ✅ **Part 3 code done (2026-10-16)**, smoke-tested locally (see Part 3).
-   Still open in Part 3: the ECS task-role IAM change
-   (`infra/terraform/iam_ecs.tf`), which needs the user's approval before
-   `terraform apply`.
+   ECS task-role IAM change applied 2026-10-16 (targeted, 1 added).
    **The mode is local-only until Part 4 lands:** no manifest block, no
    quality-gate split, and partial runs aren't yet recorded as
    "incomplete".
@@ -97,7 +95,7 @@ depends on it starts.
 | **0** | Prove PLP values match PDP values (parity probe) | this | — | ✅ done (2026-10-01) |
 | **1** | Inputs: exports, registry, vocabulary, flag column in raw | scraper-pipeline | 0 | ✅ dev (2026-10-13–16); prod pending |
 | **2** | Input loading, validation and `make preflight` | this | 0 (build with hand-made CSVs; verify against Part 1 exports) | ✅ done 2026-10-16 |
-| **3** | Crawler core: Phase 1 / Phase 2, PLP-extract rows, runtime guardrails | this | 2 | ✅ code + local smoke 2026-10-16; IAM pending approval |
+| **3** | Crawler core: Phase 1 / Phase 2, PLP-extract rows, runtime guardrails | this | 2 | ✅ done 2026-10-16 (code, local smoke, IAM applied) |
 | **4** | Run observability: manifest block, quality-gate split, run status | this (+ verifier Lambda) | 3 | not started |
 | **5** | Daily parity spot check | this | 3 | not started |
 | **6** | Downstream readiness: discount-clearing fix, label pickup, flag kept in silver, 3-day sold-out cutoff | scraper-pipeline | 1 | not started |
@@ -478,7 +476,8 @@ on the real Part 1 exports once they exist.
 
 **Goal:** Phase 1 and Phase 2 working end to end behind the flag.
 
-- [ ] IAM (moved from Part 2, 2026-10-16): the crawler's ECS task role gets
+- [x] IAM (moved from Part 2, 2026-10-16; applied 2026-10-16 as
+  `aws_iam_role_policy.ecs_task_plp_efficient_export`, targeted): the crawler's ECS task role gets
   `lambda:InvokeFunction` on the export Lambda and read access to
   `resources/plp-efficient/*` (`infra/terraform/iam_ecs.tf`). Nothing in
   ECS invokes the export before Part 3; preflight runs locally with the

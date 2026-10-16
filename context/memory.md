@@ -5,7 +5,7 @@
 - Ounass spider: `--plp-efficient` (or `OUNASS_PLP_EFFICIENT_CRAWL`) loads the export (or local files), runs the startup checks, sweeps listings with an errback per page, then schedules Phase 2 PDPs from `spider_idle`. Every normal PDP row now carries `plp_extract_flag: 0`.
 - G11/G4 are judged after the sweep: rows already written stay, a bad listing's leftovers are held back. Partial runs must become an "incomplete" status in Part 4; until then the mode is local-only.
 - New settings `OUNASS_PLP_EFFICIENT_MISSING_RATIO_CAP` (0.25) and `…_FIELD_MISMATCH_RATIO` (0.05); `COUNTRY_CURRENCY` constant.
-- Terraform: ECS task role may invoke `price-comparison-plp-efficient-export-{dev,prod}` (written, not applied).
+- Terraform: ECS task role may invoke `price-comparison-plp-efficient-export-{dev,prod}` (applied 2026-10-16, targeted).
 - 23 new tests; suite 366 passed. Live smoke run (1 Saudi tote listing): 29/29 pages, 1 product refreshed and verified against gold, Phase 2 skipped by a lowered ceiling as designed.
 
 ## 2026-10-16 - PLP-efficient Part 2: inputs, startup checks and preflight

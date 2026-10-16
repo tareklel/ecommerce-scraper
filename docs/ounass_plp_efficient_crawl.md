@@ -469,6 +469,7 @@ ago) and STALE (5 products last crawled 2026-08-08); exit 0.
 | 2026-10-05 | Doc created from the agreed design (all sections planned) | — |
 | 2026-10-13 | PDP list scoped to active PLP list rows; `is_active` column added to the PLP list | — |
 | 2026-10-16 | **Part 2 built:** startup checks (G1, G2, G7, G8, G10, stale-crawl), settings, `make preflight-ounass-plp-efficient` (+ `-probe`). Verified against the dev export | — |
+| 2026-10-16 | Crawler ECS task role may invoke the export Lambda (dev + prod names), applied (`infra/terraform/iam_ecs.tf`) | — |
 | 2026-10-16 | **Part 3 built:** listing sweep, PLP-extract rows, Phase 2 selection (G3, G4, G6, G7 currency, G11, ceiling), `run_crawler.py --plp-efficient`, `plp_extract_flag = 0` on every normal PDP row. G11 judged after the sweep (not mid-sweep): rows already written stay, leftovers held back. Partial runs to be recorded as "incomplete" (Part 4). Smoke run: 1 Saudi listing, 29/29 pages, 1 row refreshed, correct against gold | — |
 | 2026-10-16 | PDP list contract gains `last_crawl_date` (scraper-pipeline `0345c2b`, dev Lambda redeployed) | — |
 | 2026-10-16 | Added "Startup checks, in detail" and "Preflight" sections; new stale-crawl warning (`…_STALE_CRAWL_DAYS`, based on `last_crawl_date`, pending an export column) | — |
