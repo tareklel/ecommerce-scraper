@@ -357,7 +357,7 @@ class TestS3Upload:
 
         # 3. Verify
         app_env = os.environ.get('APP_ENV', 'dev')
-        data_prefix = f"bronze/{app_env}/crawls/{spider.name}/{spider.date}/{spider.run_id}"
+        data_prefix = f"bronze/{app_env}/crawl-unverified/{spider.name}/{spider.date}/{spider.run_id}"
         metadata_prefix = f"bronze/{app_env}/crawls/metadata/{spider.name}/{spider.date}/{spider.run_id}"
 
         data_response = s3_client.list_objects_v2(Bucket=s3_bucket, Prefix=data_prefix)
@@ -392,3 +392,44 @@ def test_manifest_includes_plp_efficient_block(pipeline_setup, tmp_path):
 
 def test_manifest_has_no_plp_efficient_block_for_other_spiders(manifest_test_setup):
     assert "plp_efficient" not in manifest_test_setup["manifest_data"]
+
+
+
+@pytest.mark.parametrize("exit_reason, gate, plp, expected", [
+    ("finished", "pass", None, ("success", None)),
+    ("finished", "pass", {"degradations": ["1 listing(s) skipped at startup"]}, ("degraded", None)),
+    ("shutdown", "pass", None, ("failed", "aborted")),          # valid rows, still failed
+    ("finished", None, {"startup_stopped": True}, ("failed", "startup_check")),
+    ("finished", "fail_quality", None, ("failed", "quality")),
+])
+def test_crawler_run_status(exit_reason, gate, plp, expected):
+    from ecommercecrawl.pipelines import crawler_run_status
+    assert crawler_run_status(exit_reason, gate, plp)[:2] == expected
+
+
+def test_manifest_records_run_status(manifest_test_setup):
+    manifest = manifest_test_setup["manifest_data"]
+    assert manifest["run_status"] in {"success", "failed"}
+    assert "failure_reason" in manifest and manifest["degradations"] == []
+
+
+@mock_aws
+def test_run_started_record_written_when_uploads_enabled(pipeline_setup, monkeypatch):
+    s3_client = boto3.client("s3", region_name="us-east-1")
+    s3_client.create_bucket(Bucket="test-bucket")
+    pipeline, spider, mock_crawler = pipeline_setup
+    mock_crawler.settings.get.side_effect = lambda key: "test-bucket" if key == "S3_BUCKET" else None
+    monkeypatch.setenv("S3_UPLOAD_ENABLED", "true")
+    monkeypatch.setenv("APP_ENV", "dev")
+    pipeline.spider_opened(spider)
+    key = f"bronze/dev/crawl-started/{spider.name}/{spider.date}/{spider.run_id}.json"
+    record = json.loads(s3_client.get_object(Bucket="test-bucket", Key=key)["Body"].read())
+    assert record["run_id"] == spider.run_id and record["plp_efficient"] is False
+
+
+def test_run_started_record_skipped_when_uploads_disabled(pipeline_setup, monkeypatch):
+    pipeline, spider, mock_crawler = pipeline_setup
+    monkeypatch.delenv("S3_UPLOAD_ENABLED", raising=False)
+    monkeypatch.setenv("APP_ENV", "dev")
+    pipeline._write_run_started = lambda spider: (_ for _ in ()).throw(AssertionError("should not write"))
+    pipeline.spider_opened(spider)

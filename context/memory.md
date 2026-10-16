@@ -1,5 +1,12 @@
 # Memory
 
+## 2026-10-16 - Part 4b: run status and publish-on-pass (all crawls)
+- Found: `_SUCCESS` registers the whole day folder (`crawls/<site>/<dt>/`), so a failed run's file was read whenever another run that day passed.
+- Crawler now uploads data to `bronze/<env>/crawl-unverified/…`; the verifier copies it to `crawls/…` only on success/degraded, then writes `_SUCCESS`. Failed runs keep their file in `crawl-unverified/` with `_FAIL_ABORTED` / `_FAIL_STARTUP_CHECK` / `_FAIL_QUALITY` / `_FAILED`.
+- Manifest gets `run_status` / `failure_reason` / `degradations` (crawler view in `pipelines.crawler_run_status`, final in the verifier). `crawl_manifest_raw` days are registered for every run.
+- Run-started record at spider open (`bronze/<env>/crawl-started/…`) + scraper-pipeline `crawl_started_raw` (`1bba8cd`) to spot killed runs.
+- Rollout order: deploy verifier (`091227d`), then push the crawler change.
+
 ## 2026-10-16 - PLP-efficient Part 4a: manifest block and quality-gate split
 - `quality_gate.py`: rows with `plp_extract_flag = 1` skip the blank-ratio rule (which only counts product-page rows now) and must each have ID, url, price > 0, site, country, language, with a non-listing url; one bad row fails the run.
 - `plp_efficient.manifest_block` + `OunassSpider.plp_efficient_manifest_block`: the manifest gets a `plp_efficient` block (inputs, startup decisions, per-listing outcomes, Phase 2, `degradations`), also when the run stops at startup.

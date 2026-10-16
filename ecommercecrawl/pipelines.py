@@ -88,6 +88,29 @@ class JsonlWriterPipeline:
         os.makedirs(directory_path, exist_ok=True)
 
 
+def _uploads_enabled():
+    return os.environ.get('APP_ENV') == 'prod' or os.environ.get('S3_UPLOAD_ENABLED') == 'true'
+
+
+def crawler_run_status(exit_reason, quality_gate_status, plp_efficient=None):
+    """
+    The crawler's own view of the run status (docs/ounass_plp_efficient_crawl.md,
+    "Run status"; applies to all crawls). The verifier Lambda makes the final
+    call, adding file verification, and overwrites these fields.
+
+    Returns (run_status, failure_reason, degradations).
+    """
+    degradations = list((plp_efficient or {}).get("degradations") or [])
+    if exit_reason != "finished":
+        # Ctrl+C, ECS stop, timeout, ...: failed even when its rows are fine.
+        return "failed", "aborted", degradations
+    if (plp_efficient or {}).get("startup_stopped"):
+        return "failed", "startup_check", degradations
+    if quality_gate_status != "pass":
+        return "failed", "quality", degradations
+    return ("degraded" if degradations else "success"), None, degradations
+
+
 class PostCrawlPipeline:
     def __init__(self):
         self.output_dir = None
@@ -103,9 +126,39 @@ class PostCrawlPipeline:
     @classmethod
     def from_crawler(cls, crawler):
         pipeline = cls()
+        crawler.signals.connect(pipeline.spider_opened, signal=signals.spider_opened)
         crawler.signals.connect(pipeline.spider_closed, signal=signals.spider_closed)
         pipeline.crawler = crawler
         return pipeline
+
+    def spider_opened(self, spider):
+        # A run killed hard (second Ctrl+C, out-of-memory, forced container
+        # stop) never reaches spider_closed, so it leaves no manifest. This
+        # record makes it visible: a start with no manifest = killed.
+        if _uploads_enabled():
+            self._write_run_started(spider)
+
+    def _write_run_started(self, spider):
+        s3_bucket = self.crawler.settings.get('S3_BUCKET')
+        if not s3_bucket:
+            return
+        app_env = os.environ.get('APP_ENV', 'dev')
+        record = {
+            "run_id": spider.run_id,
+            "crawler_name": spider.name,
+            "dt": spider.date,
+            "started_at": datetime.now(timezone.utc).isoformat(),
+            "app_env": app_env,
+            "plp_efficient": bool(getattr(spider, "plp_efficient_enabled", lambda: False)()),
+        }
+        key = f"bronze/{app_env}/crawl-started/{spider.name}/{spider.date}/{spider.run_id}.json"
+        try:
+            boto3.client('s3').put_object(
+                Bucket=s3_bucket, Key=key, Body=json.dumps(record).encode("utf-8"))
+            spider.logger.info(f"Run-started record written to s3://{s3_bucket}/{key}")
+        except Exception as e:
+            # Observability only: never block the crawl on it.
+            spider.logger.error(f"Could not write the run-started record: {e}")
 
     def spider_closed(self, spider, reason):
         # The spider's attributes might have been updated during the crawl.
@@ -126,7 +179,7 @@ class PostCrawlPipeline:
         self._gzip_output(spider)
         self._generate_manifest(spider, reason)
         # upload to S3 if in prod environment or S3 upload is enabled
-        if os.environ.get('APP_ENV') == 'prod' or os.environ.get('S3_UPLOAD_ENABLED') == 'true':
+        if _uploads_enabled():
             self._upload_to_s3(spider)
 
     def _get_setting(self, key, default):
@@ -270,7 +323,11 @@ class PostCrawlPipeline:
                             continue
                         s3_key = os.path.join('bronze', app_env, 'crawls', 'metadata', s3_prefix, rel_path)
                     else:
-                        s3_key = os.path.join('bronze', app_env, 'crawls', s3_prefix, rel_path)
+                        # Data goes to crawl-unverified/, which nothing reads. The
+                        # verifier copies it into crawls/ (the folder Athena reads)
+                        # only if the run passes, so a failed run's rows never
+                        # reach dbt.
+                        s3_key = os.path.join('bronze', app_env, 'crawl-unverified', s3_prefix, rel_path)
 
                     spider.logger.info(f"Uploading {local_path} to s3://{s3_bucket}/{s3_key}")
                     s3_client.upload_file(local_path, s3_bucket, s3_key)
@@ -397,6 +454,15 @@ class PostCrawlPipeline:
                 block = {"error": str(e)}
             if block is not None:
                 manifest["plp_efficient"] = block
+
+        run_status, failure_reason, degradations = crawler_run_status(
+            reason,
+            (self.quality_gate_report or {}).get("status"),
+            manifest.get("plp_efficient"),
+        )
+        manifest["run_status"] = run_status
+        manifest["failure_reason"] = failure_reason
+        manifest["degradations"] = degradations
 
         # add manifest bronze_verification
         manifest["bronze_verification"] = {

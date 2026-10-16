@@ -7,9 +7,9 @@ options and the build plan live in `tickets/ounass_plp_efficient_crawl.md`.
 
 **Build status (2026-10-16): inputs, startup checks, preflight (Part 2) and
 the crawl itself (Part 3: sweep, PLP-extract rows, Phase 2) built and
-smoke-tested locally; the manifest block and quality-gate split (Part 4a)
-built. Not yet safe for cloud runs: run status (Part 4b) and the daily parity
-check (Part 5) are still planned.** Each section is marked
+smoke-tested locally; run observability (Part 4: manifest block,
+quality-gate split, run status, publish-on-pass) built. Not yet safe for
+cloud runs: the daily parity check (Part 5) is still planned.** Each section is marked
 **[planned]** or **[built]**. Flip a marker when the matching ticket part
 lands, and correct the section if the build differs from the plan.
 
@@ -343,7 +343,7 @@ Language is compared case-insensitively: inputs use `ar` / `en`
 
 ---
 
-## 6. Outputs [rows, manifest block, quality gate built; run status planned (Part 4b)]
+## 6. Outputs [built]
 
 - **Rows [built]:** PLP-extract rows (`plp_extract_flag = 1`) and normal PDP
   rows (`plp_extract_flag = 0`) in the same output file, landing in
@@ -373,7 +373,7 @@ Language is compared case-insensitively: inputs use `ar` / `en`
     the crawler never writes such rows, so one means a bug. Reported under
     `plp_extract_rows` in the quality report.
 
-### Run status [planned, Part 4b; applies to all crawls]
+### Run status [built 2026-10-16; applies to all crawls]
 
 One question decides it: **did the crawler reach its own end, and did it
 skip anything on purpose?**
@@ -387,9 +387,43 @@ skip anything on purpose?**
 
 An aborted run is **failed**, never "partly saved", like an edit abandoned
 before saving: its rows may be genuine, but a half-finished day reads as
-misleading data. Its file is still uploaded next to the failure marker for
-inspection; nothing registers it. The next day's crawl refreshes those
-products.
+misleading data. The next day's crawl refreshes those products.
+
+**Where a run's data goes (publish on pass).** Athena reads a whole day
+folder (`crawls/<site>/<dt>/`, every run under it) once any run that day
+writes `_SUCCESS`. So the crawler doesn't upload there:
+
+1. The crawler uploads its data file to
+   `bronze/<env>/crawl-unverified/<site>/<dt>/<run_id>/`, which nothing
+   reads, and its manifest to `crawls/metadata/…` as before.
+2. The verifier Lambda (`lambda/bronze_manifest_verifier`) checks the file
+   and decides the final `run_status` / `failure_reason`, overwriting the
+   crawler's own view (`pipelines.crawler_run_status`).
+3. **Pass** (success / degraded): it copies the file to
+   `crawls/<site>/<dt>/<run_id>/`, then writes `_SUCCESS`, which registers
+   the day for dbt. **Fail**: the file stays in `crawl-unverified/` for
+   inspection, and one marker per reason is written under
+   `crawls/markers/<site>/<dt>/<run_id>/`: `_FAIL_ABORTED`,
+   `_FAIL_STARTUP_CHECK`, `_FAIL_QUALITY`, `_FAILED` (verification).
+4. Every verified manifest, failed ones included, lands in
+   `crawl_manifest_raw` (the day is registered for every run), with
+   `run_status`, `failure_reason`, `degradations` and `verification`
+   (`outcome`, `data_source`, `published_key`) inside `raw_json`.
+
+Files from crawler images older than this change sit directly in `crawls/`;
+the verifier still accepts them there (`data_source = "legacy"`).
+
+**Killed runs.** At spider open the crawler writes
+`bronze/<env>/crawl-started/<site>/<dt>/<run_id>.json` (only when uploads
+are on: `APP_ENV=prod` or `S3_UPLOAD_ENABLED=true`), read by scraper-pipeline's
+`crawl_started_raw` table. A start with no manifest = killed:
+
+```sql
+select s.crawler_name, s.dt, s.run_id, s.started_at
+from crawl_started_raw s
+left join crawl_manifest_raw m on m.run_id = s.run_id
+where m.run_id is null;
+```
 
 ## 7. Downstream behaviour (scraper-pipeline) [planned]
 
@@ -462,6 +496,7 @@ ago) and STALE (5 products last crawled 2026-08-08); exit 0.
 
 | Symptom | Likely cause | Check |
 |---|---|---|
+| A run's rows aren't in Athena | Run failed: data left in `crawl-unverified/` | `crawl_manifest_raw` `run_status` / `failure_reason`; markers under `crawls/markers/<site>/<dt>/<run_id>/` |
 | Run stopped at startup | Export Lambda failed, or G2 / G8 / G1 or G10 over threshold | Run preflight: it lists every failed check with the offending rows. For an export failure, check the Lambda's logs in scraper-pipeline. |
 | Run stopped on G8 | gold hasn't been rebuilt for 3+ days | Check scraper-pipeline's dbt runs |
 | A PLP was skipped | Bad PLP row (non-canonical value, missing subcategory, hostname ≠ country) | Fix the row in `crawl_plp_registry` |
@@ -497,6 +532,7 @@ ago) and STALE (5 products last crawled 2026-08-08); exit 0.
 | 2026-10-05 | Doc created from the agreed design (all sections planned) | — |
 | 2026-10-13 | PDP list scoped to active PLP list rows; `is_active` column added to the PLP list | — |
 | 2026-10-16 | **Part 2 built:** startup checks (G1, G2, G7, G8, G10, stale-crawl), settings, `make preflight-ounass-plp-efficient` (+ `-probe`). Verified against the dev export | — |
+| 2026-10-16 | **Part 4b built (all crawls):** data uploaded to `crawl-unverified/`, verifier publishes only passing runs into `crawls/` (failed runs had been readable whenever another run that day passed); final `run_status` / `failure_reason`, one failure marker per reason, `crawl_manifest_raw` registered for every run; run-started record + scraper-pipeline `crawl_started_raw` | — |
 | 2026-10-16 | **Part 4a built:** manifest `plp_efficient` block (also on startup stops), quality gate split by row type. Run-status definitions agreed (success / degraded / failed with reason / killed; an aborted run is failed and never reaches dbt) | — |
 | 2026-10-16 | Crawler ECS task role may invoke the export Lambda (dev + prod names), applied (`infra/terraform/iam_ecs.tf`) | — |
 | 2026-10-16 | **Part 3 built:** listing sweep, PLP-extract rows, Phase 2 selection (G3, G4, G6, G7 currency, G11, ceiling), `run_crawler.py --plp-efficient`, `plp_extract_flag = 0` on every normal PDP row. G11 judged after the sweep (not mid-sweep): rows already written stay, leftovers held back. Partial runs to be recorded as "incomplete" (Part 4). Smoke run: 1 Saudi listing, 29/29 pages, 1 row refreshed, correct against gold | — |

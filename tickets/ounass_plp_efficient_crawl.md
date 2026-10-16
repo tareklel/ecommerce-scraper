@@ -41,11 +41,19 @@ Read this first when resuming.
    ECS task-role IAM change applied 2026-10-16 (targeted, 1 added).
 6. ✅ **Part 4a done (2026-10-16):** manifest `plp_efficient` block (also
    on startup stops) and quality gate split by row type.
-   **Next: Part 4b** (run status for all crawls: `run_status` /
-   `failure_reason` in the manifest, verifier markers, "run started" record,
-   `crawl_manifest_raw` columns). The mode stays local-only until 4b lands:
-   an aborted run still gets `_SUCCESS` today.
-6. **Part 1 step 6 (prod):** only after prod gold and the registry exist;
+7. ✅ **Part 4b code done (2026-10-16)**, rollout in this order:
+   a. ✅ verifier pushed (`091227d`; accepts old and new upload locations);
+   b. **deploy the verifier**: `terraform apply -target=aws_lambda_function.bronze_manifest_verifier`
+      in `infra/terraform` (user runs it; no IAM change);
+   c. **then push the crawler commit** (uploads to `crawl-unverified/`,
+      run-started record). Pushing it before (b) would leave every run
+      unpublished;
+   d. scraper-pipeline `1bba8cd`: run
+      `make athena-ddl DDL_FILE=sql/athena/bronze_crawl_started_raw.sql` (dev);
+   e. later: `silver_crawl_manifest` to extract `run_status` /
+      `failure_reason` (scraper-pipeline).
+   **Next after rollout: Part 5** (daily parity check).
+8. **Part 1 step 6 (prod):** only after prod gold and the registry exist;
    see `../scraper-pipeline/ticket/migrate-validated-dev-to-prod.md`. Apply
    prod export resources **targeted**.
 
@@ -98,7 +106,7 @@ depends on it starts.
 | **1** | Inputs: exports, registry, vocabulary, flag column in raw | scraper-pipeline | 0 | ✅ dev (2026-10-13–16); prod pending |
 | **2** | Input loading, validation and `make preflight` | this | 0 (build with hand-made CSVs; verify against Part 1 exports) | ✅ done 2026-10-16 |
 | **3** | Crawler core: Phase 1 / Phase 2, PLP-extract rows, runtime guardrails | this | 2 | ✅ done 2026-10-16 (code, local smoke, IAM applied) |
-| **4** | Run observability: manifest block, quality-gate split, run status | this (+ verifier Lambda) | 3 | 4a ✅ 2026-10-16; 4b next |
+| **4** | Run observability: manifest block, quality-gate split, run status | this (+ verifier Lambda) | 3 | ✅ code 2026-10-16; 4b rollout pending (see handoff) |
 | **5** | Daily parity spot check | this | 3 | not started |
 | **6** | Downstream readiness: discount-clearing fix, label pickup, flag kept in silver, 3-day sold-out cutoff | scraper-pipeline | 1 | not started |
 | **7** | Shadow mode (1–2 weeks), tune thresholds, then go live | both | 1–6 | not started |
@@ -571,13 +579,13 @@ it: did the crawler reach its own end, and did it skip anything on purpose?
   - guardrail outcomes: per-PLP missing ratio and G4 trips, G11 trips,
     `phase2_ceiling_exceeded`, parity (sampled / compared / failed fetches
     / confirmed mismatches / status per country).
-- [ ] **Run status:**
+- [x] **Run status:**
   - *pass*: rows written are valid, even if degraded (a PLP skipped, Phase 2
     skipped, one country without PLP rows). → `_SUCCESS`, with the
     degradation in the manifest.
   - *fail*: whole-run stops (G2, G8 ≥ 3 days, G1/G10 over threshold, G9
     confirmed mismatches) and genuine quality failures.
-- [ ] **A run that stopped partway must never be recorded as a success,
+- [x] **A run that stopped partway must never be recorded as a success,
   even when its rows pass the quality gate** (requirement from the product
   owner, 2026-10-16, for future debugging). This applies to **all** crawls,
   not only PLP-efficient ones.
@@ -618,16 +626,25 @@ it: did the crawler reach its own end, and did it skip anything on purpose?
   gate is skipped and the verifier (which requires status `pass`) would
   write `_FAIL_QUALITY` daily. Either use an output location the verifier
   ignores, or teach it `mode = shadow`.
-- [ ] Add the new manifest fields to the `crawl_manifest_raw` table
+- [x] Add the new manifest fields to the `crawl_manifest_raw` table
   definition. Its DDL isn't in this repo's Terraform; it's referenced from
   `lambda/bronze_manifest_verifier` and `scripts/backfill_manifests.py`, so
   locate it during this part.
-- [ ] Confirm `_SUCCESS` still drives Athena partition registration
+- [x] Confirm `_SUCCESS` still drives Athena partition registration
   (`context/memory.md`, 2026-02-24). If so, the quality-gate split is what
   keeps PLP-efficient data visible to dbt.
 
+**Built (4b, 2026-10-16):** statuses as agreed above; publish-on-pass
+(`crawl-unverified/` → `crawls/` by the verifier) fixes an existing leak where
+a failed run's rows were read whenever another run that day passed (`_SUCCESS`
+registers the whole day folder). The manifest table needed no DDL change
+(`raw_json` holds the whole manifest). `_SUCCESS` confirmed as the only
+partition trigger. Run-started record + `crawl_started_raw`. Shadow runs:
+moved to Part 7.
+
 **Done when:** a stopped, a degraded and a clean run each produce the right
-marker and a manifest that explains them, queryable in Athena.
+marker and a manifest that explains them, queryable in Athena. (Unit-tested;
+to confirm with real runs after the rollout.)
 
 ## Part 5 — Daily parity spot check (this repo)
 
