@@ -225,6 +225,18 @@ format, re-run the probe before trusting these mappings.
 Principle: fail closed, never fall back to a mass PDP recrawl, and stop only as
 much as the problem affects.
 
+**Access errors are not content errors** (agreed 2026-10-19; crawler logic
+to be built in Part 5). Ounass blocking (Zyte "Website Ban", HTTP 429/403,
+repeated 5xx/timeouts) hits a whole **hostname** at once and says nothing
+about whether our data or mapping is right. So:
+- a blocked request is never a parity mismatch, a missing product (G4), a
+  field mismatch (G11) or any other content failure;
+- the crawler tracks access failures **per hostname** and reports them
+  separately (manifest, log), so "Ounass blocked en-saudi today" and "the
+  listing format changed" can never look the same;
+- the parity check (G9) only judges content: comparisons lost to blocking
+  are excluded from it, not counted as "inconclusive".
+
 | # | Check | Failure scope | Setting(s) (current value) |
 |---|---|---|---|
 | G1 | PLP row canonical; gender/category/subcategory set | Skip that PLP, hold back its products. Too many bad rows → stop run. | `OUNASS_PLP_EFFICIENT_MAX_BAD_PLP_ROWS_RATIO` (0.25) |
@@ -520,6 +532,8 @@ ago) and STALE (5 products last crawled 2026-08-08); exit 0.
   sold-out cutoff removes them.
 - **Saudi blocking:** paginated Saudi listing requests got Zyte "Website Ban"
   / HTTP 429 on 2026-09-30 and 2026-10-03. Expect degraded Saudi runs.
+  Blocking is an access problem for the whole hostname, handled apart from
+  content checks (section 5).
 - **Exact-half discount rounding** (e.g. 32.5%) is assumed to round up;
   unverified against Ounass.
 
@@ -532,6 +546,7 @@ ago) and STALE (5 products last crawled 2026-08-08); exit 0.
 | 2026-10-05 | Doc created from the agreed design (all sections planned) | — |
 | 2026-10-13 | PDP list scoped to active PLP list rows; `is_active` column added to the PLP list | — |
 | 2026-10-16 | **Part 2 built:** startup checks (G1, G2, G7, G8, G10, stale-crawl), settings, `make preflight-ounass-plp-efficient` (+ `-probe`). Verified against the dev export | — |
+| 2026-10-19 | Principle recorded: access errors (Ounass blocking a hostname) are never content errors (parity, G4, G11); tracked per hostname, reported separately. Crawler logic in Part 5 | — |
 | 2026-10-16 | **Part 4b built (all crawls):** data uploaded to `crawl-unverified/`, verifier publishes only passing runs into `crawls/` (failed runs had been readable whenever another run that day passed); final `run_status` / `failure_reason`, one failure marker per reason, `crawl_manifest_raw` registered for every run; run-started record + scraper-pipeline `crawl_started_raw` | — |
 | 2026-10-16 | **Part 4a built:** manifest `plp_efficient` block (also on startup stops), quality gate split by row type. Run-status definitions agreed (success / degraded / failed with reason / killed; an aborted run is failed and never reaches dbt) | — |
 | 2026-10-16 | Crawler ECS task role may invoke the export Lambda (dev + prod names), applied (`infra/terraform/iam_ecs.tf`) | — |

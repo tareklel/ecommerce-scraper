@@ -74,6 +74,21 @@ Cross-cutting:
   record the image SHA each crawl ran with.
 - **Drift detection:** a nightly `terraform plan` that alerts if AWS differs
   from `main`.
+- **Crawl run alerting (added 2026-10-19):** today a degraded or failed crawl
+  is only visible by querying `crawl_manifest_raw` in Athena: no SNS topic,
+  CloudWatch alarm or metric filter exists. Wanted:
+  - an alert when a run is `failed` (any `failure_reason`) or `killed`
+    (a `crawl_started_raw` record with no manifest);
+  - an alert, or a daily digest, when a run is `degraded`, listing its
+    `degradations`;
+  - access problems (a hostname blocked by Ounass) reported apart from content
+    problems, since they need different responses (see
+    `docs/ounass_plp_efficient_crawl.md`, section 5);
+  - likely mechanism: a CloudWatch metric filter on the crawler's end-of-run
+    `RUN DEGRADED` / `ACCESS` log lines (log group `/ecs/<ecs_name>`), or the
+    verifier Lambda publishing to SNS when it writes a failure marker.
+  Context: run statuses defined in PLP-efficient Part 4b
+  (`tickets/ounass_plp_efficient_crawl.md`).
 
 **Rough order:**
 1. Move scraper-pipeline's Terraform state to S3 with locking (biggest risk,

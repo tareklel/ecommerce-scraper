@@ -1,5 +1,9 @@
 # Memory
 
+## 2026-10-19 - Principle: access errors are not content errors
+- Ounass blocking (Zyte "Website Ban", HTTP 429/403, repeated 5xx/timeouts) affects a whole hostname and says nothing about data correctness. It must never count as a parity mismatch, a missing product (G4), a field mismatch (G11) or any other content failure.
+- The crawler must track access failures per hostname and report them separately from content checks (to build in PLP-efficient Part 5; recorded in `docs/ounass_plp_efficient_crawl.md` section 5 and the ticket's decision log).
+
 ## 2026-10-16 - Part 4b: run status and publish-on-pass (all crawls)
 - Found: `_SUCCESS` registers the whole day folder (`crawls/<site>/<dt>/`), so a failed run's file was read whenever another run that day passed.
 - Crawler now uploads data to `bronze/<env>/crawl-unverified/…`; the verifier copies it to `crawls/…` only on success/degraded, then writes `_SUCCESS`. Failed runs keep their file in `crawl-unverified/` with `_FAIL_ABORTED` / `_FAIL_STARTUP_CHECK` / `_FAIL_QUALITY` / `_FAILED`.

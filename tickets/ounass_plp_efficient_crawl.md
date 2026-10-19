@@ -51,7 +51,8 @@ Read this first when resuming.
    d. scraper-pipeline `1bba8cd`: run
       `make athena-ddl DDL_FILE=sql/athena/bronze_crawl_started_raw.sql` (dev);
    e. later: `silver_crawl_manifest` to extract `run_status` /
-      `failure_reason` (scraper-pipeline).
+      `failure_reason` (scraper-pipeline, **Part 6**). Alerting on
+      failed / degraded / killed runs: `tickets/cicd_pipeline.md`.
    **Next after rollout: Part 5** (daily parity check).
 8. **Part 1 step 6 (prod):** only after prod gold and the registry exist;
    see `../scraper-pipeline/ticket/migrate-validated-dev-to-prod.md`. Apply
@@ -687,6 +688,12 @@ models already treat blanks safely (see "How silver merges new raw rows").
   PDP-refresh share).
 - [ ] Image pipeline ignores rows with `image_urls = null` +
   `plp_extract_flag = 1` instead of treating them as failed galleries.
+- [ ] **Run status in silver** (added 2026-10-19): `silver_crawl_manifest`
+  extracts `run_status`, `failure_reason`, `degradations` and the
+  `verification.data_source` / `published_key` fields the verifier now
+  writes into `raw_json` (Part 4b), so degraded and failed runs are
+  queryable without hand-written `json_extract`. Optionally a model joining
+  `crawl_started_raw` to the manifests to list killed runs.
 - [ ] **3-day sold-out cutoff, recrawl side:** products sold out for 3+ days
   drop out of `gold_pdp_recrawl_ounass_daily`'s `oos_recheck`, so they stop
   being PDP-checked daily. The export side is in Part 1. Decide whether
@@ -884,6 +891,8 @@ explicit approval under `context/AGENTS.md`).
 | 2026-10-16 | Stale-crawl warning added (warn only), based on per-product `last_crawl_date`, which survives gold rebuilds; requires adding that column to the export. G8 stays as a safety net for a skipped or failed dbt step. |
 | 2026-10-16 | Preflight usage and the startup checks documented in plain terms in `docs/ounass_plp_efficient_crawl.md`. |
 | 2026-10-13 | Registry CSV template agreed: `url,site,country,language,gender,category,subcategory,brand,is_active`; a blank subcategory is rejected (G1), and broad listings run with the mode off. |
+| 2026-10-19 | **Access errors ≠ content errors.** Ounass blocking is hostname-wide (Zyte "Website Ban", 429/403, repeated 5xx/timeouts) and must never count as a parity mismatch, a missing product, a field mismatch or any content failure. The crawler tracks access failures per hostname and reports them separately. Parity (G9) judges content only: blocked comparisons are excluded, and "inconclusive because blocked" is dropped as a parity case. Built in Part 5. |
+| 2026-10-19 | Parity (G9) redesign under discussion: a fixed "2 confirmed mismatches stops the run" is too blunt; re-check must re-fetch both the listing and the product page (a product-page-only re-check can't clear a genuine price change). |
 
 ## Open Questions
 
