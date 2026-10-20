@@ -1,5 +1,9 @@
 # Memory
 
+## 2026-10-20 - Saudi Ounass via Zyte Türkiye exits
+- `CRAWLER_API_ZYTE_GEOLOCATION_BY_HOST` (settings.py) routes `saudi.ounass.com`, `en-saudi.ounass.com`, `ar.ounass.sa` through Zyte geolocation `TR`; it wins over the global `CRAWLER_API_ZYTE_GEOLOCATION`. Other hosts keep Zyte's default.
+- Evidence: the same Tory Burch listing request was banned (520) 5/5 times on default routing and returned 200 (48 hits, SAR) via `TR`. The user confirmed prices don't change by exit country.
+
 ## 2026-10-20 - Cloud check of Part 4b; work stopped for the day
 - Two dev ECS runs: a 404 test URL verified the failure path end to end (failed/quality, markers, no publish, manifest registered, run-started record, `RUN FAILED` log); an Acler en-saudi run was banned by Zyte (520) through both retry rounds. Success path still unverified in AWS.
 - Saudi bans are intermittent (playground too). Agreed next commit, not built: Zyte aggressive retry policy, 6 × 300 s rounds, `failure_reason: access`, blocked-host fix, registry brand guard (pending yes), then a success-path ECS test. Full list in the ticket's "Resume here".

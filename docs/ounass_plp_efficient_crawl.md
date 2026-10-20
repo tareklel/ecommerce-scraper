@@ -640,7 +640,10 @@ ago) and STALE (5 products last crawled 2026-08-08); exit 0.
 - **Saudi blocking:** paginated Saudi listing requests got Zyte "Website Ban"
   / HTTP 429 on 2026-09-30 and 2026-10-03. Expect degraded Saudi runs.
   Blocking is an access problem for the whole hostname, handled apart from
-  content checks (section 5).
+  content checks (section 5). **Mitigation (2026-10-20):** Saudi hostnames
+  go through Zyte's Türkiye exits (`CRAWLER_API_ZYTE_GEOLOCATION_BY_HOST` in
+  `settings.py`): the same listing that was banned 5/5 times on default
+  routing returned 200 via `TR`, prices still SAR.
 - **Exact-half discount rounding** (e.g. 32.5%) is assumed to round up;
   unverified against Ounass.
 
@@ -653,6 +656,7 @@ ago) and STALE (5 products last crawled 2026-08-08); exit 0.
 | 2026-10-05 | Doc created from the agreed design (all sections planned) | — |
 | 2026-10-13 | PDP list scoped to active PLP list rows; `is_active` column added to the PLP list | — |
 | 2026-10-16 | **Part 2 built:** startup checks (G1, G2, G7, G8, G10, stale-crawl), settings, `make preflight-ounass-plp-efficient` (+ `-probe`). Verified against the dev export | — |
+| 2026-10-20 | Saudi Ounass hostnames routed through Zyte geolocation `TR` (`CRAWLER_API_ZYTE_GEOLOCATION_BY_HOST`), after default routing was banned 5/5 times | — |
 | 2026-10-20 | **Part 5a built (all crawls):** access retry rounds (`AccessRetryMiddleware`), `access` manifest block, structured `degradations`, `RUN DEGRADED` / `RUN FAILED` / `ACCESS` log lines; G3 now tells access from content, and counts pages that never came back; listing pages routed by request | — |
 | 2026-10-20 | Part 5 design recorded: access retry rounds for all crawls (5a), structured degradations + `access` block + `RUN DEGRADED` / `ACCESS` log lines; parity (5b) per hostname, 20% / min 2, re-check re-fetches listing and product page, rows held until verdict, no whole-run stop, unverifiable → rows dropped (access). Parity added to the section 3 flow. `…_PARITY_MAX_MISMATCHES` replaced by `…_PARITY_MAX_MISMATCH_RATIO` | — |
 | 2026-10-19 | Principle recorded: access errors (Ounass blocking a hostname) are never content errors (parity, G4, G11); tracked per hostname, reported separately. Crawler logic in Part 5 | — |

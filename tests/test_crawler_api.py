@@ -52,3 +52,26 @@ def test_build_zyte_api_params_includes_optional_geolocation():
         "httpResponseHeaders": True,
         "geolocation": "AE",
     }
+
+
+
+def test_geolocation_by_host_wins_over_global_and_other_hosts_keep_global():
+    settings = Settings({
+        "CRAWLER_API_ZYTE_GEOLOCATION": "AE",
+        "CRAWLER_API_ZYTE_GEOLOCATION_BY_HOST": {"saudi.ounass.com": "TR"},
+    })
+    saudi = build_zyte_api_params(settings, REQUEST_TYPE_HTTP_RESPONSE,
+                                  url="https://saudi.ounass.com/api/women/bags/tote-bags")
+    uae = build_zyte_api_params(settings, REQUEST_TYPE_HTTP_RESPONSE,
+                                url="https://www.ounass.ae/api/women/bags/tote-bags")
+    assert saudi["geolocation"] == "TR"
+    assert uae["geolocation"] == "AE"
+
+
+def test_project_settings_route_ounass_saudi_hosts_through_turkiye():
+    from ecommercecrawl import settings as project_settings
+    by_host = project_settings.CRAWLER_API_ZYTE_GEOLOCATION_BY_HOST
+    assert {by_host[h] for h in ("saudi.ounass.com", "en-saudi.ounass.com", "ar.ounass.sa")} == {"TR"}
+    params = build_zyte_api_params(Settings({"CRAWLER_API_ZYTE_GEOLOCATION_BY_HOST": by_host}),
+                                   REQUEST_TYPE_HTTP_RESPONSE, url="https://www.levelshoes.com/x")
+    assert "geolocation" not in params

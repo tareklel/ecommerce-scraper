@@ -140,6 +140,16 @@ S3_BUCKET = os.getenv("S3_BUCKET")
 # unless the hostname is explicitly listed in OUNASS_REQUESTS_TLDS.
 CRAWLER_API_SERVICE = os.getenv("CRAWLER_API_SERVICE", "zyte").lower()
 CRAWLER_API_ZYTE_GEOLOCATION = os.getenv("CRAWLER_API_ZYTE_GEOLOCATION")
+# Per-hostname Zyte geolocation; wins over the global value above. Ounass
+# Saudi bans Zyte's default exits for long windows (5/5 attempts banned on
+# 2026-10-20, `520 Website Ban`) but serves the same listing through Türkiye
+# exits (200, prices still SAR: the hostname sets the currency). Other sites
+# and Ounass countries keep Zyte's default routing.
+CRAWLER_API_ZYTE_GEOLOCATION_BY_HOST = {
+    "saudi.ounass.com": "TR",
+    "en-saudi.ounass.com": "TR",
+    "ar.ounass.sa": "TR",
+}
 OUNASS_FETCH_BACKEND = os.getenv("OUNASS_FETCH_BACKEND", "auto").lower()
 # Ounass hostnames allowed to stay on normal requests in auto mode.
 # Empty list means all Ounass hostnames use the configured crawler API.

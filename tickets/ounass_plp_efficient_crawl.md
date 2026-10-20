@@ -30,6 +30,14 @@ verifier Lambda was deployed 2026-10-20 05:36 UTC. Nothing is uncommitted.
   sometimes gets 520 in the Zyte playground too; one request from here got
   520. Not our request shape, not geolocation.
 
+**Done late 2026-10-20:** Saudi hostnames (`saudi`, `en-saudi`,
+`ar.ounass.sa`) now go through Zyte geolocation `TR`
+(`CRAWLER_API_ZYTE_GEOLOCATION_BY_HOST` in `settings.py`; other sites and
+countries unchanged). Default routing was banned 5/5 times that day; the
+same request via `TR` returned 200 with SAR prices. The user confirmed
+prices don't change by exit country. This should make the success-path test
+(item 6) work on Saudi, and turns items 1–2 into a backstop.
+
 **Next commit (agreed in principle 2026-10-20, not built):**
 1. **Zyte aggressive retry policy:** `ZYTE_API_RETRY_POLICY =
    "zyte_api.aggressive_retrying"` (Zyte's documented setting for sites that

@@ -1,3 +1,5 @@
+from urllib.parse import urlparse
+
 import scrapy
 
 from ecommercecrawl.crawler_api import (
@@ -20,7 +22,21 @@ def _get_optional_setting(settings, name):
     return value or None
 
 
-def build_zyte_api_params(settings=None, request_type=REQUEST_TYPE_HTTP_RESPONSE):
+def _geolocation_for(settings, url):
+    """
+    Per-hostname geolocation (CRAWLER_API_ZYTE_GEOLOCATION_BY_HOST) wins over
+    the global CRAWLER_API_ZYTE_GEOLOCATION; neither set = Zyte's default.
+    """
+    by_host = _get_setting(settings, "CRAWLER_API_ZYTE_GEOLOCATION_BY_HOST", None) or {}
+    if url and by_host:
+        host = (urlparse(url).hostname or "").lower()
+        value = by_host.get(host)
+        if value:
+            return str(value).strip() or None
+    return _get_optional_setting(settings, "CRAWLER_API_ZYTE_GEOLOCATION")
+
+
+def build_zyte_api_params(settings=None, request_type=REQUEST_TYPE_HTTP_RESPONSE, url=None):
     """
     Convert a generic crawler API request type into Zyte API parameters.
 
@@ -41,7 +57,7 @@ def build_zyte_api_params(settings=None, request_type=REQUEST_TYPE_HTTP_RESPONSE
     else:
         raise ValueError(f"Unsupported crawler API request type: {request_type}")
 
-    geolocation = _get_optional_setting(settings, "CRAWLER_API_ZYTE_GEOLOCATION")
+    geolocation = _geolocation_for(settings, url)
     if geolocation:
         params["geolocation"] = geolocation
 
@@ -57,7 +73,7 @@ def build_request(
     **request_kwargs,
 ):
     request_meta = dict(meta or {})
-    request_meta["zyte_api"] = build_zyte_api_params(settings, request_type)
+    request_meta["zyte_api"] = build_zyte_api_params(settings, request_type, url=url)
 
     return scrapy.Request(
         url=url,
