@@ -53,7 +53,7 @@ Read this first when resuming.
    e. later: `silver_crawl_manifest` to extract `run_status` /
       `failure_reason` (scraper-pipeline, **Part 6**). Alerting on
       failed / degraded / killed runs: `tickets/cicd_pipeline.md`.
-   **Next after rollout: Part 5** (daily parity check).
+   **Next after rollout: Part 5** (5a access layer, then 5b parity; design agreed 2026-10-20).
 8. **Part 1 step 6 (prod):** only after prod gold and the registry exist;
    see `../scraper-pipeline/ticket/migrate-validated-dev-to-prod.md`. Apply
    prod export resources **targeted**.
@@ -108,7 +108,7 @@ depends on it starts.
 | **2** | Input loading, validation and `make preflight` | this | 0 (build with hand-made CSVs; verify against Part 1 exports) | ✅ done 2026-10-16 |
 | **3** | Crawler core: Phase 1 / Phase 2, PLP-extract rows, runtime guardrails | this | 2 | ✅ done 2026-10-16 (code, local smoke, IAM applied) |
 | **4** | Run observability: manifest block, quality-gate split, run status | this (+ verifier Lambda) | 3 | ✅ code 2026-10-16; 4b rollout pending (see handoff) |
-| **5** | Daily parity spot check | this | 3 | not started |
+| **5** | 5a access layer (all crawls) + 5b daily parity check | this | 3 | design agreed 2026-10-20 |
 | **6** | Downstream readiness: discount-clearing fix, label pickup, flag kept in silver, 3-day sold-out cutoff | scraper-pipeline | 1 | not started |
 | **7** | Shadow mode (1–2 weeks), tune thresholds, then go live | both | 1–6 | not started |
 
@@ -647,31 +647,61 @@ moved to Part 7.
 marker and a manifest that explains them, queryable in Athena. (Unit-tested;
 to confirm with real runs after the rollout.)
 
-## Part 5 — Daily parity spot check (this repo)
+## Part 5 — Access layer and daily parity check (this repo)
 
-**Goal:** catch a broken price mapping on the first day it happens (G9).
+Design agreed 2026-10-19/20; full description in the reference doc
+(section 3 "Parity check", section 5 "Access retry rounds" and "Where
+degradations and access problems are recorded").
 
-- [ ] Per country, sample 20 PLP-extracted products (~$0.01 each). Each is
-  PDP-fetched **immediately after its listing page**, so the price has
-  little time to change.
-- [ ] A price or discount mismatch is re-fetched once; it only counts if it
-  persists.
-- [ ] A failed fetch or missing product state is **not** a mismatch: it's
-  excluded and logged.
-- [ ] ≥ 2 confirmed mismatches → stop the run, no PLP-extract rows. < 10
-  usable comparisons for a country → no PLP-extract rows for that country.
-  Label mismatches are logged only.
-- [ ] **"No PLP-extract rows" must hold for rows already written** (recorded
-  2026-10-16). Listing rows are written page by page, so a parity failure
-  can come after some are written. Those must not reach raw: either run the
-  parity sample before writing any listing rows (e.g. hold that country's
-  listing rows until its sample passes), or mark the run so the verifier
-  won't register it (a failure-type status per Part 4). Pick one and test it.
-- [ ] Results go in the manifest block (Part 4).
+### 5a — Access layer (all crawls)
 
-**Done when:** tests prove each outcome (pass, 1 mismatch warning, 2
-mismatches stop, timing blip cleared by re-check, inconclusive country) and
-a live run reports parity per country.
+**Goal:** Ounass blocking is retried patiently and reported as an access
+problem, never confused with a content problem.
+
+- [ ] Classify failures after Scrapy's normal retries: **access** (Zyte
+  "Website Ban", HTTP 429/403, repeated 5xx, timeouts, connection errors)
+  vs **content** (page parsed badly, product gone).
+- [ ] Access retry rounds: set access failures aside; when the crawl is
+  idle, wait `ACCESS_RETRY_COOLDOWN_SECONDS` (900) and re-send; up to
+  `ACCESS_RETRY_ROUNDS` (2), capped by `ACCESS_RETRY_MAX_TOTAL_SECONDS`
+  (3600). Works for normal crawls and PLP-efficient (failed listing pages,
+  parity product pages, Phase 2 product pages).
+- [ ] Per-hostname `access` block in every manifest; hostname `blocked` at
+  ≥ `ACCESS_BLOCKED_HOST_RATIO` (0.5, min 5 requests).
+- [ ] Structured `degradations` (`kind` content / access, `scope`,
+  `message`); verifier unaffected (it only checks for any).
+- [ ] End-of-run `RUN DEGRADED` and `ACCESS` log lines.
+- [ ] Tests: classification, rounds (recover in round 1, still blocked
+  after the last), cap, manifest/log output.
+
+### 5b — Parity check (G9)
+
+**Goal:** catch a broken listing → price mapping on the first day, without
+ever writing the wrong prices.
+
+- [ ] Sample ~20 listing-refreshed products per hostname, spread across
+  listings, ~half on sale when available; product page fetched right after
+  its listing page.
+- [ ] Compare price + discount; label logged only.
+- [ ] On a mismatch re-fetch **both** listing page and product page;
+  agreement now = timing, cleared, and the listing row takes the re-fetched
+  value.
+- [ ] Blocked or sold-out comparisons excluded (access, not content).
+- [ ] Verdict per hostname: ≥ 10 usable → fail at ≥ 20% confirmed (min 2);
+  fewer because blocked → borrow the verdict of checked hostnames; none
+  checkable → not checked.
+- [ ] Hold listing rows per hostname until its verdict; pass → write; fail
+  or not checked → drop, products held back, run degraded (`kind` content
+  or access). **No whole-run stop.**
+- [ ] Manifest `plp_efficient.parity` per hostname (sampled, compared,
+  excluded, confirmed, cleared on re-check, label mismatches, verdict).
+- [ ] Settings `…_PARITY_SAMPLE` (20), `…_PARITY_MIN_COMPARISONS` (10),
+  `…_PARITY_MAX_MISMATCH_RATIO` (0.2).
+
+**Done when:** tests prove each outcome (pass, one mismatch = warning,
+hostname fail, timing blip cleared by re-check, blocked hostname borrowing
+a verdict, nothing checkable → rows dropped as access) and a live run
+reports parity and access per hostname.
 
 ## Part 6 — Downstream readiness (scraper-pipeline)
 
@@ -893,6 +923,7 @@ explicit approval under `context/AGENTS.md`).
 | 2026-10-13 | Registry CSV template agreed: `url,site,country,language,gender,category,subcategory,brand,is_active`; a blank subcategory is rejected (G1), and broad listings run with the mode off. |
 | 2026-10-19 | **Access errors ≠ content errors.** Ounass blocking is hostname-wide (Zyte "Website Ban", 429/403, repeated 5xx/timeouts) and must never count as a parity mismatch, a missing product, a field mismatch or any content failure. The crawler tracks access failures per hostname and reports them separately. Parity (G9) judges content only: blocked comparisons are excluded, and "inconclusive because blocked" is dropped as a parity case. Built in Part 5. |
 | 2026-10-19 | Parity (G9) redesign under discussion: a fixed "2 confirmed mismatches stops the run" is too blunt; re-check must re-fetch both the listing and the product page (a product-page-only re-check can't clear a genuine price change). |
+| 2026-10-20 | **Part 5 design agreed.** 5a, all crawls: access retry rounds after a cool-down (2 × 900 s, capped at 3600 s), per-hostname `access` block, structured `degradations` (`kind` content / access), `RUN DEGRADED` / `ACCESS` log lines. 5b parity: per hostname, ≥ 20% confirmed mismatches (min 2) of ≥ 10 usable comparisons fails that hostname; re-check re-fetches listing and product page; blocked hostnames borrow the checked hostnames' verdict; nothing checkable → that day's listing rows dropped and products held back (access); rows held per hostname until the verdict; no whole-run stop. Replaces the 2026-10-04 parity entry. Crawls run on ECS Fargate (no time limit), so cool-downs are safe. |
 
 ## Open Questions
 

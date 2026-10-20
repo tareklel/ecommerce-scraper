@@ -1,5 +1,9 @@
 # Memory
 
+## 2026-10-20 - PLP-efficient Part 5 design recorded (not built)
+- 5a (all crawls): access failures retried in rounds after a cool-down (`ACCESS_RETRY_ROUNDS` 2, `…_COOLDOWN_SECONDS` 900, `…_MAX_TOTAL_SECONDS` 3600), per-hostname `access` manifest block, structured `degradations` (`kind` content/access), end-of-run `RUN DEGRADED` / `ACCESS` log lines.
+- 5b parity (G9): ~20 per hostname, re-check re-fetches listing + product page, hostname fails at ≥ 20% (min 2) of ≥ 10 usable comparisons, blocked hostnames borrow others' verdict, nothing checkable → listing rows dropped (access); rows held per hostname until verdict; no whole-run stop. Parity now drawn in the reference doc's section 3 flow.
+
 ## 2026-10-19 - Principle: access errors are not content errors
 - Ounass blocking (Zyte "Website Ban", HTTP 429/403, repeated 5xx/timeouts) affects a whole hostname and says nothing about data correctness. It must never count as a parity mismatch, a missing product (G4), a field mismatch (G11) or any other content failure.
 - The crawler must track access failures per hostname and report them separately from content checks (to build in PLP-efficient Part 5; recorded in `docs/ounass_plp_efficient_crawl.md` section 5 and the ticket's decision log).
