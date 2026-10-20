@@ -389,10 +389,77 @@ def test_manifest_block_names_held_back_listing_and_ceiling():
     run.page_failed(0)                                 # G3
     run.select_phase2()
     block = pe.manifest_block(result=None, run=run)
-    assert any("listing held back" in d and "G3" in d for d in block["degradations"])
-    assert any("Phase 2 skipped" in d for d in block["degradations"])
+    [held] = [d for d in block["degradations"] if "listing held back" in d["message"]]
+    assert "G3" in held["message"] and held["kind"] == "content" and held["scope"] == TOTE
+    assert any("Phase 2 skipped" in d["message"] for d in block["degradations"])
     assert block["phase2"]["phase2_ceiling_exceeded"] is True
 
 
 def test_manifest_block_is_none_in_normal_mode():
     assert OunassSpider().plp_efficient_manifest_block() is None
+
+
+# --- Access layer integration (Part 5a) -------------------------------------------
+
+from ecommercecrawl import access as access_layer
+
+
+class _ZyteError(Exception):
+    """Stand-in for zyte_api.RequestError."""
+    def __init__(self, status):
+        super().__init__(status)
+        self.status = status
+_ZyteError.__name__ = "RequestError"
+
+
+def _failure(request, exc):
+    class _F:
+        pass
+    f = _F()
+    f.request, f.value = request, exc
+    return f
+
+
+def test_deferred_listing_page_is_not_a_g3_failure():
+    spider = _spider([plp()], [pdp("1")])
+    [seed] = list(spider.start_requests())
+    spider._plp_efficient_listing_failed(_failure(seed, access_layer.AccessDeferred("later")))
+    assert spider.plp_run.stats[0]["pages_failed"] == 0
+
+
+def test_listing_lost_to_blocking_is_an_access_degradation():
+    spider = _spider([plp()], [pdp(str(i)) for i in range(3)])
+    [seed] = list(spider.start_requests())
+    spider._plp_efficient_listing_failed(_failure(seed, _ZyteError(520)))
+    spider._plp_efficient_on_idle()
+    assert "access" in spider.plp_run.phase2["listing_health"][TOTE]
+    block = spider.plp_efficient_manifest_block()
+    [held] = [d for d in block["degradations"] if d["scope"] == TOTE]
+    assert held["kind"] == "access"
+
+
+def test_blocked_listing_response_is_not_parsed_as_content():
+    spider = _spider([plp()], [pdp("1")])
+    list(spider.start_requests())
+    url = f"{TOTE}?{constants.PLPSORT_KEY}={constants.PLPSORT}&p=0"
+    request = scrapy.Request(url, meta={"plp_idx": 0})
+    blocked = TextResponse(url=url, status=403, body=b"<html>denied</html>", encoding="utf-8",
+                           request=request)
+    assert list(spider.parse(blocked)) == []
+    stats = spider.plp_run.stats[0]
+    assert stats["pages_failed_access"] == 1 and stats["pages_parsed"] == 0
+
+
+def test_phase2_waits_for_access_retry_rounds():
+    spider = _spider([plp()], [pdp("1")])
+    list(spider.start_requests())
+
+    class _Busy:
+        def busy(self):
+            return True
+    spider.crawler.access_retry = _Busy()
+    spider._plp_efficient_on_idle()
+    assert spider.plp_run.phase2 is None          # not chosen yet
+    spider.crawler.access_retry = None
+    spider._plp_efficient_on_idle()
+    assert spider.plp_run.phase2 is not None

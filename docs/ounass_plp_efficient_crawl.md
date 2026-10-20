@@ -109,7 +109,7 @@ PLP or directly in Phase 2. That's why scoping happens in the export.
 
 ---
 
-## 3. How a run works [built; parity and access retry rounds planned, Part 5]
+## 3. How a run works [built; parity planned, Part 5b]
 
 ```mermaid
 flowchart TD
@@ -126,7 +126,7 @@ flowchart TD
         row -. "sample (~20 per hostname)" .-> parity["Parity sample: fetch the product page<br/>right away, compare price + discount [Part 5b]"]
     end
 
-    p1 --> retry["Access retry rounds: re-send requests that failed<br/>on blocking, after a cool-down [Part 5a, all crawls]"]
+    p1 --> retry["Access retry rounds: re-send requests that failed<br/>on blocking, after a cool-down [all crawls]"]
     retry --> verdict{"Parity verdict per hostname [Part 5b]"}
     verdict -- "pass" --> release["Write that hostname's held listing rows"]
     verdict -- "fail / not checkable" --> drop["Drop them; products held back<br/>(degraded: content or access)"]
@@ -281,7 +281,7 @@ about whether our data or mapping is right. So:
 - the parity check (G9) only judges content: comparisons lost to blocking
   are excluded from it, not counted as "inconclusive".
 
-### Access retry rounds [planned, Part 5a; all crawls, not only this mode]
+### Access retry rounds [built 2026-10-20, Part 5a; all crawls, not only this mode]
 
 Blocking is often temporary, and Scrapy's own retries (`RETRY_TIMES = 5`)
 happen back to back, while the block is still on. So:
@@ -304,18 +304,40 @@ Phase 2 (whose product pages get their own rounds at the end). Crawls run as
 ECS Fargate tasks with no time limit, so the cool-downs only lengthen the
 task; no Lambda waits on them.
 
-### Where degradations and access problems are recorded [planned, Part 5a]
+How it's built (`ecommercecrawl/access.py`): `AccessRetryMiddleware`, a
+downloader middleware at priority 540, just after the retry middlewares, so
+it only sees what they gave up on. A set-aside request raises
+`AccessDeferred` (an `IgnoreRequest`: callbacks and errbacks must ignore it,
+the same request returns later); the copy carries `meta["access_round"]` and
+a fresh `retry_times`. On `spider_idle` it waits the cool-down and re-sends.
+When the next cool-down would pass the cap, it sends one last attempt
+immediately, with no further deferral, so errbacks still see the real final
+failure. After the last round, a refused response (403/429/5xx) reaches the
+callback as usual. PLP-efficient chooses Phase 2 only once the layer is idle
+(`crawler.access_retry.busy()`), and counts a listing page lost to access as
+`pages_failed_access`: a G3 hold-back caused only by blocking is recorded as
+`kind = access`. Listing pages are routed by their request (`plp_idx`), not
+by the page body, so a blocked HTML page is never silently dropped, and a
+requested page that never came back is also G3.
+Verified 2026-10-20 with a real Scrapy crawl against a local server (refused
+twice then recovered in round 2; always-refused reached the callback after
+the last round).
+
+### Where degradations and access problems are recorded [built 2026-10-20, Part 5a]
 
 - **Manifest (the record):** `degradations` becomes structured, one entry
   per skip: `{"kind": "content" | "access", "scope": <hostname or listing>,
   "message": …}`. Details stay in their blocks: `plp_efficient` (listings,
-  Phase 2, `parity` per hostname) and a new top-level `access` block per
-  hostname for **every** crawl (requests, succeeded, blocked by type,
-  timeouts, retry rounds, status `ok` / `blocked`). Verified copy in
+  Phase 2, `parity` per hostname from Part 5b) and a top-level `access`
+  block for **every** crawl: `rounds_run`, `total_waited_seconds`, and per
+  hostname `requests` (final outcomes), `succeeded`, `other_errors`,
+  `gave_up`, `recovered_in_rounds`, `deferred`, `access_failures` by label
+  (`zyte_520`, `http_429`, `timeout`, …), `status` `ok` / `blocked`. Verified copy in
   `crawl_manifest_raw.raw_json`; in silver from Part 6.
 - **CloudWatch log** (`/ecs/<ecs_name>`), once at the end of the run: a
-  `RUN DEGRADED` line with one indented line per degradation, and an
-  `ACCESS` line per hostname with access failures (also on clean runs).
+  `RUN DEGRADED` warning with one indented line per degradation, `RUN FAILED`
+  (error) with the failure reason, and an `ACCESS <hostname>` warning per
+  hostname with any access failures (also on clean runs).
   Grep-able now; the hook for alerting (`tickets/cicd_pipeline.md`).
 
 | # | Check | Failure scope | Setting(s) (current value) |
@@ -342,10 +364,10 @@ Other settings:
 | `OUNASS_PLP_EFFICIENT_SHADOW` [planned, Part 7] | `False` | Shadow mode: full run, no rows written, outcomes logged to the manifest |
 | `OUNASS_PLP_EFFICIENT_EXPORT_LAMBDA` | `price-comparison-plp-efficient-export-<APP_ENV>` | Name of scraper-pipeline's export Lambda, invoked at crawl start |
 | `OUNASS_PLP_EFFICIENT_STALE_CRAWL_DAYS` | `7` | Stale-crawl warning: products not crawled for more than this many days |
-| `ACCESS_RETRY_ROUNDS` [planned, 5a] | `2` | Access retry rounds after the normal retries; 0 = off (all crawls) |
-| `ACCESS_RETRY_COOLDOWN_SECONDS` [planned, 5a] | `900` | Wait before each round |
-| `ACCESS_RETRY_MAX_TOTAL_SECONDS` [planned, 5a] | `3600` | Cap on total cool-down per run |
-| `ACCESS_BLOCKED_HOST_RATIO` [planned, 5a] | `0.5` | Share of a hostname's requests failing on access (min 5) to report it blocked |
+| `ACCESS_RETRY_ROUNDS` | `2` | Access retry rounds after the normal retries; 0 = off (all crawls) |
+| `ACCESS_RETRY_COOLDOWN_SECONDS` | `900` | Wait before each round |
+| `ACCESS_RETRY_MAX_TOTAL_SECONDS` | `3600` | Cap on total cool-down per run |
+| `ACCESS_BLOCKED_HOST_RATIO` | `0.5` | Share of a hostname's requests failing on access (min 5) to report it blocked |
 
 Settings live in `ecommercecrawl/settings.py`; thresholds can be overridden
 with environment variables of the same name. The startup checks read them
@@ -631,6 +653,7 @@ ago) and STALE (5 products last crawled 2026-08-08); exit 0.
 | 2026-10-05 | Doc created from the agreed design (all sections planned) | — |
 | 2026-10-13 | PDP list scoped to active PLP list rows; `is_active` column added to the PLP list | — |
 | 2026-10-16 | **Part 2 built:** startup checks (G1, G2, G7, G8, G10, stale-crawl), settings, `make preflight-ounass-plp-efficient` (+ `-probe`). Verified against the dev export | — |
+| 2026-10-20 | **Part 5a built (all crawls):** access retry rounds (`AccessRetryMiddleware`), `access` manifest block, structured `degradations`, `RUN DEGRADED` / `RUN FAILED` / `ACCESS` log lines; G3 now tells access from content, and counts pages that never came back; listing pages routed by request | — |
 | 2026-10-20 | Part 5 design recorded: access retry rounds for all crawls (5a), structured degradations + `access` block + `RUN DEGRADED` / `ACCESS` log lines; parity (5b) per hostname, 20% / min 2, re-check re-fetches listing and product page, rows held until verdict, no whole-run stop, unverifiable → rows dropped (access). Parity added to the section 3 flow. `…_PARITY_MAX_MISMATCHES` replaced by `…_PARITY_MAX_MISMATCH_RATIO` | — |
 | 2026-10-19 | Principle recorded: access errors (Ounass blocking a hostname) are never content errors (parity, G4, G11); tracked per hostname, reported separately. Crawler logic in Part 5 | — |
 | 2026-10-16 | **Part 4b built (all crawls):** data uploaded to `crawl-unverified/`, verifier publishes only passing runs into `crawls/` (failed runs had been readable whenever another run that day passed); final `run_status` / `failure_reason`, one failure marker per reason, `crawl_manifest_raw` registered for every run; run-started record + scraper-pipeline `crawl_started_raw` | — |

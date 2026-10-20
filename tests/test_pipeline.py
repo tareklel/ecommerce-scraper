@@ -433,3 +433,29 @@ def test_run_started_record_skipped_when_uploads_disabled(pipeline_setup, monkey
     monkeypatch.setenv("APP_ENV", "dev")
     pipeline._write_run_started = lambda spider: (_ for _ in ()).throw(AssertionError("should not write"))
     pipeline.spider_opened(spider)
+
+
+def test_manifest_access_block_and_log_lines(pipeline_setup, tmp_path):
+    import scrapy as _scrapy
+    from scrapy.http import Response as _Response
+    from scrapy.settings import Settings as _Settings
+    from ecommercecrawl.access import AccessRetryMiddleware
+
+    pipeline, spider, mock_crawler = pipeline_setup
+    spider.entry_points = {}
+    mock_crawler.stats.get_stats.return_value = {"start_time": datetime.now(timezone.utc)}
+    mock_crawler.settings = _Settings({"ACCESS_RETRY_ROUNDS": 0})
+    mw = AccessRetryMiddleware(mock_crawler)
+    mock_crawler.access_retry = mw
+    for i in range(5):
+        request = _scrapy.Request(f"https://en-saudi.ounass.com/p{i}")
+        mw.process_response(request, _Response(url=request.url, status=429, request=request), None)
+
+    pipeline.spider_closed(spider=spider, reason="finished")
+    with open(tmp_path / "metadata" / "manifest.json") as f:
+        manifest = json.load(f)
+    assert manifest["access"]["hosts"]["en-saudi.ounass.com"]["status"] == "blocked"
+    assert manifest["degradations"][0]["kind"] == "access"
+    warnings = [str(c.args[0]) for c in spider.logger.warning.call_args_list]
+    assert any(w.startswith("RUN DEGRADED") and "1 access" in w for w in warnings)
+    assert any(w.startswith("ACCESS en-saudi.ounass.com: blocked") for w in warnings)

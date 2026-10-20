@@ -79,6 +79,10 @@ COOKIES_ENABLED = True
 # See https://docs.scrapy.org/en/latest/topics/downloader-middleware.html
 DOWNLOADER_MIDDLEWARES = {
     'ecommercecrawl.middlewares.RetryAfterMiddleware': 550,  # after default RetryMiddleware (543)
+    # Runs after the retry middlewares have given up (responses/exceptions pass
+    # back through middlewares in descending order): access errors are set
+    # aside and retried in rounds after a cool-down (ecommercecrawl/access.py).
+    'ecommercecrawl.access.AccessRetryMiddleware': 540,
 }
 
 TWISTED_REACTOR = "twisted.internet.asyncioreactor.AsyncioSelectorReactor"
@@ -204,6 +208,18 @@ OUNASS_PLP_EFFICIENT_MISSING_RATIO_CAP = float(
 OUNASS_PLP_EFFICIENT_FIELD_MISMATCH_RATIO = float(
     os.getenv("OUNASS_PLP_EFFICIENT_FIELD_MISMATCH_RATIO", "0.05")
 )
+
+# Access retry rounds, all crawls (ecommercecrawl/access.py; documented in
+# docs/ounass_plp_efficient_crawl.md, section 5). A request that still fails on
+# an access error (blocking, 429/403, 5xx, timeouts) after the normal retries
+# is set aside and re-sent after a cool-down, up to ROUNDS times, with total
+# waiting capped per run. 0 rounds = off.
+ACCESS_RETRY_ROUNDS = int(os.getenv("ACCESS_RETRY_ROUNDS", "2"))
+ACCESS_RETRY_COOLDOWN_SECONDS = float(os.getenv("ACCESS_RETRY_COOLDOWN_SECONDS", "900"))
+ACCESS_RETRY_MAX_TOTAL_SECONDS = float(os.getenv("ACCESS_RETRY_MAX_TOTAL_SECONDS", "3600"))
+# A hostname is reported "blocked" when at least this share of its requests
+# (min 5) still failed on access after the last round.
+ACCESS_BLOCKED_HOST_RATIO = float(os.getenv("ACCESS_BLOCKED_HOST_RATIO", "0.5"))
 
 # Quality gate (executed automatically in PostCrawlPipeline on spider close)
 QUALITY_GATE_ENABLED = os.getenv("QUALITY_GATE_ENABLED", "true")

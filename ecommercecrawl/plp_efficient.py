@@ -667,6 +667,7 @@ class PlpEfficientRun:
         self.new_urls = {}   # url -> index of the listing it was found on
         self.stats = [
             {"url": plp["url"], "pages_requested": 0, "pages_parsed": 0, "pages_failed": 0,
+             "pages_failed_access": 0,
              "emitted": 0, "matched": 0, "mismatched": 0, "unusable": 0, "new": 0,
              "stopped": None}
             for plp in self.plps
@@ -685,8 +686,15 @@ class PlpEfficientRun:
     def page_parsed(self, idx):
         self.stats[idx]["pages_parsed"] += 1
 
-    def page_failed(self, idx):
+    def page_failed(self, idx, access=False):
+        """A listing page lost for good. `access`: blocked/refused, not a content problem."""
         self.stats[idx]["pages_failed"] += 1
+        if access:
+            self.stats[idx]["pages_failed_access"] += 1
+
+    def failed_on_access_only(self, idx):
+        stats = self.stats[idx]
+        return bool(stats["pages_failed"]) and stats["pages_failed_access"] == stats["pages_failed"]
 
     def stop_plp(self, idx, reason):
         if not self.stats[idx]["stopped"]:
@@ -790,9 +798,14 @@ class PlpEfficientRun:
             if stats["stopped"]:
                 health[idx] = stats["stopped"]
             elif stats["pages_failed"]:
-                health[idx] = f"G3: {stats['pages_failed']} listing page(s) failed"
+                cause = "blocked by the site (access)" if self.failed_on_access_only(idx) else "failed"
+                health[idx] = f"G3: {stats['pages_failed']} listing page(s) {cause}"
             elif stats["pages_parsed"] == 0:
                 health[idx] = "G3: no listing page was parsed"
+            elif stats["pages_parsed"] < stats["pages_requested"]:
+                # Requested but neither parsed nor reported failed: lost silently.
+                missing = stats["pages_requested"] - stats["pages_parsed"]
+                health[idx] = f"G3: {missing} listing page(s) never came back"
             elif seen and stats["mismatched"] / seen > cfg.field_mismatch_ratio:
                 health[idx] = (f"G11: {stats['mismatched']} of {seen} matched products disagree "
                                f"with the listing's fields (> {cfg.field_mismatch_ratio:.0%})")
@@ -876,6 +889,13 @@ class PlpEfficientRun:
 # ---------------------------------------------------------------------------
 
 MANIFEST_MAX_MESSAGES = 50
+ACCESS = "access"     # same kinds as ecommercecrawl/access.py
+CONTENT = "content"
+
+
+def _degradation(kind, scope, message):
+    """One manifest `degradations` entry: kind access (site refused us) or content."""
+    return {"kind": kind, "scope": scope, "message": message}
 
 
 def manifest_block(inputs=None, result=None, run=None, startup_error=None, mode="live"):
@@ -883,7 +903,7 @@ def manifest_block(inputs=None, result=None, run=None, startup_error=None, mode=
     The run manifest's `plp_efficient` block: what the run was given, what the
     startup checks decided, what each listing did and what Phase 2 got.
 
-    `degradations` lists every piece of work a guardrail chose to skip in a run
+    `degradations` lists (as {kind, scope, message}) every piece of work skipped in a run
     that otherwise completed (a skipped or held-back listing, quarantined or
     held-back products, Phase 2 skipped by the ceiling). `startup_stopped`
     means the run made no request at all. Both feed the run status (Part 4b).
@@ -931,28 +951,34 @@ def manifest_block(inputs=None, result=None, run=None, startup_error=None, mode=
             "stop_messages": [p.message for p in result.by_severity(STOP)][:MANIFEST_MAX_MESSAGES],
         }
         if result.skipped_plp_rows:
-            degradations.append(f"{len(result.skipped_plp_rows)} listing(s) skipped at startup")
+            degradations.append(_degradation(
+                CONTENT, "startup", f"{len(result.skipped_plp_rows)} listing(s) skipped at startup"))
         if result.quarantined_pdp_rows:
-            degradations.append(f"{len(result.quarantined_pdp_rows)} product(s) quarantined")
+            degradations.append(_degradation(
+                CONTENT, "startup", f"{len(result.quarantined_pdp_rows)} product(s) quarantined"))
         if result.held_back_pdp_rows:
-            degradations.append(
-                f"{len(result.held_back_pdp_rows)} product(s) held back (only skipped listings cover them)")
+            degradations.append(_degradation(
+                CONTENT, "startup",
+                f"{len(result.held_back_pdp_rows)} product(s) held back (only skipped listings cover them)"))
 
     if run is not None:
         health = run.phase2["listing_health"] if run.phase2 else {}
         listings = []
-        for stats in run.stats:
+        for idx, stats in enumerate(run.stats):
             reason = health.get(stats["url"]) if run.phase2 else stats["stopped"]
             listings.append({**stats, "held_back_reason": reason})
             if reason:
-                degradations.append(f"listing held back: {stats['url']} ({reason})")
+                # A listing lost only to blocking is an access problem, not a content one.
+                kind = ACCESS if reason.startswith("G3") and run.failed_on_access_only(idx) else CONTENT
+                degradations.append(_degradation(kind, stats["url"], f"listing held back: {reason}"))
         block["listings"] = listings
         block["refreshed_from_listing"] = len(run.crawled)
         block["new_products"] = len(run.new_urls)
         if run.phase2:
             block["phase2"] = {k: v for k, v in run.phase2.items() if k not in ("urls", "listing_health")}
             if run.phase2["phase2_ceiling_exceeded"]:
-                degradations.append(
+                degradations.append(_degradation(
+                    CONTENT, "phase2",
                     f"Phase 2 skipped: {run.phase2['candidates']} product pages exceed the ceiling "
-                    f"of {run.config.max_phase2_pdps}")
+                    f"of {run.config.max_phase2_pdps}"))
     return block

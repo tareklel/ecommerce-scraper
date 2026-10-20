@@ -53,7 +53,9 @@ Read this first when resuming.
    e. later: `silver_crawl_manifest` to extract `run_status` /
       `failure_reason` (scraper-pipeline, **Part 6**). Alerting on
       failed / degraded / killed runs: `tickets/cicd_pipeline.md`.
-   **Next after rollout: Part 5** (5a access layer, then 5b parity; design agreed 2026-10-20).
+   ✅ Rollout done 2026-10-20: verifier deployed, crawler pushed.
+8. ✅ **Part 5a done (2026-10-20)**: access layer, all crawls.
+   **Next: Part 5b** (parity).
 8. **Part 1 step 6 (prod):** only after prod gold and the registry exist;
    see `../scraper-pipeline/ticket/migrate-validated-dev-to-prod.md`. Apply
    prod export resources **targeted**.
@@ -108,7 +110,7 @@ depends on it starts.
 | **2** | Input loading, validation and `make preflight` | this | 0 (build with hand-made CSVs; verify against Part 1 exports) | ✅ done 2026-10-16 |
 | **3** | Crawler core: Phase 1 / Phase 2, PLP-extract rows, runtime guardrails | this | 2 | ✅ done 2026-10-16 (code, local smoke, IAM applied) |
 | **4** | Run observability: manifest block, quality-gate split, run status | this (+ verifier Lambda) | 3 | ✅ code 2026-10-16; 4b rollout pending (see handoff) |
-| **5** | 5a access layer (all crawls) + 5b daily parity check | this | 3 | design agreed 2026-10-20 |
+| **5** | 5a access layer (all crawls) + 5b daily parity check | this | 3 | 5a ✅ 2026-10-20; 5b next |
 | **6** | Downstream readiness: discount-clearing fix, label pickup, flag kept in silver, 3-day sold-out cutoff | scraper-pipeline | 1 | not started |
 | **7** | Shadow mode (1–2 weeks), tune thresholds, then go live | both | 1–6 | not started |
 
@@ -658,21 +660,26 @@ degradations and access problems are recorded").
 **Goal:** Ounass blocking is retried patiently and reported as an access
 problem, never confused with a content problem.
 
-- [ ] Classify failures after Scrapy's normal retries: **access** (Zyte
+- [x] Classify failures after Scrapy's normal retries: **access** (Zyte
   "Website Ban", HTTP 429/403, repeated 5xx, timeouts, connection errors)
   vs **content** (page parsed badly, product gone).
-- [ ] Access retry rounds: set access failures aside; when the crawl is
+- [x] Access retry rounds: set access failures aside; when the crawl is
   idle, wait `ACCESS_RETRY_COOLDOWN_SECONDS` (900) and re-send; up to
   `ACCESS_RETRY_ROUNDS` (2), capped by `ACCESS_RETRY_MAX_TOTAL_SECONDS`
   (3600). Works for normal crawls and PLP-efficient (failed listing pages,
   parity product pages, Phase 2 product pages).
-- [ ] Per-hostname `access` block in every manifest; hostname `blocked` at
+- [x] Per-hostname `access` block in every manifest; hostname `blocked` at
   ≥ `ACCESS_BLOCKED_HOST_RATIO` (0.5, min 5 requests).
-- [ ] Structured `degradations` (`kind` content / access, `scope`,
+- [x] Structured `degradations` (`kind` content / access, `scope`,
   `message`); verifier unaffected (it only checks for any).
-- [ ] End-of-run `RUN DEGRADED` and `ACCESS` log lines.
-- [ ] Tests: classification, rounds (recover in round 1, still blocked
+- [x] End-of-run `RUN DEGRADED` and `ACCESS` log lines.
+- [x] Tests: classification, rounds (recover in round 1, still blocked
   after the last), cap, manifest/log output.
+- [x] Found and fixed while building: a blocked listing page (HTML, not
+  JSON) was dropped silently by `parse` (neither parsed nor failed), so its
+  listing could look healthy. Listing pages are now routed by request
+  meta, and G3 also counts pages that never came back.
+- [x] Verified with a real Scrapy crawl against a local server (2026-10-20).
 
 ### 5b — Parity check (G9)
 

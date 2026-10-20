@@ -1,5 +1,12 @@
 # Memory
 
+## 2026-10-20 - Part 5a: access layer for all crawls
+- Verifier deployed (05:36 UTC) and the crawl-unverified/ crawler change pushed.
+- New `ecommercecrawl/access.py`: `AccessRetryMiddleware` (priority 540) sets access failures aside after normal retries (`AccessDeferred`) and re-sends them after a cool-down (`ACCESS_RETRY_ROUNDS` 2 × 900 s, cap 3600 s); per-hostname `access` manifest block; blocked hostnames become `kind = access` degradations.
+- Degradations are now structured `{kind, scope, message}`; end-of-run `RUN DEGRADED` / `RUN FAILED` / `ACCESS` log lines.
+- PLP-efficient: Phase 2 waits for retry rounds; G3 separates access from content and counts pages that never came back (a blocked HTML listing page used to be dropped silently).
+- 24 new tests (420 total); real Scrapy run against a local server confirmed recovery in a round and the final failure reaching the callback.
+
 ## 2026-10-20 - PLP-efficient Part 5 design recorded (not built)
 - 5a (all crawls): access failures retried in rounds after a cool-down (`ACCESS_RETRY_ROUNDS` 2, `…_COOLDOWN_SECONDS` 900, `…_MAX_TOTAL_SECONDS` 3600), per-hostname `access` manifest block, structured `degradations` (`kind` content/access), end-of-run `RUN DEGRADED` / `ACCESS` log lines.
 - 5b parity (G9): ~20 per hostname, re-check re-fetches listing + product page, hostname fails at ≥ 20% (min 2) of ≥ 10 usable comparisons, blocked hostnames borrow others' verdict, nothing checkable → listing rows dropped (access); rows held per hostname until verdict; no whole-run stop. Parity now drawn in the reference doc's section 3 flow.

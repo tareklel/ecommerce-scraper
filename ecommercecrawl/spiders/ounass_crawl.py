@@ -17,6 +17,7 @@ from ecommercecrawl.crawler_api import (
 from scrapy import signals
 from scrapy.exceptions import DontCloseSpider
 from scrapy.http import HtmlResponse
+from ecommercecrawl import access
 from ecommercecrawl import plp_efficient as pe
 
 
@@ -337,6 +338,11 @@ class OunassSpider(MasterCrawl, scrapy.Spider):
             return
     
     def parse(self, response):
+        if self.plp_run is not None and "plp_idx" in response.meta:
+            # PLP-efficient listing page: routed by the request, not the body,
+            # so a blocked/garbled page is still accounted for (G3).
+            yield from self._parse_plp_efficient(response)
+            return
         if rules.is_plp(response):
             yield from self.parse_plp(response)
             return
@@ -401,16 +407,28 @@ class OunassSpider(MasterCrawl, scrapy.Spider):
         )
 
     def _plp_efficient_listing_failed(self, failure):
+        if isinstance(failure.value, access.AccessDeferred):
+            # Set aside for a later access retry round; not a failure yet.
+            return
         idx = failure.request.meta.get("plp_idx")
+        blocked = access.classify_exception(failure.value) is not None
         if self.plp_run is not None and idx is not None:
             # G3: a partially swept listing's products must not go to Phase 2
             # (they'd falsely look missing).
-            self.plp_run.page_failed(idx)
-        self.logger.error(f"PLP-efficient listing page failed: {failure.request.url}: {failure.value!r}")
+            self.plp_run.page_failed(idx, access=blocked)
+        cause = "blocked (access)" if blocked else "failed"
+        self.logger.error(f"PLP-efficient listing page {cause}: {failure.request.url}: {failure.value!r}")
 
     def _parse_plp_efficient(self, response):
         run = self.plp_run
         idx = response.meta["plp_idx"]
+        label = access.classify_response(response)
+        if label is not None:
+            # A refusal (403/429/5xx) that survived every retry round: the
+            # listing page is lost to access, not to its content.
+            run.page_failed(idx, access=True)
+            self.logger.error(f"PLP-efficient listing page blocked ({label}): {response.url}")
+            return
         run.page_parsed(idx)
         if run.is_stopped(idx):
             return
@@ -436,6 +454,11 @@ class OunassSpider(MasterCrawl, scrapy.Spider):
         """After the sweep: pick Phase 2 PDPs once, schedule them, keep the spider open."""
         run = self.plp_run
         if run is None or run.phase2 is not None:
+            return
+        access_retry = getattr(getattr(self, "crawler", None), "access_retry", None)
+        if access_retry is not None and access_retry.busy():
+            # Listing pages still waiting for an access retry round: Phase 2
+            # is chosen only once every round is done.
             return
         phase2 = run.select_phase2()
         self.logger.info(f"PLP-efficient Phase 2: {json.dumps({k: v for k, v in phase2.items() if k != 'urls'})}")

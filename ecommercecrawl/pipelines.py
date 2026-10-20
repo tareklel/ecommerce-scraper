@@ -16,6 +16,7 @@ import gzip
 import shutil
 import boto3
 from botocore.exceptions import NoCredentialsError
+from ecommercecrawl.access import AccessRetryMiddleware
 from ecommercecrawl.quality_gate import QualityGateParams
 from ecommercecrawl.quality_gate import evaluate_fail_quality
 from ecommercecrawl.quality_gate import load_blank_field_exceptions
@@ -92,7 +93,7 @@ def _uploads_enabled():
     return os.environ.get('APP_ENV') == 'prod' or os.environ.get('S3_UPLOAD_ENABLED') == 'true'
 
 
-def crawler_run_status(exit_reason, quality_gate_status, plp_efficient=None):
+def crawler_run_status(exit_reason, quality_gate_status, plp_efficient=None, extra_degradations=()):
     """
     The crawler's own view of the run status (docs/ounass_plp_efficient_crawl.md,
     "Run status"; applies to all crawls). The verifier Lambda makes the final
@@ -100,7 +101,7 @@ def crawler_run_status(exit_reason, quality_gate_status, plp_efficient=None):
 
     Returns (run_status, failure_reason, degradations).
     """
-    degradations = list((plp_efficient or {}).get("degradations") or [])
+    degradations = list((plp_efficient or {}).get("degradations") or []) + list(extra_degradations)
     if exit_reason != "finished":
         # Ctrl+C, ECS stop, timeout, ...: failed even when its rows are fine.
         return "failed", "aborted", degradations
@@ -455,14 +456,24 @@ class PostCrawlPipeline:
             if block is not None:
                 manifest["plp_efficient"] = block
 
+        # Access layer (ecommercecrawl/access.py), every crawl: per-hostname
+        # outcomes, and a degradation for each hostname that stayed blocked.
+        access_retry = getattr(self.crawler, "access_retry", None)
+        access_degradations = []
+        if isinstance(access_retry, AccessRetryMiddleware):
+            manifest["access"] = access_retry.summary()
+            access_degradations = access_retry.degradations()
+
         run_status, failure_reason, degradations = crawler_run_status(
             reason,
             (self.quality_gate_report or {}).get("status"),
             manifest.get("plp_efficient"),
+            access_degradations,
         )
         manifest["run_status"] = run_status
         manifest["failure_reason"] = failure_reason
         manifest["degradations"] = degradations
+        self._log_run_outcome(spider, manifest)
 
         # add manifest bronze_verification
         manifest["bronze_verification"] = {
@@ -478,6 +489,38 @@ class PostCrawlPipeline:
         with open(manifest_path, 'w', encoding='utf-8') as f:
             json.dump(manifest, f, indent=4)
         spider.logger.info(f"Manifest file created at: {manifest_path}")
+
+    def _log_run_outcome(self, spider, manifest):
+        """
+        End-of-run summary lines for CloudWatch (grep-able; the hook for future
+        alerting). The manifest is the record; these only point at it.
+        """
+        degradations = manifest.get("degradations") or []
+        if degradations:
+            kinds = {}
+            for d in degradations:
+                kind = d.get("kind", "content") if isinstance(d, dict) else "content"
+                kinds[kind] = kinds.get(kind, 0) + 1
+            counts = ", ".join(f"{n} {k}" for k, n in sorted(kinds.items()))
+            lines = [f"RUN DEGRADED run_id={self.run_id} site={self.crawler_name}: {counts} (see manifest)"]
+            for d in degradations:
+                if isinstance(d, dict):
+                    lines.append(f"  {d.get('kind')}: {d.get('scope')}: {d.get('message')}")
+                else:
+                    lines.append(f"  {d}")
+            spider.logger.warning("\n".join(lines))
+        if manifest.get("run_status") == "failed":
+            spider.logger.error(
+                f"RUN FAILED run_id={self.run_id} site={self.crawler_name}: "
+                f"{manifest.get('failure_reason')} (see manifest)")
+        for host, stats in ((manifest.get("access") or {}).get("hosts") or {}).items():
+            if not stats.get("access_failures"):
+                continue
+            kinds = ", ".join(f"{k} {v}" for k, v in sorted(stats["access_failures"].items()))
+            spider.logger.warning(
+                f"ACCESS {host}: {stats['status']}; {stats['gave_up']} of {stats['requests']} requests "
+                f"failed on access after retry rounds, {stats['recovered_in_rounds']} recovered "
+                f"in rounds ({kinds})")
 
     def _build_manifest_stats(self, stats):
         """Builds the stats dictionary for the manifest."""
