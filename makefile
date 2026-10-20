@@ -28,12 +28,12 @@ DOCKER_SECRET_ENV_FLAGS = --env ZYTE_API_KEY --env ZYTE_API_ENABLED --env CRAWLE
 # Optional: override ECS command at runtime (used by ecs-run).
 ECS_RUN_COMMAND ?=
 # Saved test command (previous Terraform default) for quick reuse.
-ECS_TEST_COMMAND = python3 run_crawler.py ounass --env $(APP_ENV) --urls https://www.ounass.ae/api/women/designers/burberry/bags && python3 run_crawler.py level --env $(APP_ENV) --urls https://www.levelshoes.com/women/brands/toteme/bags
+ECS_TEST_COMMAND = python3 run_crawler.py ounass --env $(APP_ENV) --urls https://saudi.ounass.com/api/women/designers/ami/ && python3 run_crawler.py level --env $(APP_ENV) --urls https://www.levelshoes.com/women/brands/toteme/bags
 # Script that renders ECS --overrides JSON from ECS_RUN_COMMAND.
 ECS_OVERRIDES_SCRIPT = scripts/ecs_overrides.py
 
 FF_TEST_URL = https://www.farfetch.com/ae/shopping/women/louis-vuitton-pre-owned/clothing-1/items.aspx
-OUNASS_TEST_URL ?= https://saudi.ounass.com/api/women/designers/ami/bags
+OUNASS_TEST_URL ?= https://saudi.ounass.com/api/women/designers/ami/
 LEVEL_TEST_URL ?= https://www.levelshoes.com/women/brands/miu-miu/bags
 OUNASS_IMAGE_SMOKE_URL ?= https://saudi.ounass.com/shop-safiyaa-finley-peplum-dress-for-women-219174599_2709.html
 LEVEL_IMAGE_SMOKE_URL ?= https://www.levelshoes.com/miu-miu-wander-matelass-satin-mini-bag-blue-satin-women-mini-bags-qmbhpt.html

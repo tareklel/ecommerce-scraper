@@ -2,9 +2,77 @@
 
 **Status: Parts 0–2 done (Part 1 dev only; prod pending); Parts 3–7 not started.**
 
-## ▶ Where we are / next steps (handoff, updated 2026-10-16)
+## ▶ Where we are / next steps (handoff, updated 2026-10-20)
 
 Read this first when resuming.
+
+### ▶ Resume here (stopped 2026-10-20)
+
+**State:** Parts 0–4 and 5a are built and pushed; the live crawler image is
+`987161e` (crawl-unverified/ upload, run status, access retry rounds). The
+verifier Lambda was deployed 2026-10-20 05:36 UTC. Nothing is uncommitted.
+
+**Cloud check of Part 4b (2026-10-20, two ECS runs in dev):**
+- Run `2026-10-20T07-26-01-401` (`www.ounass.ae/api/women/designers/burberry/bags`,
+  an old makefile test URL that now 404s): 0 rows → `run_status failed`,
+  `failure_reason quality`, markers `_FAIL_QUALITY` + `_FAILED`, nothing
+  copied into `crawls/`, run-started record written, `crawl_manifest_raw`
+  day registered for the failed run, `RUN FAILED` in CloudWatch. **Failure
+  path verified.**
+- Run `2026-10-20T07-28-13-690` (`en-saudi.ounass.com/api/women/designers/acler`):
+  Zyte `520 /download/website-ban` on the only listing request; the access
+  layer waited 2 × 15 min and gave up (32 min run). Correct behaviour, but
+  it exposed two labelling gaps (items 3 and 4 below).
+- **Success path (copy into `crawls/` → `_SUCCESS` → data partition) is
+  still unverified in AWS.**
+- Saudi bans are **intermittent**: the same `httpResponseBody` request
+  (`saudi.ounass.com/api/women/designers/tory-burch`) sometimes works and
+  sometimes gets 520 in the Zyte playground too; one request from here got
+  520. Not our request shape, not geolocation.
+
+**Next commit (agreed in principle 2026-10-20, not built):**
+1. **Zyte aggressive retry policy:** `ZYTE_API_RETRY_POLICY =
+   "zyte_api.aggressive_retrying"` (Zyte's documented setting for sites that
+   ban often; retries 520/521 more inside each request). Check on the Zyte
+   usage page that bans aren't billed.
+2. **Retune access rounds for flickering bans:** `ACCESS_RETRY_ROUNDS` 6,
+   `ACCESS_RETRY_COOLDOWN_SECONDS` 300, cap unchanged at 3600.
+3. **`failure_reason: access`:** a run with no rows whose requests were all
+   given up on access must fail as `access`, not `quality` (the
+   access ≠ content principle). Change `pipelines.crawler_run_status` and the
+   verifier (`FAILURE_REASONS` + a `_FAIL_ACCESS` marker), then the user
+   redeploys the verifier: `terraform plan -target=aws_lambda_function.bronze_manifest_verifier -out=verifier.tfplan`.
+4. **Blocked hostname regardless of size:** a hostname where every request
+   was given up on access is `blocked` even under the 5-request minimum
+   (Acler showed `status: ok` with 1 of 1 blocked).
+5. **Registry guard, option (a), awaiting the user's final yes:** startup
+   check (G1) rejects a PLP row with `brand` set or a `/designers/` URL. A
+   listing returns what its URL contains, and only category pages with no
+   brand match what a row claims; otherwise every other product on the
+   page looks new (daily Phase 2 flood) or mismatched (G11). Option (b),
+   brand pages filtered by each entry's breadcrumbs + brand, needs a
+   raw→canonical category map from scraper-pipeline: possible extension,
+   not planned.
+6. Then **re-run the success-path ECS test**, e.g.
+   `make ecs-run APP_ENV=dev ECS_RUN_COMMAND="python3 run_crawler.py ounass --env dev --urls https://saudi.ounass.com/api/women/designers/tory-burch --category bags"`
+   and check: file in `crawl-unverified/` and copied to `crawls/`,
+   `_SUCCESS`, data partition, `run_status`, `access` block,
+   `crawl_started_raw` row (query it once in Athena too).
+   Note: `make ecs-run-test` now uses the brand page
+   `saudi.ounass.com/api/women/designers/ami/` with no `--category`, so it
+   crawls every Ami product page (all categories), not just bags.
+
+**After that: Part 5b (parity)**, as designed in Part 5 below.
+
+**Facts learned 2026-10-20 (keep):**
+- The crawler reads listing pages **only** as `/api/` JSON (`routeType:
+  plp`); a human listing URL returns HTML and is silently ignored. Product
+  pages are HTML with an embedded `window.state`.
+- Ounass no longer serves `/api/.../designers/<brand>/<category>`; brand
+  pages mix all categories. Normal mode handles this with `--category`
+  (filters entries by their breadcrumbs before any product page request).
+- Crawls run on ECS Fargate (no time limit); Lambdas only start tasks,
+  export inputs or verify, so retry cool-downs can't time anything out.
 
 **Done:**
 - Part 0 (parity proof); design, reference doc, drift test. Committed and
@@ -55,8 +123,8 @@ Read this first when resuming.
       failed / degraded / killed runs: `tickets/cicd_pipeline.md`.
    ✅ Rollout done 2026-10-20: verifier deployed, crawler pushed.
 8. ✅ **Part 5a done (2026-10-20)**: access layer, all crawls.
-   **Next: Part 5b** (parity).
-8. **Part 1 step 6 (prod):** only after prod gold and the registry exist;
+   **Next:** the "Resume here" list above, then Part 5b (parity).
+9. **Part 1 step 6 (prod):** only after prod gold and the registry exist;
    see `../scraper-pipeline/ticket/migrate-validated-dev-to-prod.md`. Apply
    prod export resources **targeted**.
 
@@ -931,6 +999,8 @@ explicit approval under `context/AGENTS.md`).
 | 2026-10-19 | **Access errors ≠ content errors.** Ounass blocking is hostname-wide (Zyte "Website Ban", 429/403, repeated 5xx/timeouts) and must never count as a parity mismatch, a missing product, a field mismatch or any content failure. The crawler tracks access failures per hostname and reports them separately. Parity (G9) judges content only: blocked comparisons are excluded, and "inconclusive because blocked" is dropped as a parity case. Built in Part 5. |
 | 2026-10-19 | Parity (G9) redesign under discussion: a fixed "2 confirmed mismatches stops the run" is too blunt; re-check must re-fetch both the listing and the product page (a product-page-only re-check can't clear a genuine price change). |
 | 2026-10-20 | **Part 5 design agreed.** 5a, all crawls: access retry rounds after a cool-down (2 × 900 s, capped at 3600 s), per-hostname `access` block, structured `degradations` (`kind` content / access), `RUN DEGRADED` / `ACCESS` log lines. 5b parity: per hostname, ≥ 20% confirmed mismatches (min 2) of ≥ 10 usable comparisons fails that hostname; re-check re-fetches listing and product page; blocked hostnames borrow the checked hostnames' verdict; nothing checkable → that day's listing rows dropped and products held back (access); rows held per hostname until the verdict; no whole-run stop. Replaces the 2026-10-04 parity entry. Crawls run on ECS Fargate (no time limit), so cool-downs are safe. |
+| 2026-10-20 | Saudi Zyte bans are intermittent (same `httpResponseBody` request alternates between success and 520, playground included). Response: Zyte aggressive retry policy + more, shorter access retry rounds (6 × 300 s, cap 3600 s). A run that got nothing because of blocking must fail as `access`, not `quality`. Not built yet (see "Resume here"). |
+| 2026-10-20 | Brand field: only category pages with no brand match what a registry row claims (Ounass has no brand+category API listing; brand pages mix categories). Proposed guard (a): reject rows with a brand or a `/designers/` URL at startup; brand-page support (b) via breadcrumb filtering is a possible extension. Awaiting the user's final yes on (a). |
 
 ## Open Questions
 

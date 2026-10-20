@@ -1,5 +1,10 @@
 # Memory
 
+## 2026-10-20 - Cloud check of Part 4b; work stopped for the day
+- Two dev ECS runs: a 404 test URL verified the failure path end to end (failed/quality, markers, no publish, manifest registered, run-started record, `RUN FAILED` log); an Acler en-saudi run was banned by Zyte (520) through both retry rounds. Success path still unverified in AWS.
+- Saudi bans are intermittent (playground too). Agreed next commit, not built: Zyte aggressive retry policy, 6 × 300 s rounds, `failure_reason: access`, blocked-host fix, registry brand guard (pending yes), then a success-path ECS test. Full list in the ticket's "Resume here".
+- `ECS_TEST_COMMAND` / `OUNASS_TEST_URL` now point at `saudi.ounass.com/api/women/designers/ami/` (the user's change).
+
 ## 2026-10-20 - Part 5a: access layer for all crawls
 - Verifier deployed (05:36 UTC) and the crawl-unverified/ crawler change pushed.
 - New `ecommercecrawl/access.py`: `AccessRetryMiddleware` (priority 540) sets access failures aside after normal retries (`AccessDeferred`) and re-sends them after a cool-down (`ACCESS_RETRY_ROUNDS` 2 × 900 s, cap 3600 s); per-hostname `access` manifest block; blocked hostnames become `kind = access` degradations.
