@@ -47,8 +47,8 @@ prices don't change by exit country. This should make the success-path test
    `ACCESS_RETRY_COOLDOWN_SECONDS` 300, cap unchanged at 3600.
 3. ✅ **`failure_reason: access`, built 2026-10-21:** no rows + requests
    given up on access → `failed / access`, `_FAIL_ACCESS` only (crawler
-   `crawler_run_status`, verifier `FAILURE_REASONS`). **Verifier redeploy
-   needed** (user): `terraform plan -target=aws_lambda_function.bronze_manifest_verifier -out=verifier.tfplan`.
+   `crawler_run_status`, verifier `FAILURE_REASONS`). Verifier deployed
+   2026-10-21 14:29 UTC (code hash matches the local build).
 4. ✅ **Blocked hostname regardless of size, built 2026-10-21:** a
    hostname that lost every request is `blocked`.
 4b. ✅ **Lost listing page degrades the run, built 2026-10-21** (all
