@@ -1,5 +1,8 @@
 # Memory
 
+## 2026-10-21 - Part 4b success path verified in AWS
+- Dev ECS run `2026-10-21T14-27-38-056` (Saudi Tory Burch bags via Zyte `TR`): 137/137 requests 200, 126 rows, published from `crawl-unverified/` into `crawls/`, `_SUCCESS`, partitions registered, `run_status success`. Athena returns the 126 rows and the `crawl_started_raw` records. The Türkiye routing fixed Saudi access.
+
 ## 2026-10-21 - Lost listing pages degrade the run
 - `access.LISTING_META_KEY`: a flagged listing request given up on access adds a `kind: access` degradation naming the URL, even when its hostname isn't blocked. Ounass normal mode flags its `/api/` requests; PLP-efficient listings aren't flagged (G3 covers them).
 - Degraded runs still publish everything they wrote; only failed runs stay out of raw. Level Shoes listing fetches (plain `requests`) bypass the access layer: follow-up in the ticket.

@@ -61,7 +61,16 @@ prices don't change by exit country. This should make the success-path test
    Brand-page support (b) is recorded as a possible extension (reference
    doc, section 10); `plp_covers_pdp`'s brand rule is kept for it. The
    current seed (4 category rows, brand blank) passes.
-6. Then **re-run the success-path ECS test**, e.g.
+6. ✅ **Success path verified in AWS, 2026-10-21:** dev ECS run
+   `2026-10-21T14-27-38-056` (`saudi.ounass.com/api/women/designers/tory-burch
+   --category bags`, Saudi via Zyte `TR`): 137 requests, all 200, no access
+   failures; 126 rows; file in `crawl-unverified/` copied to `crawls/`,
+   `_SUCCESS`, both Glue partitions registered; manifest `run_status
+   success`, `verification.data_source unverified`. Athena: 126 rows in
+   `bronze_ounass_raw` for the run (`plp_extract_flag = 0` on all), and all
+   three runs of 2026-10-20/21 in `crawl_started_raw`. **Part 4b is fully
+   verified.** The command used (kept for reference):
+   ~~re-run the success-path ECS test~~, e.g.
    `make ecs-run APP_ENV=dev ECS_RUN_COMMAND="python3 run_crawler.py ounass --env dev --urls https://saudi.ounass.com/api/women/designers/tory-burch --category bags"`
    and check: file in `crawl-unverified/` and copied to `crawls/`,
    `_SUCCESS`, data partition, `run_status`, `access` block,
