@@ -1,5 +1,10 @@
 # Memory
 
+## 2026-10-21 - Registry guard: category listings with no brand only
+- G1 (`plp_efficient._page_kind_errors`) rejects PLP rows with a brand or a `/designers/` URL: a listing returns what its URL contains, and only category pages with no brand match what a row claims (otherwise a daily Phase 2 flood or G11).
+- Brand-page support (filter entries by breadcrumbs + brand; needs a raw→canonical map) recorded as a possible extension. `plp_covers_pdp`'s brand rule kept for it. scraper-pipeline's export doc updated in the same change.
+- 2 new tests replace the brand-scoped coverage test; suite 424 passed.
+
 ## 2026-10-20 - Saudi Ounass via Zyte Türkiye exits
 - `CRAWLER_API_ZYTE_GEOLOCATION_BY_HOST` (settings.py) routes `saudi.ounass.com`, `en-saudi.ounass.com`, `ar.ounass.sa` through Zyte geolocation `TR`; it wins over the global `CRAWLER_API_ZYTE_GEOLOCATION`. Other hosts keep Zyte's default.
 - Evidence: the same Tory Burch listing request was banned (520) 5/5 times on default routing and returned 200 (48 hits, SAR) via `TR`. The user confirmed prices don't change by exit country.

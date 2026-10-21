@@ -371,12 +371,34 @@ def _host_errors(row):
     return errors
 
 
+def _page_kind_errors(row):
+    """
+    G1 page-kind guard (2026-10-20). A listing returns whatever its URL
+    contains, whatever the row says; only a category page with no brand
+    shows exactly the products the row claims. Ounass no longer serves
+    brand + category listings, and brand pages (/designers/) mix every
+    category, so on any other combination most of the page would look "new"
+    (a daily Phase 2 product-page flood) or mismatched (G11). Brand-page
+    support would need entry-level filtering by breadcrumbs + brand
+    (ticket, "Brand pages"); until then such rows are rejected.
+    """
+    errors = []
+    if row.get("brand"):
+        errors.append("brand must be blank: category listings show every brand "
+                      "(brand-scoped rows are not supported yet)")
+    if "/designers/" in (urlparse(row.get("url") or "").path or ""):
+        errors.append("url is a brand (/designers/) page, which mixes every category; "
+                      "use a category listing")
+    return errors
+
+
 def _check_plp_rows(rows, vocab, config, result):
     seen_urls = set()
     for number, raw in enumerate(rows, start=1):
         row = normalize_row(raw)
         problems = [Problem("G1", SKIP, e, "plp_list", number)
                     for e in _canonical_errors(row, vocab, config.site)]
+        problems += [Problem("G1", SKIP, e, "plp_list", number) for e in _page_kind_errors(row)]
         problems += [Problem("G7", SKIP, e, "plp_list", number) for e in _host_errors(row)]
         if row.get("url") in seen_urls:
             problems.append(Problem("G1", SKIP, "duplicate url", "plp_list", number))

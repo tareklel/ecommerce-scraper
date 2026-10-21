@@ -53,14 +53,11 @@ prices don't change by exit country. This should make the success-path test
 4. **Blocked hostname regardless of size:** a hostname where every request
    was given up on access is `blocked` even under the 5-request minimum
    (Acler showed `status: ok` with 1 of 1 blocked).
-5. **Registry guard, option (a), awaiting the user's final yes:** startup
-   check (G1) rejects a PLP row with `brand` set or a `/designers/` URL. A
-   listing returns what its URL contains, and only category pages with no
-   brand match what a row claims; otherwise every other product on the
-   page looks new (daily Phase 2 flood) or mismatched (G11). Option (b),
-   brand pages filtered by each entry's breadcrumbs + brand, needs a
-   raw→canonical category map from scraper-pipeline: possible extension,
-   not planned.
+5. ✅ **Registry guard (a), done 2026-10-21:** G1 rejects a PLP row with
+   `brand` set or a `/designers/` URL (`plp_efficient._page_kind_errors`).
+   Brand-page support (b) is recorded as a possible extension (reference
+   doc, section 10); `plp_covers_pdp`'s brand rule is kept for it. The
+   current seed (4 category rows, brand blank) passes.
 6. Then **re-run the success-path ECS test**, e.g.
    `make ecs-run APP_ENV=dev ECS_RUN_COMMAND="python3 run_crawler.py ounass --env dev --urls https://saudi.ounass.com/api/women/designers/tory-burch --category bags"`
    and check: file in `crawl-unverified/` and copied to `crawls/`,
@@ -1009,6 +1006,7 @@ explicit approval under `context/AGENTS.md`).
 | 2026-10-20 | **Part 5 design agreed.** 5a, all crawls: access retry rounds after a cool-down (2 × 900 s, capped at 3600 s), per-hostname `access` block, structured `degradations` (`kind` content / access), `RUN DEGRADED` / `ACCESS` log lines. 5b parity: per hostname, ≥ 20% confirmed mismatches (min 2) of ≥ 10 usable comparisons fails that hostname; re-check re-fetches listing and product page; blocked hostnames borrow the checked hostnames' verdict; nothing checkable → that day's listing rows dropped and products held back (access); rows held per hostname until the verdict; no whole-run stop. Replaces the 2026-10-04 parity entry. Crawls run on ECS Fargate (no time limit), so cool-downs are safe. |
 | 2026-10-20 | Saudi Zyte bans are intermittent (same `httpResponseBody` request alternates between success and 520, playground included). Response: Zyte aggressive retry policy + more, shorter access retry rounds (6 × 300 s, cap 3600 s). A run that got nothing because of blocking must fail as `access`, not `quality`. Not built yet (see "Resume here"). |
 | 2026-10-20 | Brand field: only category pages with no brand match what a registry row claims (Ounass has no brand+category API listing; brand pages mix categories). Proposed guard (a): reject rows with a brand or a `/designers/` URL at startup; brand-page support (b) via breadcrumb filtering is a possible extension. Awaiting the user's final yes on (a). |
+| 2026-10-21 | **Registry guard (a) agreed and built:** G1 rejects rows with a brand or a `/designers/` URL; category listings with no brand only. Brand pages (b): possible extension, not planned. Replaces the 2026-10-20 "awaiting yes" entry. scraper-pipeline's export doc updated to match. |
 
 ## Open Questions
 

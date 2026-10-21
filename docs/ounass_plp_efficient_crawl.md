@@ -80,8 +80,18 @@ https://saudi.ounass.com/api/women/bags/tote-bags,ounass,sa,ar,women,bags,tote_b
 - `url` must be the `/api/...` endpoint. The human-facing page is HTML the
   spider can't parse. The hostname must match `country` + `language`
   (`ounass_constants.TLD_LANGUAGE_MAP`).
-- `gender`, `category`, `subcategory` are **required**; `brand` is optional
-  (null = any brand).
+- `gender`, `category`, `subcategory` are **required**. `brand` must be
+  **blank**, and the URL must be a **category** listing, not a brand page
+  (`/designers/`): rejected by G1 since 2026-10-21.
+- Why: a listing returns whatever its URL contains, whatever the row says.
+  Ounass no longer serves brand + category listings
+  (`/api/.../designers/<brand>/<category>` is gone), and brand pages mix all
+  of a brand's categories. Only a category page with no brand shows exactly
+  the products the row claims; with any other combination the rest of the
+  page looks **new** (product pages crawled in Phase 2 every day, under
+  the 10,000 ceiling) or **mismatched** (G11 holds the listing back). The
+  `brand` column stays in the template for possible brand-page support
+  (section 10).
 - Category **and** subcategory are required because canonical categories are
   broader than Ounass listings. Canonical `bags` includes Ounass
   `Accessories / Small Leather Goods`, which never appears on `women/bags`.
@@ -342,7 +352,7 @@ the last round).
 
 | # | Check | Failure scope | Setting(s) (current value) |
 |---|---|---|---|
-| G1 | PLP row canonical; gender/category/subcategory set | Skip that PLP, hold back its products. Too many bad rows → stop run. | `OUNASS_PLP_EFFICIENT_MAX_BAD_PLP_ROWS_RATIO` (0.25) |
+| G1 | PLP row canonical; gender/category/subcategory set; brand blank and not a `/designers/` URL (category listings only, section 2) | Skip that PLP, hold back its products. Too many bad rows → stop run. | `OUNASS_PLP_EFFICIENT_MAX_BAD_PLP_ROWS_RATIO` (0.25) |
 | G2 | PLP list and PDP list present, all columns | Stop run | — |
 | G3 | Every page of a PLP fetched | After the sweep: that PLP's leftovers held back (rows already written stay) | — |
 | G4 | Known-but-unseen products per PLP (excluding ones gold has as sold out) | After the sweep: over the cap → that PLP's leftovers held back (rows already written stay) | `OUNASS_PLP_EFFICIENT_MISSING_RATIO_CAP` (0.25) |
@@ -644,6 +654,14 @@ ago) and STALE (5 products last crawled 2026-08-08); exit 0.
   go through Zyte's Türkiye exits (`CRAWLER_API_ZYTE_GEOLOCATION_BY_HOST` in
   `settings.py`): the same listing that was banned 5/5 times on default
   routing returned 200 via `TR`, prices still SAR.
+- **Category listings only:** brand pages and brand-scoped rows are
+  rejected (section 2). To support them, the sweep would have to ignore
+  entries outside the row's scope using each entry's breadcrumbs and brand.
+  Breadcrumbs carry Ounass's raw category (`tote-bags`), not the canonical
+  one (`tote_bags`), so that needs a raw→canonical map exported from
+  scraper-pipeline. Worth it only to track a few brands without sweeping
+  whole categories. The brand rule in matching (`plp_covers_pdp`) is kept
+  for that.
 - **Exact-half discount rounding** (e.g. 32.5%) is assumed to round up;
   unverified against Ounass.
 
@@ -656,6 +674,7 @@ ago) and STALE (5 products last crawled 2026-08-08); exit 0.
 | 2026-10-05 | Doc created from the agreed design (all sections planned) | — |
 | 2026-10-13 | PDP list scoped to active PLP list rows; `is_active` column added to the PLP list | — |
 | 2026-10-16 | **Part 2 built:** startup checks (G1, G2, G7, G8, G10, stale-crawl), settings, `make preflight-ounass-plp-efficient` (+ `-probe`). Verified against the dev export | — |
+| 2026-10-21 | G1 rejects listing rows with a brand or a `/designers/` URL: only category pages with no brand match what a row claims (otherwise Phase 2 flood or G11). Brand-page support recorded as a possible extension (section 10) | — |
 | 2026-10-20 | Saudi Ounass hostnames routed through Zyte geolocation `TR` (`CRAWLER_API_ZYTE_GEOLOCATION_BY_HOST`), after default routing was banned 5/5 times | — |
 | 2026-10-20 | **Part 5a built (all crawls):** access retry rounds (`AccessRetryMiddleware`), `access` manifest block, structured `degradations`, `RUN DEGRADED` / `RUN FAILED` / `ACCESS` log lines; G3 now tells access from content, and counts pages that never came back; listing pages routed by request | — |
 | 2026-10-20 | Part 5 design recorded: access retry rounds for all crawls (5a), structured degradations + `access` block + `RUN DEGRADED` / `ACCESS` log lines; parity (5b) per hostname, 20% / min 2, re-check re-fetches listing and product page, rows held until verdict, no whole-run stop, unverifiable → rows dropped (access). Parity added to the section 3 flow. `…_PARITY_MAX_MISMATCHES` replaced by `…_PARITY_MAX_MISMATCH_RATIO` | — |

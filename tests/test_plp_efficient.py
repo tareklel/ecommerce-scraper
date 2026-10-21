@@ -123,7 +123,7 @@ def test_g2_vocabulary_missing_key_stops():
     {"subcategory": "tote-bags"},     # not canonical
     {"subcategory": ""},              # required
     {"gender": ""},                   # required
-    {"brand": "unknown_brand"},       # brand must be canonical when set
+    {"brand": "unknown_brand"},       # brand not allowed (and not canonical)
     {"site": "level-shoes"},          # wrong site
 ])
 def test_g1_invalid_listing_row_is_skipped(override):
@@ -260,10 +260,28 @@ def test_product_covered_by_no_listing_goes_to_phase2():
     assert [p["portal_itemid"] for p in result.uncovered_pdp_rows] == ["9"]
 
 
-def test_brand_scoped_listing_covers_only_that_brand():
-    rows = [plp(brand="brand_a")]
-    result = run(make_inputs(plp_rows=rows, pdp_rows=[pdp("1"), pdp("2", brand="brand_b")]))
-    assert [p["portal_itemid"] for p in result.uncovered_pdp_rows] == ["2"]
+@pytest.mark.parametrize("override, message", [
+    ({"brand": "brand_a"}, "brand must be blank"),
+    ({"url": "https://saudi.ounass.com/api/women/designers/acler"}, "/designers/"),
+])
+def test_g1_rejects_brand_rows_and_brand_pages(override, message):
+    # A listing returns what its URL contains; only category pages with no
+    # brand match what a row claims (otherwise: Phase 2 flood or G11).
+    rows = [plp(), plp(url="https://saudi.ounass.com/api/women/bags/shoulder-bags",
+                       subcategory="shoulder_bags"),
+            plp(**{"url": "https://saudi.ounass.com/api/z", **override}),
+            plp(url="https://saudi.ounass.com/api/y", subcategory="shoulder_bags")]
+    result = run(make_inputs(plp_rows=rows))
+    g1 = [p for p in result.problems if p.check == "G1" and p.severity == pe.SKIP]
+    assert any(message in p.message for p in g1)
+    assert len(result.skipped_plp_rows) == 1
+
+
+def test_brand_matching_rule_kept_for_future_brand_pages():
+    # Dormant while the guard rejects brand rows; kept for brand-page support.
+    listing = pe.normalize_row(plp(brand="brand_a"))
+    assert pe.plp_covers_pdp(listing, pe.normalize_row(pdp("1")))
+    assert not pe.plp_covers_pdp(listing, pe.normalize_row(pdp("2", brand="brand_b")))
 
 
 def test_too_many_uncovered_products_warns_about_phase2_ceiling():
