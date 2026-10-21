@@ -183,9 +183,21 @@ def test_blocked_host_is_reported_with_an_access_degradation():
     assert degradation["kind"] == "access" and degradation["scope"] == "saudi.ounass.com"
 
 
-def test_few_failures_on_a_small_host_are_not_blocked():
+def test_small_host_partly_failing_is_not_blocked():
     mw = _middleware(ACCESS_RETRY_ROUNDS=0)
-    request = scrapy.Request(URL)
-    mw.process_exception(request, RequestError(520), spider=None)   # 1 of 1, below min 5
+    for i in range(3):
+        request = scrapy.Request(f"{URL}?p={i}")
+        if i == 0:
+            mw.process_exception(request, RequestError(520), spider=None)   # 1 of 3, below min 5
+        else:
+            mw.process_response(request, _response(request, 200), spider=None)
     assert mw.summary()["hosts"]["saudi.ounass.com"]["status"] == "ok"
     assert mw.degradations() == []
+
+
+def test_host_with_every_request_lost_is_blocked_whatever_its_size():
+    # The 2026-10-20 Acler run: 1 of 1 request banned, reported "ok" before.
+    mw = _middleware(ACCESS_RETRY_ROUNDS=0)
+    mw.process_exception(scrapy.Request(URL), RequestError(520), spider=None)
+    assert mw.summary()["hosts"]["saudi.ounass.com"]["status"] == "blocked"
+    assert mw.degradations()[0]["kind"] == "access"

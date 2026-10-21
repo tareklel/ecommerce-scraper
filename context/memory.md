@@ -1,5 +1,10 @@
 # Memory
 
+## 2026-10-21 - failure_reason access; blocked-host fix
+- A run with no rows whose requests were given up on access fails as `access` (`_FAIL_ACCESS`), not `quality`, in both `pipelines.crawler_run_status` and the verifier; no extra quality/verification markers for it.
+- A hostname that lost every request is `blocked` even under the 5-request minimum (the Acler run showed 1/1 blocked as "ok").
+- 6 new tests; suite 430 passed. Verifier redeploy needed for the new marker.
+
 ## 2026-10-21 - Registry guard: category listings with no brand only
 - G1 (`plp_efficient._page_kind_errors`) rejects PLP rows with a brand or a `/designers/` URL: a listing returns what its URL contains, and only category pages with no brand match what a row claims (otherwise a daily Phase 2 flood or G11).
 - Brand-page support (filter entries by breadcrumbs + brand; needs a raw→canonical map) recorded as a possible extension. `plp_covers_pdp`'s brand rule kept for it. scraper-pipeline's export doc updated in the same change.

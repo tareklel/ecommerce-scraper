@@ -45,14 +45,12 @@ prices don't change by exit country. This should make the success-path test
    usage page that bans aren't billed.
 2. **Retune access rounds for flickering bans:** `ACCESS_RETRY_ROUNDS` 6,
    `ACCESS_RETRY_COOLDOWN_SECONDS` 300, cap unchanged at 3600.
-3. **`failure_reason: access`:** a run with no rows whose requests were all
-   given up on access must fail as `access`, not `quality` (the
-   access ≠ content principle). Change `pipelines.crawler_run_status` and the
-   verifier (`FAILURE_REASONS` + a `_FAIL_ACCESS` marker), then the user
-   redeploys the verifier: `terraform plan -target=aws_lambda_function.bronze_manifest_verifier -out=verifier.tfplan`.
-4. **Blocked hostname regardless of size:** a hostname where every request
-   was given up on access is `blocked` even under the 5-request minimum
-   (Acler showed `status: ok` with 1 of 1 blocked).
+3. ✅ **`failure_reason: access`, built 2026-10-21:** no rows + requests
+   given up on access → `failed / access`, `_FAIL_ACCESS` only (crawler
+   `crawler_run_status`, verifier `FAILURE_REASONS`). **Verifier redeploy
+   needed** (user): `terraform plan -target=aws_lambda_function.bronze_manifest_verifier -out=verifier.tfplan`.
+4. ✅ **Blocked hostname regardless of size, built 2026-10-21:** a
+   hostname that lost every request is `blocked`.
 5. ✅ **Registry guard (a), done 2026-10-21:** G1 rejects a PLP row with
    `brand` set or a `/designers/` URL (`plp_efficient._page_kind_errors`).
    Brand-page support (b) is recorded as a possible extension (reference

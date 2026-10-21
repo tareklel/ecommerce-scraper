@@ -93,7 +93,14 @@ def _uploads_enabled():
     return os.environ.get('APP_ENV') == 'prod' or os.environ.get('S3_UPLOAD_ENABLED') == 'true'
 
 
-def crawler_run_status(exit_reason, quality_gate_status, plp_efficient=None, extra_degradations=()):
+def access_gave_up(access):
+    """Requests given up on access after every retry round, all hostnames."""
+    hosts = (access or {}).get("hosts") or {}
+    return sum(int(h.get("gave_up") or 0) for h in hosts.values())
+
+
+def crawler_run_status(exit_reason, quality_gate_status, plp_efficient=None, extra_degradations=(),
+                       rows=None, access=None):
     """
     The crawler's own view of the run status (docs/ounass_plp_efficient_crawl.md,
     "Run status"; applies to all crawls). The verifier Lambda makes the final
@@ -107,6 +114,10 @@ def crawler_run_status(exit_reason, quality_gate_status, plp_efficient=None, ext
         return "failed", "aborted", degradations
     if (plp_efficient or {}).get("startup_stopped"):
         return "failed", "startup_check", degradations
+    if not rows and access_gave_up(access):
+        # Nothing written and blocking lost requests: an access failure, not
+        # a content one (access errors are never content errors).
+        return "failed", "access", degradations
     if quality_gate_status != "pass":
         return "failed", "quality", degradations
     return ("degraded" if degradations else "success"), None, degradations
@@ -469,6 +480,8 @@ class PostCrawlPipeline:
             (self.quality_gate_report or {}).get("status"),
             manifest.get("plp_efficient"),
             access_degradations,
+            rows=self.items_written,
+            access=manifest.get("access"),
         )
         manifest["run_status"] = run_status
         manifest["failure_reason"] = failure_reason

@@ -109,13 +109,18 @@ class AccessTracker:
         """
         One entry per hostname. `requests` counts final outcomes (a request
         retried in rounds counts once); `gave_up` = access failures after the
-        last round. status "blocked" when gave_up / requests >= blocked_ratio.
+        last round. status "blocked" when every request was given up, or when
+        gave_up / requests >= blocked_ratio with at least min_requests.
         """
         out = {}
         for host, stats in sorted(self.hosts.items()):
             requests = stats["requests"]
-            blocked = (requests >= min_requests and requests
-                       and stats["gave_up"] / requests >= blocked_ratio)
+            gave_up = stats["gave_up"]
+            # Blocked: every request lost to access (any size), or a large
+            # enough share of a big enough sample.
+            blocked = bool(gave_up) and (
+                gave_up == requests
+                or (requests >= min_requests and gave_up / requests >= blocked_ratio))
             out[host] = {
                 "requests": requests,
                 "succeeded": stats["succeeded"],

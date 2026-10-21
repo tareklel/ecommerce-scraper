@@ -459,3 +459,18 @@ def test_manifest_access_block_and_log_lines(pipeline_setup, tmp_path):
     warnings = [str(c.args[0]) for c in spider.logger.warning.call_args_list]
     assert any(w.startswith("RUN DEGRADED") and "1 access" in w for w in warnings)
     assert any(w.startswith("ACCESS en-saudi.ounass.com: blocked") for w in warnings)
+
+
+
+BLOCKED_ACCESS = {"hosts": {"en-saudi.ounass.com": {"requests": 1, "gave_up": 1}}}
+
+
+@pytest.mark.parametrize("rows, access, expected", [
+    (0, BLOCKED_ACCESS, ("failed", "access")),        # nothing written, blocking lost requests
+    (0, {"hosts": {}}, ("failed", "quality")),        # nothing written, no blocking: content
+    (5, BLOCKED_ACCESS, ("success", None)),           # rows written: gate decides as usual
+])
+def test_crawler_run_status_tells_access_from_quality(rows, access, expected):
+    from ecommercecrawl.pipelines import crawler_run_status
+    gate = "pass" if rows else None
+    assert crawler_run_status("finished", gate, None, (), rows=rows, access=access)[:2] == expected

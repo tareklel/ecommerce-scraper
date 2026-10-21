@@ -305,9 +305,9 @@ happen back to back, while the block is still on. So:
    `ACCESS_RETRY_COOLDOWN_SECONDS` and re-sends everything set aside: one
    round. Up to `ACCESS_RETRY_ROUNDS` rounds, stopping early once the total
    wait reaches `ACCESS_RETRY_MAX_TOTAL_SECONDS`.
-3. What still fails is given up. A hostname where at least
-   `ACCESS_BLOCKED_HOST_RATIO` of requests (min 5) ultimately failed on
-   access is reported **blocked**.
+3. What still fails is given up. A hostname is reported **blocked** when
+   every one of its requests was given up on access (any number), or when
+   at least `ACCESS_BLOCKED_HOST_RATIO` of them were (min 5 requests).
 
 In this mode the order after the sweep is: retry rounds → parity verdict →
 Phase 2 (whose product pages get their own rounds at the end). Crawls run as
@@ -377,7 +377,7 @@ Other settings:
 | `ACCESS_RETRY_ROUNDS` | `2` | Access retry rounds after the normal retries; 0 = off (all crawls) |
 | `ACCESS_RETRY_COOLDOWN_SECONDS` | `900` | Wait before each round |
 | `ACCESS_RETRY_MAX_TOTAL_SECONDS` | `3600` | Cap on total cool-down per run |
-| `ACCESS_BLOCKED_HOST_RATIO` | `0.5` | Share of a hostname's requests failing on access (min 5) to report it blocked |
+| `ACCESS_BLOCKED_HOST_RATIO` | `0.5` | Share of a hostname's requests failing on access (min 5) to report it blocked; a hostname that lost every request is blocked regardless |
 
 Settings live in `ecommercecrawl/settings.py`; thresholds can be overridden
 with environment variables of the same name. The startup checks read them
@@ -511,7 +511,7 @@ skip anything on purpose?**
 |---|---|---|---|
 | `success` | Reached its own end, nothing skipped | `_SUCCESS` | yes |
 | `degraded` | Reached its own end, but a guardrail skipped work (a listing skipped or held back, products quarantined or held back, Phase 2 skipped by the ceiling). The manifest's `degradations` names each one. | `_SUCCESS` | yes |
-| `failed` | Rows can't be trusted or the run didn't finish. `failure_reason`: `aborted` (closed for any reason other than `finished`: Ctrl+C, ECS stop, timeout), `startup_check` (stopped before any request), `quality` (quality gate failed), `verification` (file check failed) | a failure marker per reason | **no** |
+| `failed` | Rows can't be trusted or the run didn't finish. `failure_reason`: `aborted` (closed for any reason other than `finished`: Ctrl+C, ECS stop, timeout), `startup_check` (stopped before any request), `access` (no rows written and requests were lost to blocking after every retry round, 2026-10-21), `quality` (quality gate failed), `verification` (file check failed) | a failure marker per reason | **no** |
 | `killed` | A "run started" record with no manifest (hard kill, out-of-memory) | none | no |
 
 An aborted run is **failed**, never "partly saved", like an edit abandoned
@@ -533,7 +533,9 @@ writes `_SUCCESS`. So the crawler doesn't upload there:
    the day for dbt. **Fail**: the file stays in `crawl-unverified/` for
    inspection, and one marker per reason is written under
    `crawls/markers/<site>/<dt>/<run_id>/`: `_FAIL_ABORTED`,
-   `_FAIL_STARTUP_CHECK`, `_FAIL_QUALITY`, `_FAILED` (verification).
+   `_FAIL_STARTUP_CHECK`, `_FAIL_ACCESS`, `_FAIL_QUALITY`, `_FAILED`
+   (verification). A startup-stopped or fully blocked run has no data file
+   by design, so it gets only its own marker.
 4. Every verified manifest, failed ones included, lands in
    `crawl_manifest_raw` (the day is registered for every run), with
    `run_status`, `failure_reason`, `degradations` and `verification`
@@ -625,6 +627,7 @@ ago) and STALE (5 products last crawled 2026-08-08); exit 0.
 
 | Symptom | Likely cause | Check |
 |---|---|---|
+| Run failed with `failure_reason: access` | Nothing written because the site refused us through every retry round | Manifest `access` block (which hostnames, which errors); Saudi routing (`CRAWLER_API_ZYTE_GEOLOCATION_BY_HOST`); re-run later |
 | A run's rows aren't in Athena | Run failed: data left in `crawl-unverified/` | `crawl_manifest_raw` `run_status` / `failure_reason`; markers under `crawls/markers/<site>/<dt>/<run_id>/` |
 | Run stopped at startup | Export Lambda failed, or G2 / G8 / G1 or G10 over threshold | Run preflight: it lists every failed check with the offending rows. For an export failure, check the Lambda's logs in scraper-pipeline. |
 | Run stopped on G8 | gold hasn't been rebuilt for 3+ days | Check scraper-pipeline's dbt runs |
@@ -674,6 +677,7 @@ ago) and STALE (5 products last crawled 2026-08-08); exit 0.
 | 2026-10-05 | Doc created from the agreed design (all sections planned) | — |
 | 2026-10-13 | PDP list scoped to active PLP list rows; `is_active` column added to the PLP list | — |
 | 2026-10-16 | **Part 2 built:** startup checks (G1, G2, G7, G8, G10, stale-crawl), settings, `make preflight-ounass-plp-efficient` (+ `-probe`). Verified against the dev export | — |
+| 2026-10-21 | New `failure_reason: access` (`_FAIL_ACCESS`): a run with no rows whose requests were lost to blocking fails as access, not quality, in the crawler and the verifier. A hostname that lost every request is `blocked` regardless of the 5-request minimum | — |
 | 2026-10-21 | G1 rejects listing rows with a brand or a `/designers/` URL: only category pages with no brand match what a row claims (otherwise Phase 2 flood or G11). Brand-page support recorded as a possible extension (section 10) | — |
 | 2026-10-20 | Saudi Ounass hostnames routed through Zyte geolocation `TR` (`CRAWLER_API_ZYTE_GEOLOCATION_BY_HOST`), after default routing was banned 5/5 times | — |
 | 2026-10-20 | **Part 5a built (all crawls):** access retry rounds (`AccessRetryMiddleware`), `access` manifest block, structured `degradations`, `RUN DEGRADED` / `RUN FAILED` / `ACCESS` log lines; G3 now tells access from content, and counts pages that never came back; listing pages routed by request | — |

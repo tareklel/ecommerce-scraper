@@ -314,3 +314,29 @@ def test_legacy_upload_location_still_verifies_without_copy():
     assert fake_s3.copy_calls == []
     assert result["status"] == "ok"
     assert inner["verification"]["data_source"] == "legacy"
+
+
+
+def test_fully_blocked_run_fails_as_access_with_only_the_access_marker():
+    # 2026-10-20 Acler run: banned through every retry round, 0 rows, no file.
+    bucket = "test-bucket"
+    manifest_key = "bronze/dev/crawls/metadata/ounass/2026-03-03/run123/manifest.json"
+    manifest = {"exit_reason": "finished", "artifacts": {"rows": 0}, "quality_gate": None,
+                "access": {"hosts": {"en-saudi.ounass.com": {"requests": 1, "gave_up": 1}}}}
+    _, fake_s3, result, inner, _ = _run(
+        (bucket, manifest_key, {(bucket, manifest_key): json.dumps(manifest).encode("utf-8")}))
+    keys = [k for k in _put_keys(fake_s3) if "/markers/" in k]
+    assert keys == [f"{MARKERS}/_FAIL_ACCESS"]
+    assert inner["run_status"] == "failed" and inner["failure_reason"] == "access"
+    assert "en-saudi.ounass.com" in inner["verification"]["failure_reason"]
+
+
+def test_empty_run_without_blocking_is_still_a_quality_failure():
+    bucket = "test-bucket"
+    manifest_key = "bronze/dev/crawls/metadata/ounass/2026-03-03/run123/manifest.json"
+    manifest = {"exit_reason": "finished", "artifacts": {"rows": 0}, "quality_gate": None,
+                "access": {"hosts": {"www.ounass.ae": {"requests": 1, "gave_up": 0}}}}
+    _, fake_s3, _, inner, _ = _run(
+        (bucket, manifest_key, {(bucket, manifest_key): json.dumps(manifest).encode("utf-8")}))
+    assert inner["failure_reason"] == "quality"
+    assert f"{MARKERS}/_FAIL_QUALITY" in _put_keys(fake_s3)

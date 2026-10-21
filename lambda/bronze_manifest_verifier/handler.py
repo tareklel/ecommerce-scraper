@@ -34,6 +34,7 @@ MARKER_FAILED = "_FAILED"
 MARKER_FAIL_QUALITY = "_FAIL_QUALITY"
 MARKER_FAIL_ABORTED = "_FAIL_ABORTED"
 MARKER_FAIL_STARTUP_CHECK = "_FAIL_STARTUP_CHECK"
+MARKER_FAIL_ACCESS = "_FAIL_ACCESS"
 
 # Run status (docs/ounass_plp_efficient_crawl.md, "Run status"; applies to all
 # crawls). One question decides it: did the crawler reach its own end, and did
@@ -48,6 +49,9 @@ RUN_FAILED = "failed"       # rows never reach dbt; see failure_reason
 FAILURE_REASONS = {
     "aborted": (MARKER_FAIL_ABORTED, "FAIL_ABORTED"),
     "startup_check": (MARKER_FAIL_STARTUP_CHECK, "FAIL_STARTUP_CHECK"),
+    # Nothing written because the site refused us (blocking): never a
+    # content failure. Same rule as the crawler's crawler_run_status.
+    "access": (MARKER_FAIL_ACCESS, "FAIL_ACCESS"),
     "quality": (MARKER_FAIL_QUALITY, "FAIL_QUALITY"),
     "verification": (MARKER_FAILED, "FAILED"),
 }
@@ -179,7 +183,23 @@ def _crawler_failure_reason(manifest):
     plp_efficient = manifest.get("plp_efficient")
     if isinstance(plp_efficient, dict) and plp_efficient.get("startup_stopped"):
         return "startup_check"
+    rows = (manifest.get("artifacts") or {}).get("rows")
+    if not rows and _access_gave_up(manifest):
+        return "access"
     return None
+
+
+def _access_gave_up(manifest):
+    access = manifest.get("access")
+    hosts = access.get("hosts") if isinstance(access, dict) else None
+    if not isinstance(hosts, dict):
+        return 0
+    return sum(int((h or {}).get("gave_up") or 0) for h in hosts.values())
+
+
+def _blocked_hosts(manifest):
+    hosts = ((manifest.get("access") or {}).get("hosts") or {})
+    return sorted(h for h, stats in hosts.items() if (stats or {}).get("gave_up"))
 
 
 def _read_data_file(bucket, unverified_key, published_key):
@@ -257,12 +277,12 @@ def _verify_manifest_and_write_success(bucket, key):
     crawler_reason = _crawler_failure_reason(manifest) if manifest_ok else None
 
     # Every reason that applies gets its marker; the first is the run's
-    # failure_reason. A startup-stopped run has no data file by design, so
-    # the missing file isn't also reported as a quality/verification failure.
+    # failure_reason. A startup-stopped or fully blocked run has no data file
+    # by design, so the missing file isn't also reported as quality/verification.
     reasons = []
     if crawler_reason:
         reasons.append(crawler_reason)
-    if crawler_reason != "startup_check":
+    if crawler_reason not in ("startup_check", "access"):
         if manifest_ok and not quality_gate_ok:
             reasons.append("quality")
         if not verification_ok:
@@ -292,6 +312,7 @@ def _verify_manifest_and_write_success(bucket, key):
             "aborted": f"exit_reason={manifest.get('exit_reason')}",
             "startup_check": (manifest.get("plp_efficient") or {}).get("startup_error")
             or "stopped by startup checks",
+            "access": f"no rows; requests lost to blocking on {', '.join(_blocked_hosts(manifest))}",
             "quality": quality_gate_reason,
             "verification": verification_error,
         }[failure_reason]
