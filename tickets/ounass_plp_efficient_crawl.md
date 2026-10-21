@@ -51,6 +51,11 @@ prices don't change by exit country. This should make the success-path test
    needed** (user): `terraform plan -target=aws_lambda_function.bronze_manifest_verifier -out=verifier.tfplan`.
 4. ✅ **Blocked hostname regardless of size, built 2026-10-21:** a
    hostname that lost every request is `blocked`.
+4b. ✅ **Lost listing page degrades the run, built 2026-10-21** (all
+   crawls, opt-in flag; Ounass normal mode flagged). **Follow-up:** Level
+   Shoes fetches its listing pages with plain `requests`
+   (`level_crawl._get_payload`), outside Scrapy, so it gets no retry rounds
+   and no access record. Move it onto Scrapy/Zyte requests to cover it.
 5. ✅ **Registry guard (a), done 2026-10-21:** G1 rejects a PLP row with
    `brand` set or a `/designers/` URL (`plp_efficient._page_kind_errors`).
    Brand-page support (b) is recorded as a possible extension (reference

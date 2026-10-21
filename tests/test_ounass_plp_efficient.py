@@ -463,3 +463,13 @@ def test_phase2_waits_for_access_retry_rounds():
     spider.crawler.access_retry = None
     spider._plp_efficient_on_idle()
     assert spider.plp_run.phase2 is not None
+
+
+
+def test_normal_mode_flags_listing_requests_not_product_pages():
+    spider = OunassSpider()
+    spider.settings = _settings()
+    [listing] = list(spider._handle_seed_url("https://saudi.ounass.com/api/women/designers/ami"))
+    [product] = list(spider._handle_seed_url("https://saudi.ounass.com/shop-x-1.html"))
+    assert listing.meta.get(access_layer.LISTING_META_KEY) is True
+    assert access_layer.LISTING_META_KEY not in product.meta

@@ -201,3 +201,29 @@ def test_host_with_every_request_lost_is_blocked_whatever_its_size():
     mw.process_exception(scrapy.Request(URL), RequestError(520), spider=None)
     assert mw.summary()["hosts"]["saudi.ounass.com"]["status"] == "blocked"
     assert mw.degradations()[0]["kind"] == "access"
+
+
+
+def test_lost_listing_page_is_an_access_degradation_naming_the_url():
+    mw = _middleware(ACCESS_RETRY_ROUNDS=0)
+    listing = scrapy.Request(URL, meta={access.LISTING_META_KEY: True})
+    product = scrapy.Request("https://saudi.ounass.com/shop-x-1.html")
+    for i in range(10):     # plenty of successes: the hostname itself isn't blocked
+        ok = scrapy.Request(f"https://saudi.ounass.com/shop-ok-{i}.html")
+        mw.process_response(ok, _response(ok, 200), spider=None)
+    mw.process_exception(listing, RequestError(520), spider=None)
+    mw.process_exception(product, RequestError(520), spider=None)
+    assert mw.summary()["hosts"]["saudi.ounass.com"]["status"] == "ok"
+    [lost] = mw.degradations()
+    assert lost["kind"] == "access" and lost["scope"] == URL
+    assert "listing page lost" in lost["message"]
+
+
+def test_listing_page_recovered_in_a_round_is_not_a_degradation():
+    mw = _middleware()
+    listing = scrapy.Request(URL, meta={access.LISTING_META_KEY: True})
+    with pytest.raises(access.AccessDeferred):
+        mw.process_exception(listing, RequestError(520), spider=None)
+    resent = mw.pending[0]
+    mw.process_response(resent, _response(resent, 200), spider=None)
+    assert mw.degradations() == []

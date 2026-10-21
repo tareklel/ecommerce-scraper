@@ -308,6 +308,23 @@ happen back to back, while the block is still on. So:
 3. What still fails is given up. A hostname is reported **blocked** when
    every one of its requests was given up on access (any number), or when
    at least `ACCESS_BLOCKED_HOST_RATIO` of them were (min 5 requests).
+4. **A lost listing page degrades the run** (2026-10-21), even when its
+   hostname isn't blocked: losing one silently drops every product it
+   would have linked to (up to 48). Spiders opt in by flagging listing
+   requests with `meta[access.LISTING_META_KEY]`; the run gets a
+   `kind: access` degradation naming the URL. Flagged today: Ounass normal
+   mode (`/api/` requests). PLP-efficient listings aren't flagged, because
+   G3 already records them.
+
+What a degraded run means for data: it still gets `_SUCCESS`, so **every
+row it wrote reaches raw**. Degradations describe only what's missing
+(products never written that day keep their previous values downstream).
+Only failed runs are kept out of raw.
+
+Not covered (fetched outside Scrapy, so no retry rounds or access record):
+Level Shoes listing pages (`level_crawl._get_payload`, plain `requests`),
+and Ounass's "requests mode" fallback, which is off by default
+(`OUNASS_REQUESTS_TLDS` empty).
 
 In this mode the order after the sweep is: retry rounds → parity verdict →
 Phase 2 (whose product pages get their own rounds at the end). Crawls run as
@@ -677,6 +694,7 @@ ago) and STALE (5 products last crawled 2026-08-08); exit 0.
 | 2026-10-05 | Doc created from the agreed design (all sections planned) | — |
 | 2026-10-13 | PDP list scoped to active PLP list rows; `is_active` column added to the PLP list | — |
 | 2026-10-16 | **Part 2 built:** startup checks (G1, G2, G7, G8, G10, stale-crawl), settings, `make preflight-ounass-plp-efficient` (+ `-probe`). Verified against the dev export | — |
+| 2026-10-21 | A listing page lost to blocking degrades the run (`kind: access`, URL named) even when its hostname isn't blocked; opt-in per spider via `access.LISTING_META_KEY`, set for Ounass normal mode. Documented what a degraded run means for raw, and the fetches outside Scrapy the access layer can't see | — |
 | 2026-10-21 | New `failure_reason: access` (`_FAIL_ACCESS`): a run with no rows whose requests were lost to blocking fails as access, not quality, in the crawler and the verifier. A hostname that lost every request is `blocked` regardless of the 5-request minimum | — |
 | 2026-10-21 | G1 rejects listing rows with a brand or a `/designers/` URL: only category pages with no brand match what a row claims (otherwise Phase 2 flood or G11). Brand-page support recorded as a possible extension (section 10) | — |
 | 2026-10-20 | Saudi Ounass hostnames routed through Zyte geolocation `TR` (`CRAWLER_API_ZYTE_GEOLOCATION_BY_HOST`), after default routing was banned 5/5 times | — |

@@ -40,6 +40,12 @@ NETWORK_ERROR_NAMES = {
 }
 
 
+# Request meta flag a spider sets on listing-page requests. A flagged request
+# given up on access makes the run degraded (kind access), naming the URL:
+# losing one listing page silently drops every product it would have linked to.
+LISTING_META_KEY = "access_listing_page"
+
+
 class AccessDeferred(IgnoreRequest):
     """
     Raised for a request set aside for a later access retry round. Callbacks
@@ -153,6 +159,7 @@ class AccessRetryMiddleware:
         self.final_flush = False   # cap reached: re-send once more, no deferral
         self.total_waited = 0.0
         self.rounds_run = 0
+        self.lost_listings = []    # (url, label) of flagged listing pages given up
         self._call_later = None    # injectable for tests
 
     @classmethod
@@ -187,7 +194,7 @@ class AccessRetryMiddleware:
             return response
         if self._can_defer(request):
             self._defer(request, label)
-        self.tracker.failure(host, label, deferred=False)
+        self._give_up(request, host, label)
         return response
 
     def process_exception(self, request, exception, spider):
@@ -200,8 +207,13 @@ class AccessRetryMiddleware:
             return None
         if self._can_defer(request):
             self._defer(request, label)
-        self.tracker.failure(host, label, deferred=False)
+        self._give_up(request, host, label)
         return None
+
+    def _give_up(self, request, host, label):
+        self.tracker.failure(host, label, deferred=False)
+        if request.meta.get(LISTING_META_KEY):
+            self.lost_listings.append((request.url, label))
 
     # --- rounds ------------------------------------------------------------------
 
@@ -254,8 +266,15 @@ class AccessRetryMiddleware:
         }
 
     def degradations(self):
-        """Structured degradation entries for blocked hostnames."""
+        """Structured degradation entries: blocked hostnames, lost listing pages."""
         out = []
+        for url, label in self.lost_listings:
+            out.append({
+                "kind": ACCESS,
+                "scope": url,
+                "message": (f"listing page lost to blocking ({label}) after {self.rounds_run} "
+                            "retry round(s); the products on it weren't crawled"),
+            })
         for host, stats in self.tracker.summary(blocked_ratio=self.blocked_ratio).items():
             if stats["status"] == "blocked":
                 kinds = ", ".join(f"{k} {v}" for k, v in sorted(stats["access_failures"].items()))

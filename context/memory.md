@@ -1,5 +1,9 @@
 # Memory
 
+## 2026-10-21 - Lost listing pages degrade the run
+- `access.LISTING_META_KEY`: a flagged listing request given up on access adds a `kind: access` degradation naming the URL, even when its hostname isn't blocked. Ounass normal mode flags its `/api/` requests; PLP-efficient listings aren't flagged (G3 covers them).
+- Degraded runs still publish everything they wrote; only failed runs stay out of raw. Level Shoes listing fetches (plain `requests`) bypass the access layer: follow-up in the ticket.
+
 ## 2026-10-21 - failure_reason access; blocked-host fix
 - A run with no rows whose requests were given up on access fails as `access` (`_FAIL_ACCESS`), not `quality`, in both `pipelines.crawler_run_status` and the verifier; no extra quality/verification markers for it.
 - A hostname that lost every request is `blocked` even under the 5-request minimum (the Acler run showed 1/1 blocked as "ok").

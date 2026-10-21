@@ -187,11 +187,15 @@ class OunassSpider(MasterCrawl, scrapy.Spider):
         backend = self._get_fetch_backend_for_url(url)
         if backend == FETCH_BACKEND_API:
             self._seen_fetch_urls.add(url)
+            # /api/ URLs are listing pages (product pages are .html): if one is
+            # lost to blocking, the run is degraded with the URL named.
+            meta = {access.LISTING_META_KEY: True} if urlparse(url).path.startswith("/api/") else None
             yield build_crawler_api_request(
                 url=url,
                 callback=self.parse,
                 settings=getattr(self, "settings", None),
                 request_type=self._get_crawler_api_request_type(url),
+                meta=meta,
             )
             return
 
