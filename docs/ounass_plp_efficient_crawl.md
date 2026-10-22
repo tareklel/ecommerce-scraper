@@ -521,6 +521,10 @@ Language is compared case-insensitively: inputs use `ar` / `en`
 
 ### Run status [built 2026-10-16; applies to all crawls]
 
+**The full reference for all crawls (every status, marker, what to do,
+queries) is `docs/crawl_run_status.md`.** This section keeps the
+PLP-efficient view and history.
+
 One question decides it: **did the crawler reach its own end, and did it
 skip anything on purpose?**
 
@@ -694,6 +698,7 @@ ago) and STALE (5 products last crawled 2026-08-08); exit 0.
 | 2026-10-05 | Doc created from the agreed design (all sections planned) | — |
 | 2026-10-13 | PDP list scoped to active PLP list rows; `is_active` column added to the PLP list | — |
 | 2026-10-16 | **Part 2 built:** startup checks (G1, G2, G7, G8, G10, stale-crawl), settings, `make preflight-ounass-plp-efficient` (+ `-probe`). Verified against the dev export | — |
+| 2026-10-22 | Run statuses and markers for all crawls moved to their own reference, `docs/crawl_run_status.md` (with a drift test); section 6 points to it | — |
 | 2026-10-21 | A listing page lost to blocking degrades the run (`kind: access`, URL named) even when its hostname isn't blocked; opt-in per spider via `access.LISTING_META_KEY`, set for Ounass normal mode. Documented what a degraded run means for raw, and the fetches outside Scrapy the access layer can't see | — |
 | 2026-10-21 | New `failure_reason: access` (`_FAIL_ACCESS`): a run with no rows whose requests were lost to blocking fails as access, not quality, in the crawler and the verifier. A hostname that lost every request is `blocked` regardless of the 5-request minimum | — |
 | 2026-10-21 | G1 rejects listing rows with a brand or a `/designers/` URL: only category pages with no brand match what a row claims (otherwise Phase 2 flood or G11). Brand-page support recorded as a possible extension (section 10) | — |

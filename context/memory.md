@@ -1,5 +1,9 @@
 # Memory
 
+## 2026-10-22 - Run status reference doc for all crawls
+- New `docs/crawl_run_status.md`: statuses, the failure-marker table (when / example / what to do), where a run's data and record go, Athena queries. `tests/test_crawl_run_status_docs.py` fails if a verifier marker, status or failure reason is missing from it. AGENTS.md rule added.
+- `docs/fail_quality_contract.md` had drifted (no PLP-extract rule since 2026-10-16; said threshold 0.8 while crawls use 0.2): fixed.
+
 ## 2026-10-21 - Part 4b success path verified in AWS
 - Dev ECS run `2026-10-21T14-27-38-056` (Saudi Tory Burch bags via Zyte `TR`): 137/137 requests 200, 126 rows, published from `crawl-unverified/` into `crawls/`, `_SUCCESS`, partitions registered, `run_status success`. Athena returns the 126 rows and the `crawl_started_raw` records. The Türkiye routing fixed Saudi access.
 

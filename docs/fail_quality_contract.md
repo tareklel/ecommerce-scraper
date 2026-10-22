@@ -14,13 +14,17 @@ Current rule set id:
 Quality reports include:
 - `rule_set`: `default`
 
-Current hard-fail rule:
-- `field_blankness_threshold`: fail if any non-exempt field is blank in `>= blank_threshold` ratio of rows for a site.
+Current hard-fail rules (rows are split by `plp_extract_flag` since 2026-10-16):
+- `field_blankness_threshold`, **product-page rows** (`plp_extract_flag` not `1`): fail if any non-exempt field is blank in `>= blank_threshold` ratio of a site's product-page rows.
+- `plp_extract_required_fields`, **listing-extract rows** (`plp_extract_flag = 1`, Ounass PLP-efficient crawl): every row must have `portal_itemid`, `url`, `price`, `site`, `country`, `language`, with `price > 0` and `url` not a listing URL (no `/api/`, not the `plp_source_url`). One bad row fails the run: the crawler never writes such rows, so one means a bug. These rows leave name, images, category etc. blank on purpose, so the blank-ratio rule doesn't apply to them. Reported under `plp_extract_rows` in the quality report.
+
+A failed gate makes the run `failed / quality` (marker `_FAIL_QUALITY`); see
+`docs/crawl_run_status.md` for every status and marker.
 
 ## Parameters
 
-- `blank_threshold` (default `0.8`)
-  - Example: `0.8` means a field is a violation when 80% or more of rows are blank.
+- `blank_threshold` (code default `0.8`; **crawls run with `0.2`**, set by `QUALITY_GATE_BLANK_THRESHOLD` in `ecommercecrawl/settings.py`)
+  - Example: `0.2` means a field is a violation when 20% or more of rows are blank.
 - `min_rows_for_blank_check` (default `20`)
   - Blankness checks are skipped for sites with fewer rows than this value.
   - This avoids overreacting to very small crawl samples.

@@ -4,6 +4,7 @@
 - Write comments to explain intent, assumptions, and non-obvious logic. Keep comments concise and specific.
 - Before writing changes to files, first explain to me what you plan to do and then do changes once you get agreement.
 - Ounass PLP-efficient crawl mode is documented in `docs/ounass_plp_efficient_crawl.md`, which describes how the mode works today. Any change to its behaviour (spider, rules, settings, quality gate, manifest, verifier Lambda, input contracts) must update that doc in the same commit, including its change log. `tests/test_plp_efficient_docs.py` fails if an `OUNASS_PLP_EFFICIENT_*` setting is missing from the doc.
+- Run statuses, failure reasons and S3 markers (all crawls) are documented in `docs/crawl_run_status.md`. Any change to them (`pipelines.crawler_run_status`, the verifier Lambda's `FAILURE_REASONS` / markers) must update that doc in the same commit. `tests/test_crawl_run_status_docs.py` fails if a marker, status or failure reason in the verifier is missing from the doc. Quality-gate rule changes must update `docs/fail_quality_contract.md`.
 
 # Security-sensitive actions
 
