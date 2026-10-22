@@ -689,6 +689,13 @@ ago) and STALE (5 products last crawled 2026-08-08); exit 0.
   go through Zyte's Türkiye exits (`CRAWLER_API_ZYTE_GEOLOCATION_BY_HOST` in
   `settings.py`): the same listing that was banned 5/5 times on default
   routing returned 200 via `TR`, prices still SAR.
+- **Planned direction (2026-10-22): brand-scoped category rows.** A row's
+  `brand` would filter its category listing to that brand's entries, so
+  only the registry's brands are refreshed or product-crawled (dry run #1
+  had to product-crawl 3,897 products of every brand). Each entry carries
+  `designerCategoryUrl` / `id_designer`; it needs a designer → canonical
+  brand map from scraper-pipeline. Design notes: ticket, "Future
+  direction: brand-scoped category rows". Until then:
 - **Category listings only:** brand pages and brand-scoped rows are
   rejected (section 2). To support them, the sweep would have to ignore
   entries outside the row's scope using each entry's breadcrumbs and brand.

@@ -81,6 +81,11 @@ prices don't change by exit country. This should make the success-path test
 
 **After that: Part 5b (parity)**, as designed in Part 5 below.
 
+**Dry run #1 (2026-10-22) → future direction:** Phase 2 had to crawl 3,897
+product pages of every brand. The user wants brand-scoped category rows
+instead (crawl only the registry's brands, then compare against gold): see
+"Future direction: brand-scoped category rows" below.
+
 **Facts learned 2026-10-20 (keep):**
 - The crawler reads listing pages **only** as `/api/` JSON (`routeType:
   plp`); a human listing URL returns HTML and is silently ignored. Product
@@ -211,6 +216,51 @@ today and outlives this ticket (rule in `context/AGENTS.md`).
 setting isn't documented there.
 
 ---
+
+## Future direction: brand-scoped category rows (user, 2026-10-22)
+
+**Direction.** Don't crawl every product on a category listing. A registry
+row's `brand` becomes a **filter** on its category listing: sweeping
+`/api/women/bags/tote-bags` with `brand = bottega_veneta` only considers
+that brand's entries; `brand` empty still means every brand. Entries of
+other brands are **ignored entirely**: not new (no Phase 2 product-page
+crawl), not a mismatch (no G11), not expected (no G4). Then compare what
+the filtered sweep finds against gold.
+
+**Why (dry run #1, 2026-10-22).** With only 5 known products, the first run
+sent **3,897** product pages to Phase 2, every brand on 4 bag listings,
+taking about 2.5 hours. Most brands may not matter for the product; paying
+to crawl them all every time a gold is young (or a listing grows) is waste.
+
+**What the listing gives us** (saved listing, Part 0 probe 2026-09-30):
+each entry has `designerCategoryEnglishName` ("MCM"),
+`designerCategoryUrl` (`women/designers/mcm`, a stable slug) and
+`id_designer` (3050).
+
+**Design work needed before building:**
+1. **Ounass designer → canonical brand.** Rows use canonical brands
+   (`bottega_veneta`); entries carry Ounass's own designer slug/id. The
+   crawler doesn't canonicalize, so scraper-pipeline's export would add a
+   map (designer slug or `id_designer` → `brand_canonical`), built from the
+   same mapping silver already uses. Unmapped designers: ignored when a row
+   names a brand, and counted (so a missing mapping is visible).
+2. **Several brands on one listing.** Today G1 rejects duplicate URLs. Either
+   allow the same URL on several rows (fetch the listing once, route each
+   entry to the rows whose brand matches), or let a row carry a list of
+   brands.
+3. **Against gold.** The export already scopes the PDP list by brand, so
+   "expected" (G4) and "known" match the filter. Open: a product whose gold
+   brand differs from its entry's designer (rebrand, mapping change) counts
+   as a G11 mismatch, or as "ignored"?
+4. **New products of the chosen brands** are still product-crawled in
+   Phase 2 (that's how they get their full data); products of other brands
+   never are.
+5. **Guard (a) changes:** brand on a **category** URL becomes allowed;
+   `/designers/` brand pages stay rejected (they mix categories; the
+   breadcrumb problem is separate).
+
+**Status:** direction recorded, not designed in detail. Guard (a) (brand
+must be blank) stays until this is built. Relates to Part 5b and Part 7.
 
 # Design Reference (shared by all parts)
 
@@ -1022,6 +1072,7 @@ explicit approval under `context/AGENTS.md`).
 | 2026-10-22 | Failures explain themselves: markers, verified manifests (`failure_explanation`) and `RUN FAILED` log lines carry `meaning`, `what_to_do` and a doc link, from one table per side (verifier `FAILURE_REASONS`, crawler `run_status.py`) kept identical by a test. Reference: `docs/crawl_run_status.md`. Verifier deployed 2026-10-22 06:34 UTC (targeted apply). |
 | 2026-10-22 | **G8 warn-only.** Stale gold only makes recently found products look new (more Phase 2 cost, capped by the ceiling), never wrong data; stopping the crawl left everything unrefreshed while dbt was down. No automatic dbt run from the crawler (dbt has no cloud runner yet, and it would couple crawls to dbt); a scheduled dbt job in AWS goes in `tickets/cicd_pipeline.md`. Dry run may start from dev gold's 5 known products: run #1 seeds gold via Phase 2, dbt, then run #2 shows the saving. |
 | 2026-10-22 | **Dry run #1 findings.** (1) G4/G11 need a minimum sample (20 products): "1 of 1 expected not seen" held back the Saudi Arabic tote listing and its 1,059 new products. Built. (2) Phase 2 runs at ~27 product pages/min (`CONCURRENT_REQUESTS_PER_DOMAIN = 2`, `DOWNLOAD_DELAY = 1`), so ~4,000 pages take ~2.5 h. Raising concurrency for Zyte requests (Zyte throttles itself) to test separately; matters less once runs are mostly listing refreshes. |
+| 2026-10-22 | **Direction: brand-scoped category rows.** A registry row's `brand` will filter its category listing to that brand's entries (empty = all brands); other brands are ignored, not product-crawled. Needs an Ounass designer → canonical brand map from scraper-pipeline and a decision on several brands per listing. Not built; guard (a) stays meanwhile. See "Future direction" section. |
 
 ## Open Questions
 

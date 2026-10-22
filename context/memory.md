@@ -1,5 +1,9 @@
 # Memory
 
+## 2026-10-22 - Direction: brand-scoped category rows
+- User direction after dry run #1 (3,897 Phase 2 product pages, all brands): registry `brand` should filter a category listing to that brand's entries (empty = all); other brands ignored. Then compare against gold.
+- Listing entries carry `designerCategoryEnglishName`, `designerCategoryUrl` (slug), `id_designer`. Needs a designer → canonical brand map exported from scraper-pipeline, and a rule for several brands per listing. Not built; guard (a) stays. Notes in the ticket's "Future direction" section.
+
 ## 2026-10-22 - Dry run #1 started; G4/G11 minimum samples
 - PLP-efficient dry run #1 in dev ECS (task 342abe5b…): export invoked from ECS OK, startup warnings G8/STALE logged, sweep of 4 listings in ~2.5 min, Phase 2 3,897 new product pages at ~27/min, 0 errors, no blocking.
 - Found: G4 held back the Saudi Arabic tote listing on "1 of 1 expected products not seen". Fix: G4 and G11 need ≥ 20 products (`OUNASS_PLP_EFFICIENT_MISSING_MIN_EXPECTED`, `…_FIELD_MISMATCH_MIN_SEEN`); below, per-listing `expected_products` / `expected_unseen` / `note` are recorded only.
