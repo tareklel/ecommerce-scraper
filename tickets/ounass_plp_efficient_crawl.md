@@ -1019,6 +1019,7 @@ explicit approval under `context/AGENTS.md`).
 | 2026-10-20 | Saudi Zyte bans are intermittent (same `httpResponseBody` request alternates between success and 520, playground included). Response: Zyte aggressive retry policy + more, shorter access retry rounds (6 × 300 s, cap 3600 s). A run that got nothing because of blocking must fail as `access`, not `quality`. Not built yet (see "Resume here"). |
 | 2026-10-20 | Brand field: only category pages with no brand match what a registry row claims (Ounass has no brand+category API listing; brand pages mix categories). Proposed guard (a): reject rows with a brand or a `/designers/` URL at startup; brand-page support (b) via breadcrumb filtering is a possible extension. Awaiting the user's final yes on (a). |
 | 2026-10-21 | **Registry guard (a) agreed and built:** G1 rejects rows with a brand or a `/designers/` URL; category listings with no brand only. Brand pages (b): possible extension, not planned. Replaces the 2026-10-20 "awaiting yes" entry. scraper-pipeline's export doc updated to match. |
+| 2026-10-22 | Failures explain themselves: markers, verified manifests (`failure_explanation`) and `RUN FAILED` log lines carry `meaning`, `what_to_do` and a doc link, from one table per side (verifier `FAILURE_REASONS`, crawler `run_status.py`) kept identical by a test. Reference: `docs/crawl_run_status.md`. Needs a verifier deploy. |
 
 ## Open Questions
 

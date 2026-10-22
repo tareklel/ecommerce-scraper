@@ -474,3 +474,12 @@ def test_crawler_run_status_tells_access_from_quality(rows, access, expected):
     from ecommercecrawl.pipelines import crawler_run_status
     gate = "pass" if rows else None
     assert crawler_run_status("finished", gate, None, (), rows=rows, access=access)[:2] == expected
+
+
+def test_run_failed_log_line_explains_itself(pipeline_setup):
+    pipeline, spider, _ = pipeline_setup
+    pipeline.run_id, pipeline.crawler_name = "run-1", "ounass"
+    pipeline._log_run_outcome(spider, {"run_status": "failed", "failure_reason": "access"})
+    [line] = [str(c.args[0]) for c in spider.logger.error.call_args_list]
+    assert line.startswith("RUN FAILED run_id=run-1 site=ounass: access: Nothing was written")
+    assert "What to do:" in line and "docs/crawl_run_status.md#failure-markers" in line

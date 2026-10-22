@@ -38,6 +38,24 @@ applies. The first in this order is the run's `failure_reason`.
 | `_FAIL_QUALITY` | `quality` | The quality gate failed, or nothing was written for a reason **other than** blocking | 2026-10-20 Burberry run: URL 404, zero rows | `metadata/quality_report.json`; check the seed URL still exists and the page format |
 | `_FAILED` | `verification` | The **file check** failed: data file missing, hash or row-count mismatch, unreadable manifest, or the copy into `crawls/` failed | upload cut off halfway | Verifier Lambda logs; re-run |
 
+**Failures explain themselves** (2026-10-22). Every failure marker's JSON,
+the verified manifest (`failure_explanation`) and the crawler's `RUN FAILED`
+log line carry a plain-language `meaning`, `what_to_do` and a link to this
+section, so you can read what a failure means wherever you meet it:
+
+```json
+{"run_status": "failed", "failure_reason": "access",
+ "meaning": "Nothing was written because the site blocked our requests through every retry round.",
+ "what_to_do": "See the manifest's access block for which hostnames and errors; check Zyte routing (CRAWLER_API_ZYTE_GEOLOCATION_BY_HOST); re-run later.",
+ "doc": "docs/crawl_run_status.md#failure-markers", "...": "other fields"}
+```
+
+The texts live in the verifier (`FAILURE_REASONS`) and, as an identical copy
+for the crawler's logs, in `ecommercecrawl/run_status.py` (the Lambda ships
+as its own zip and can't import the crawler).
+`tests/test_run_status_explanations.py` fails if the copies differ. Change
+the wording in both places.
+
 Notes:
 - `_FAILED` is the oldest marker and only means "the file didn't verify". It
   would read better as `_FAIL_VERIFICATION`; it keeps its name because older
@@ -68,9 +86,9 @@ Notes:
    `crawl_manifest_raw` (`raw_json` holds the whole manifest: `run_status`,
    `failure_reason`, `degradations`, `access`, `verification`, and for
    PLP-efficient runs `plp_efficient`).
-5. **Logs** (CloudWatch `/ecs/<ecs_name>`), end of run: `RUN DEGRADED`,
-   `RUN FAILED <reason>`, and `ACCESS <hostname>` for any hostname with
-   access failures.
+5. **Logs** (CloudWatch `/ecs/<ecs_name>`), end of run: `RUN DEGRADED`
+   (with what was skipped), `RUN FAILED <reason>: <meaning> What to do: …`,
+   and `ACCESS <hostname>` for any hostname with access failures.
 
 Why publish-on-pass: Athena reads a whole day folder once any run that day
 writes `_SUCCESS`. Before 2026-10-16, a failed run's file sat next to a

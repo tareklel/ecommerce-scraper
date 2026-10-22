@@ -1,5 +1,10 @@
 # Memory
 
+## 2026-10-22 - Self-explaining failures
+- Every failure marker, verified manifest (`failure_explanation`) and `RUN FAILED` log line now carries a plain `meaning`, `what_to_do` and a link to `docs/crawl_run_status.md#failure-markers`.
+- Texts: verifier `FAILURE_REASONS` and crawler `ecommercecrawl/run_status.py` (identical copy; the Lambda can't import the crawler), enforced by `tests/test_run_status_explanations.py`. Verifier constant `RUN_STATUS_DOC` → `STATUS_DOC_LINK` so `RUN_*` stays reserved for statuses (the docs drift test reads them).
+- 6 new tests; suite 441 passed. Verifier deploy needed.
+
 ## 2026-10-22 - Run status reference doc for all crawls
 - New `docs/crawl_run_status.md`: statuses, the failure-marker table (when / example / what to do), where a run's data and record go, Athena queries. `tests/test_crawl_run_status_docs.py` fails if a verifier marker, status or failure reason is missing from it. AGENTS.md rule added.
 - `docs/fail_quality_contract.md` had drifted (no PLP-extract rule since 2026-10-16; said threshold 0.8 while crawls use 0.2): fixed.

@@ -43,17 +43,47 @@ RUN_SUCCESS = "success"     # reached its end, nothing skipped -> _SUCCESS
 RUN_DEGRADED = "degraded"   # reached its end, a guardrail skipped work -> _SUCCESS
 RUN_FAILED = "failed"       # rows never reach dbt; see failure_reason
 
-# failure_reason -> (marker, verification.outcome), in precedence order: the
-# first that applies is the run's failure_reason. An aborted run is failed
-# even when its rows are fine: a half-finished day is misleading data.
+# failure_reason -> marker, verification.outcome, and a plain-language
+# meaning + what to do, in precedence order: the first that applies is the
+# run's failure_reason. An aborted run is failed even when its rows are fine:
+# a half-finished day is misleading data.
+# The explanations are written into every marker and verified manifest, so a
+# failure explains itself wherever it's met. They must match the crawler's
+# copy in ecommercecrawl/run_status.py (tests/test_run_status_explanations.py).
+STATUS_DOC_LINK = "docs/crawl_run_status.md#failure-markers"
 FAILURE_REASONS = {
-    "aborted": (MARKER_FAIL_ABORTED, "FAIL_ABORTED"),
-    "startup_check": (MARKER_FAIL_STARTUP_CHECK, "FAIL_STARTUP_CHECK"),
+    "aborted": {
+        "marker": MARKER_FAIL_ABORTED,
+        "outcome": "FAIL_ABORTED",
+        "meaning": "The crawl was stopped before it finished (Ctrl+C, ECS task stopped, timeout); its rows are not published.",
+        "what_to_do": "Re-run the crawl. If it keeps happening, check why the task was stopped.",
+    },
+    "startup_check": {
+        "marker": MARKER_FAIL_STARTUP_CHECK,
+        "outcome": "FAIL_STARTUP_CHECK",
+        "meaning": "The PLP-efficient crawl stopped before making any request because a startup check failed.",
+        "what_to_do": "Run `make preflight-ounass-plp-efficient` to list every failed check.",
+    },
     # Nothing written because the site refused us (blocking): never a
     # content failure. Same rule as the crawler's crawler_run_status.
-    "access": (MARKER_FAIL_ACCESS, "FAIL_ACCESS"),
-    "quality": (MARKER_FAIL_QUALITY, "FAIL_QUALITY"),
-    "verification": (MARKER_FAILED, "FAILED"),
+    "access": {
+        "marker": MARKER_FAIL_ACCESS,
+        "outcome": "FAIL_ACCESS",
+        "meaning": "Nothing was written because the site blocked our requests through every retry round.",
+        "what_to_do": "See the manifest's access block for which hostnames and errors; check Zyte routing (CRAWLER_API_ZYTE_GEOLOCATION_BY_HOST); re-run later.",
+    },
+    "quality": {
+        "marker": MARKER_FAIL_QUALITY,
+        "outcome": "FAIL_QUALITY",
+        "meaning": "The rows failed the quality gate, or nothing was written for a reason other than blocking.",
+        "what_to_do": "Read metadata/quality_report.json; check the seed URLs still exist and the page format hasn't changed.",
+    },
+    "verification": {
+        "marker": MARKER_FAILED,
+        "outcome": "FAILED",
+        "meaning": "The data file failed verification (missing, hash or row-count mismatch, unreadable manifest, or the publish copy failed).",
+        "what_to_do": "Check the verifier Lambda's logs, then re-run the crawl.",
+    },
 }
 
 
@@ -307,7 +337,7 @@ def _verify_manifest_and_write_success(bucket, key):
     if reasons:
         run_status = RUN_FAILED
         failure_reason = reasons[0]
-        outcome = FAILURE_REASONS[failure_reason][1]
+        outcome = FAILURE_REASONS[failure_reason]["outcome"]
         detail = {
             "aborted": f"exit_reason={manifest.get('exit_reason')}",
             "startup_check": (manifest.get("plp_efficient") or {}).get("startup_error")
@@ -331,6 +361,12 @@ def _verify_manifest_and_write_success(bucket, key):
         **manifest,
         "run_status": run_status,
         "failure_reason": failure_reason,
+        "failure_explanation": (
+            {"meaning": FAILURE_REASONS[failure_reason]["meaning"],
+             "what_to_do": FAILURE_REASONS[failure_reason]["what_to_do"],
+             "doc": STATUS_DOC_LINK}
+            if failure_reason else None
+        ),
         "verification": {
             "verified_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "outcome": outcome,
@@ -359,7 +395,7 @@ def _verify_manifest_and_write_success(bucket, key):
         logger.exception("Failed to register %s partition", MANIFEST_TABLE)
 
     for reason in reasons:
-        marker = FAILURE_REASONS[reason][0]
+        marker = FAILURE_REASONS[reason]["marker"]
         try:
             s3.put_object(
                 Bucket=bucket,
@@ -368,6 +404,10 @@ def _verify_manifest_and_write_success(bucket, key):
                     {
                         "run_status": run_status,
                         "failure_reason": reason,
+                        # Self-explaining: what this marker means and what to do.
+                        "meaning": FAILURE_REASONS[reason]["meaning"],
+                        "what_to_do": FAILURE_REASONS[reason]["what_to_do"],
+                        "doc": STATUS_DOC_LINK,
                         "quality_gate_status": quality_gate_status,
                         "quality_gate_reason": quality_gate_reason,
                         "exit_reason": manifest.get("exit_reason"),

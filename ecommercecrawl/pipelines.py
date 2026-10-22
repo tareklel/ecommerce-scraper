@@ -17,6 +17,7 @@ import shutil
 import boto3
 from botocore.exceptions import NoCredentialsError
 from ecommercecrawl.access import AccessRetryMiddleware
+from ecommercecrawl.run_status import DEGRADED_MEANING, FAILURE_EXPLANATIONS, RUN_STATUS_DOC
 from ecommercecrawl.quality_gate import QualityGateParams
 from ecommercecrawl.quality_gate import evaluate_fail_quality
 from ecommercecrawl.quality_gate import load_blank_field_exceptions
@@ -515,7 +516,8 @@ class PostCrawlPipeline:
                 kind = d.get("kind", "content") if isinstance(d, dict) else "content"
                 kinds[kind] = kinds.get(kind, 0) + 1
             counts = ", ".join(f"{n} {k}" for k, n in sorted(kinds.items()))
-            lines = [f"RUN DEGRADED run_id={self.run_id} site={self.crawler_name}: {counts} (see manifest)"]
+            lines = [f"RUN DEGRADED run_id={self.run_id} site={self.crawler_name}: {counts}. "
+                     f"{DEGRADED_MEANING} Details: manifest `degradations`; {RUN_STATUS_DOC}"]
             for d in degradations:
                 if isinstance(d, dict):
                     lines.append(f"  {d.get('kind')}: {d.get('scope')}: {d.get('message')}")
@@ -523,9 +525,12 @@ class PostCrawlPipeline:
                     lines.append(f"  {d}")
             spider.logger.warning("\n".join(lines))
         if manifest.get("run_status") == "failed":
+            reason = manifest.get("failure_reason")
+            explanation = FAILURE_EXPLANATIONS.get(reason, {})
             spider.logger.error(
-                f"RUN FAILED run_id={self.run_id} site={self.crawler_name}: "
-                f"{manifest.get('failure_reason')} (see manifest)")
+                f"RUN FAILED run_id={self.run_id} site={self.crawler_name}: {reason}: "
+                f"{explanation.get('meaning', '')} What to do: {explanation.get('what_to_do', '')} "
+                f"({RUN_STATUS_DOC})")
         for host, stats in ((manifest.get("access") or {}).get("hosts") or {}).items():
             if not stats.get("access_failures"):
                 continue

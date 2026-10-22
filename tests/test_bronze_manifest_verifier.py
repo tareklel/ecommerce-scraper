@@ -340,3 +340,21 @@ def test_empty_run_without_blocking_is_still_a_quality_failure():
         (bucket, manifest_key, {(bucket, manifest_key): json.dumps(manifest).encode("utf-8")}))
     assert inner["failure_reason"] == "quality"
     assert f"{MARKERS}/_FAIL_QUALITY" in _put_keys(fake_s3)
+
+
+def test_failure_marker_and_manifest_explain_themselves():
+    bucket = "test-bucket"
+    manifest_key = "bronze/dev/crawls/metadata/ounass/2026-03-03/run123/manifest.json"
+    manifest = {"exit_reason": "finished", "artifacts": {"rows": 0}, "quality_gate": None,
+                "access": {"hosts": {"en-saudi.ounass.com": {"requests": 1, "gave_up": 1}}}}
+    _, fake_s3, _, inner, bucket = _run(
+        (bucket, manifest_key, {(bucket, manifest_key): json.dumps(manifest).encode("utf-8")}))
+    marker = json.loads(fake_s3.objects[(bucket, f"{MARKERS}/_FAIL_ACCESS")])
+    assert "blocked" in marker["meaning"] and marker["what_to_do"]
+    assert marker["doc"] == "docs/crawl_run_status.md#failure-markers"
+    assert inner["failure_explanation"]["meaning"] == marker["meaning"]
+
+
+def test_successful_run_has_no_failure_explanation():
+    _, _, _, inner, _ = _run(_new_layout_fixture())
+    assert inner["failure_explanation"] is None
