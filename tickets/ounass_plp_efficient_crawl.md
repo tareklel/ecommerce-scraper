@@ -33,9 +33,13 @@ tests passing. The mode is still **dev only**: Part 5b (parity) and Part 6
 - **dbt** rebuilt dev 2026-10-22 11:40 UTC (21/21 models OK). Gold now
   knows **3,807** in-scope products (sa/ar 1,385, sa/en 2,422). Preflight
   after it: no problems, no warnings.
-- **Images:** the image pipeline was started by hand 2026-10-22 (ECS task
-  `7f0f11d0…`) to download images for dry run #1's products; a dbt build
-  after it puts them in gold. See "Images" below for the outcome.
+- **Images:** the image pipeline ran by hand 2026-10-22 (ECS task
+  `7f0f11d0…`, run `2026-10-22T14-25-59-277`): **16,087 images, all OK**,
+  15 min; `_SUCCESS` started the quality checker. **Still to do first thing:
+  `make dbt-run` in `../scraper-pipeline`** so the images reach gold. It
+  failed at 14:41 UTC only because the AWS SSO session expired (`aws sso
+  login` first). Then check gold has images, e.g. in Athena:
+  `select count(*), count_if(is_image_available) from gold_product_serving_latest where site='ounass' and country='sa'`.
 
 #### Next: dry run #2 (the real test of the saving)
 1. Preflight (no Zyte; invokes the export Lambda):
