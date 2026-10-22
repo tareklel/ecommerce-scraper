@@ -214,9 +214,11 @@ each listing's health once, then decides Phase 2:
   - it was stopped during the sweep (G7 currency);
   - a page failed or no page was parsed (G3);
   - more than 5% of the products it matched by ID disagree with it on
-    gender/category/subcategory/brand (G11);
+    gender/category/subcategory/brand (G11), once at least 20 were matched;
   - more than 25% of the products it should show (ignoring ones gold has
-    as sold out) weren't on it (G4).
+    as sold out) weren't on it (G4), when it should show at least 20.
+    With fewer, one delisted product would read as "100% missing", so the
+    numbers are only recorded.
 - A known product covered by several listings is crawled if **any** of them
   is healthy.
 - Known products **no listing covers** (e.g. special PDPs) are always
@@ -372,13 +374,13 @@ the last round).
 | G1 | PLP row canonical; gender/category/subcategory set; brand blank and not a `/designers/` URL (category listings only, section 2) | Skip that PLP, hold back its products. Too many bad rows → stop run. | `OUNASS_PLP_EFFICIENT_MAX_BAD_PLP_ROWS_RATIO` (0.25) |
 | G2 | PLP list and PDP list present, all columns | Stop run | — |
 | G3 | Every page of a PLP fetched | After the sweep: that PLP's leftovers held back (rows already written stay) | — |
-| G4 | Known-but-unseen products per PLP (excluding ones gold has as sold out) | After the sweep: over the cap → that PLP's leftovers held back (rows already written stay) | `OUNASS_PLP_EFFICIENT_MISSING_RATIO_CAP` (0.25) |
+| G4 | Known-but-unseen products per PLP (excluding ones gold has as sold out) | After the sweep: over the cap → that PLP's leftovers held back (rows already written stay). Applies only to listings with at least `OUNASS_PLP_EFFICIENT_MISSING_MIN_EXPECTED` (20) expected products; below that the numbers are recorded per listing (`expected_products`, `expected_unseen`, `note`), not acted on. | `OUNASS_PLP_EFFICIENT_MISSING_RATIO_CAP` (0.25) |
 | G6 | PLP-extract `url` = PDP list `url`, not a listing URL | Don't write that row; product left for Phase 2 | — |
 | G7 | PLP hostname ↔ country/language; entry `localeCurrency` = country currency | Startup: skip that PLP. Sweep: stop that PLP at the first wrong-currency entry; its leftovers held back (rows already written stay). | — |
 | G8 | Gold age: gold's last build time from the PDP list manifest. The export itself is always fresh. | **Warn only** (2026-10-22): warn at the warn age, or if the age is unknown; never stops the run | `OUNASS_PLP_EFFICIENT_GOLD_WARN_AGE_DAYS` (2) |
 | G9 | Parity check, per hostname (section 3, "Parity check") [planned, Part 5b] | Confirmed mismatches ≥ 20% (min 2) → that hostname's listing rows dropped, products held back. Not checkable because of blocking → borrow other hostnames' verdict; none checkable → rows dropped (access). Never a whole-run stop. | `OUNASS_PLP_EFFICIENT_PARITY_SAMPLE` (20), `OUNASS_PLP_EFFICIENT_PARITY_MIN_COMPARISONS` (10), `OUNASS_PLP_EFFICIENT_PARITY_MAX_MISMATCH_RATIO` (0.2) |
 | G10 | Canonical values exist in the latest vocabulary | Bad PLP row → as G1. Bad PDP row → quarantine that product. Too many bad PDP rows → stop run. | `OUNASS_PLP_EFFICIENT_MAX_BAD_PDP_ROWS_RATIO` (0.05) |
-| G11 | ID matched but fields differ (drift / reclassification) | After the sweep: over the share → that PLP's leftovers held back (rows already written stay) | `OUNASS_PLP_EFFICIENT_FIELD_MISMATCH_RATIO` (0.05) |
+| G11 | ID matched but fields differ (drift / reclassification) | After the sweep: over the share → that PLP's leftovers held back (rows already written stay). Applies only once at least `OUNASS_PLP_EFFICIENT_FIELD_MISMATCH_MIN_SEEN` (20) products were matched; below that it's recorded as a `note`. | `OUNASS_PLP_EFFICIENT_FIELD_MISMATCH_RATIO` (0.05) |
 | — | Phase 2 ceiling | Over → skip Phase 2 entirely, `phase2_ceiling_exceeded = true` (logged as an error) | `OUNASS_PLP_EFFICIENT_MAX_PHASE2_PDPS` (10000) |
 
 "Hold back" = neither refreshed nor PDP-crawled this run, and logged.
@@ -707,6 +709,7 @@ ago) and STALE (5 products last crawled 2026-08-08); exit 0.
 | 2026-10-05 | Doc created from the agreed design (all sections planned) | — |
 | 2026-10-13 | PDP list scoped to active PLP list rows; `is_active` column added to the PLP list | — |
 | 2026-10-16 | **Part 2 built:** startup checks (G1, G2, G7, G8, G10, stale-crawl), settings, `make preflight-ounass-plp-efficient` (+ `-probe`). Verified against the dev export | — |
+| 2026-10-22 | **Minimum samples for G4 and G11** (20 products each, `…_MISSING_MIN_EXPECTED`, `…_FIELD_MISMATCH_MIN_SEEN`): dry run #1 held back the Saudi Arabic tote listing (1,059 new products) on "1 of 1 expected products not seen", its only known product having been delisted. Per-listing `expected_products` / `expected_unseen` / `note` in the manifest | — |
 | 2026-10-22 | **G8 warn-only:** stale gold no longer stops the run (setting `…_GOLD_MAX_AGE_DAYS` removed); an unreadable `gold_built_at` warns too. Startup warnings are logged one per line at WARNING and their texts go in the manifest (`startup.warning_messages`) | — |
 | 2026-10-22 | Run statuses and markers for all crawls moved to their own reference, `docs/crawl_run_status.md` (with a drift test); section 6 points to it | — |
 | 2026-10-21 | A listing page lost to blocking degrades the run (`kind: access`, URL named) even when its hostname isn't blocked; opt-in per spider via `access.LISTING_META_KEY`, set for Ounass normal mode. Documented what a degraded run means for raw, and the fetches outside Scrapy the access layer can't see | — |

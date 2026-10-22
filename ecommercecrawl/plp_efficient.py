@@ -84,6 +84,8 @@ class Config:
     max_phase2_pdps: int = 10000
     missing_ratio_cap: float = 0.25
     field_mismatch_ratio: float = 0.05
+    missing_min_expected: int = 20
+    field_mismatch_min_seen: int = 20
     site: str = "ounass"
 
     @classmethod
@@ -101,6 +103,8 @@ class Config:
             max_phase2_pdps=get("OUNASS_PLP_EFFICIENT_MAX_PHASE2_PDPS", 10000, int),
             missing_ratio_cap=get("OUNASS_PLP_EFFICIENT_MISSING_RATIO_CAP", 0.25, float),
             field_mismatch_ratio=get("OUNASS_PLP_EFFICIENT_FIELD_MISMATCH_RATIO", 0.05, float),
+            missing_min_expected=get("OUNASS_PLP_EFFICIENT_MISSING_MIN_EXPECTED", 20, int),
+            field_mismatch_min_seen=get("OUNASS_PLP_EFFICIENT_FIELD_MISMATCH_MIN_SEEN", 20, int),
         )
 
 
@@ -695,7 +699,10 @@ class PlpEfficientRun:
             {"url": plp["url"], "pages_requested": 0, "pages_parsed": 0, "pages_failed": 0,
              "pages_failed_access": 0,
              "emitted": 0, "matched": 0, "mismatched": 0, "unusable": 0, "new": 0,
-             "stopped": None}
+             "stopped": None,
+             # Filled by listing_health: G4 inputs, recorded even when too few
+             # products to act on (missing_min_expected).
+             "expected_products": None, "expected_unseen": None, "note": None}
             for plp in self.plps
         ]
         self.phase2 = None
@@ -833,8 +840,14 @@ class PlpEfficientRun:
                 missing = stats["pages_requested"] - stats["pages_parsed"]
                 health[idx] = f"G3: {missing} listing page(s) never came back"
             elif seen and stats["mismatched"] / seen > cfg.field_mismatch_ratio:
-                health[idx] = (f"G11: {stats['mismatched']} of {seen} matched products disagree "
-                               f"with the listing's fields (> {cfg.field_mismatch_ratio:.0%})")
+                if seen >= cfg.field_mismatch_min_seen:
+                    health[idx] = (f"G11: {stats['mismatched']} of {seen} matched products disagree "
+                                   f"with the listing's fields (> {cfg.field_mismatch_ratio:.0%})")
+                else:
+                    # Too few products for a share to mean anything: record only.
+                    health[idx] = None
+                    stats["note"] = (f"G11 not applied: {stats['mismatched']} of {seen} matched products "
+                                     f"disagree, below the {cfg.field_mismatch_min_seen}-product minimum")
             else:
                 health[idx] = None
         # G4 on listings still healthy: unseen share of expected products,
@@ -851,9 +864,17 @@ class PlpEfficientRun:
                 continue
             counted = [k for k in keys if str(self.pdps[k].get("out_of_stock")).lower() != "true"]
             unseen = [k for k in counted if k not in self.crawled]
+            stats = self.stats[idx]
+            stats["expected_products"], stats["expected_unseen"] = len(counted), len(unseen)
             if counted and len(unseen) / len(counted) > cfg.missing_ratio_cap:
-                health[idx] = (f"G4: {len(unseen)} of {len(counted)} expected products not seen "
-                               f"(> {cfg.missing_ratio_cap:.0%})")
+                if len(counted) >= cfg.missing_min_expected:
+                    health[idx] = (f"G4: {len(unseen)} of {len(counted)} expected products not seen "
+                                   f"(> {cfg.missing_ratio_cap:.0%})")
+                else:
+                    # A handful of known products (e.g. a young gold) can't show a
+                    # listing is broken: one delisted product would be "100% missing".
+                    stats["note"] = (f"G4 not applied: {len(unseen)} of {len(counted)} expected products "
+                                     f"not seen, below the {cfg.missing_min_expected}-product minimum")
         return health
 
     def select_phase2(self):

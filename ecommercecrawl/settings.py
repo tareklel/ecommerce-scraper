@@ -216,6 +216,16 @@ OUNASS_PLP_EFFICIENT_MISSING_RATIO_CAP = float(
 OUNASS_PLP_EFFICIENT_FIELD_MISMATCH_RATIO = float(
     os.getenv("OUNASS_PLP_EFFICIENT_FIELD_MISMATCH_RATIO", "0.05")
 )
+# Minimum sample before G4 / G11 can hold a listing back: a share of a handful
+# of products means nothing (2026-10-22 dry run: "1 of 1 expected products not
+# seen" held back a whole listing because its only known product was
+# delisted). Below the minimum the numbers are recorded, not acted on.
+OUNASS_PLP_EFFICIENT_MISSING_MIN_EXPECTED = int(
+    os.getenv("OUNASS_PLP_EFFICIENT_MISSING_MIN_EXPECTED", "20")
+)
+OUNASS_PLP_EFFICIENT_FIELD_MISMATCH_MIN_SEEN = int(
+    os.getenv("OUNASS_PLP_EFFICIENT_FIELD_MISMATCH_MIN_SEEN", "20")
+)
 
 # Access retry rounds, all crawls (ecommercecrawl/access.py; documented in
 # docs/ounass_plp_efficient_crawl.md, section 5). A request that still fails on

@@ -1,5 +1,10 @@
 # Memory
 
+## 2026-10-22 - Dry run #1 started; G4/G11 minimum samples
+- PLP-efficient dry run #1 in dev ECS (task 342abe5b…): export invoked from ECS OK, startup warnings G8/STALE logged, sweep of 4 listings in ~2.5 min, Phase 2 3,897 new product pages at ~27/min, 0 errors, no blocking.
+- Found: G4 held back the Saudi Arabic tote listing on "1 of 1 expected products not seen". Fix: G4 and G11 need ≥ 20 products (`OUNASS_PLP_EFFICIENT_MISSING_MIN_EXPECTED`, `…_FIELD_MISMATCH_MIN_SEEN`); below, per-listing `expected_products` / `expected_unseen` / `note` are recorded only.
+- Phase 2 speed (throttling settings) to test separately.
+
 ## 2026-10-22 - G8 warn-only
 - Stale gold no longer stops a PLP-efficient run (`OUNASS_PLP_EFFICIENT_GOLD_MAX_AGE_DAYS` removed; unreadable `gold_built_at` also warns). Reason: it only makes recently found products look new (extra Phase 2 cost, capped), never wrong data.
 - Startup warnings: one `PLP-efficient startup warning <check>: …` WARNING log line each, and their texts in the manifest (`plp_efficient.startup.warning_messages`).

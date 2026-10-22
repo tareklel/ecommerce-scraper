@@ -61,6 +61,10 @@ def validated(plp_rows, pdp_rows):
 
 
 def make_run(plp_rows, pdp_rows, **config):
+    # Ratio tests use a handful of products; the minimum-sample rule has its
+    # own tests, which pass the real minimum explicitly.
+    config.setdefault("missing_min_expected", 1)
+    config.setdefault("field_mismatch_min_seen", 1)
     _, result = validated(plp_rows, pdp_rows)
     return pe.PlpEfficientRun(result, pe.Config(**config), "run-1", "2026-10-16")
 
@@ -487,3 +491,38 @@ def test_stale_gold_warns_in_log_and_manifest_but_does_not_stop(caplog):
     assert any("startup warning G8" in r.message for r in caplog.records)
     block = spider.plp_efficient_manifest_block()
     assert any(m.startswith("G8: gold last rebuilt 6.0 days ago") for m in block["startup"]["warning_messages"])
+
+
+
+# --- Minimum samples for G4 / G11 (2026-10-22 dry run) -----------------------------
+
+def test_g4_not_applied_below_minimum_expected():
+    # Dry run #1: the listing's only known product was delisted -> "1 of 1 missing"
+    # used to hold back the whole listing (1,059 new products).
+    run = make_run([plp()], [pdp("gone")], missing_min_expected=20)
+    _swept(run)
+    run.handle_hit(0, hit("777"), TOTE)                 # a new product on the page
+    phase2 = run.select_phase2()
+    assert phase2["listing_health"][TOTE] is None
+    assert "https://saudi.ounass.com/shop-made-up-777_19.html" in phase2["urls"]
+    stats = run.stats[0]
+    assert stats["expected_products"] == 1 and stats["expected_unseen"] == 1
+    assert "G4 not applied" in stats["note"]
+
+
+def test_g4_still_applies_at_the_minimum():
+    run = make_run([plp()], [pdp(str(i)) for i in range(20)], missing_min_expected=20)
+    _swept(run)                                         # none of the 20 seen
+    assert "G4" in run.select_phase2()["listing_health"][TOTE]
+
+
+def test_g11_not_applied_below_minimum_seen():
+    run = make_run([plp(), plp(url=SHOULDER, subcategory="shoulder_bags")],
+                   [pdp("1"), pdp("x", subcategory="shoulder_bags")],
+                   missing_ratio_cap=1.0, field_mismatch_min_seen=20)
+    _swept(run, 0)
+    _swept(run, 1)
+    run.handle_hit(0, hit("1"), TOTE)
+    run.handle_hit(0, hit("x"), TOTE)                   # 1 of 2 disagree = 50%, but only 2 seen
+    assert run.select_phase2()["listing_health"][TOTE] is None
+    assert "G11 not applied" in run.stats[0]["note"]
