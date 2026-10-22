@@ -96,7 +96,11 @@ Cross-cutting:
 2. Crawler image CI (build on push, manual promote).
 3. Terraform plan-on-PR / apply-on-merge for both repos. Deploy the pending
    2026-07-30 API-cache code deliberately through it.
-4. dbt in CI.
+4. dbt in CI, plus a **scheduled dbt build in AWS** (e.g. daily after the
+   crawls; added 2026-10-22). Today dbt only runs on a laptop, so gold goes
+   stale whenever nobody runs it; the PLP-efficient crawl then warns (G8)
+   and pays for extra product-page crawls until it's rebuilt. Running dbt
+   from the crawler instead was rejected: it would couple crawls to dbt.
 5. Website pipeline; nightly drift checks.
 
 ---

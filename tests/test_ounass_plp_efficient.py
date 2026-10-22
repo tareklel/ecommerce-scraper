@@ -473,3 +473,17 @@ def test_normal_mode_flags_listing_requests_not_product_pages():
     [product] = list(spider._handle_seed_url("https://saudi.ounass.com/shop-x-1.html"))
     assert listing.meta.get(access_layer.LISTING_META_KEY) is True
     assert access_layer.LISTING_META_KEY not in product.meta
+
+
+
+def test_stale_gold_warns_in_log_and_manifest_but_does_not_stop(caplog):
+    spider = _spider([plp()], [pdp("1")])
+    inputs, _ = validated([plp()], [pdp("1")])
+    inputs.manifest["gold_built_at"] = (NOW - timedelta(days=6)).isoformat()
+    spider._load_plp_efficient_inputs = lambda: inputs
+    with caplog.at_level("WARNING"):
+        requests = list(spider.start_requests())
+    assert requests                                   # the crawl starts
+    assert any("startup warning G8" in r.message for r in caplog.records)
+    block = spider.plp_efficient_manifest_block()
+    assert any(m.startswith("G8: gold last rebuilt 6.0 days ago") for m in block["startup"]["warning_messages"])

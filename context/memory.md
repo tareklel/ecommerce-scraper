@@ -1,5 +1,10 @@
 # Memory
 
+## 2026-10-22 - G8 warn-only
+- Stale gold no longer stops a PLP-efficient run (`OUNASS_PLP_EFFICIENT_GOLD_MAX_AGE_DAYS` removed; unreadable `gold_built_at` also warns). Reason: it only makes recently found products look new (extra Phase 2 cost, capped), never wrong data.
+- Startup warnings: one `PLP-efficient startup warning <check>: …` WARNING log line each, and their texts in the manifest (`plp_efficient.startup.warning_messages`).
+- Scheduled dbt in AWS added to `tickets/cicd_pipeline.md`; no dbt run from the crawler.
+
 ## 2026-10-22 - Self-explaining failures
 - Every failure marker, verified manifest (`failure_explanation`) and `RUN FAILED` log line now carries a plain `meaning`, `what_to_do` and a link to `docs/crawl_run_status.md#failure-markers`.
 - Texts: verifier `FAILURE_REASONS` and crawler `ecommercecrawl/run_status.py` (identical copy; the Lambda can't import the crawler), enforced by `tests/test_run_status_explanations.py`. Verifier constant `RUN_STATUS_DOC` → `STATUS_DOC_LINK` so `RUN_*` stays reserved for statuses (the docs drift test reads them).

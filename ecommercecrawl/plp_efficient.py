@@ -80,7 +80,6 @@ class Config:
     max_bad_plp_rows_ratio: float = 0.25
     max_bad_pdp_rows_ratio: float = 0.05
     gold_warn_age_days: float = 2
-    gold_max_age_days: float = 3
     stale_crawl_days: int = 7
     max_phase2_pdps: int = 10000
     missing_ratio_cap: float = 0.25
@@ -98,7 +97,6 @@ class Config:
             max_bad_plp_rows_ratio=get("OUNASS_PLP_EFFICIENT_MAX_BAD_PLP_ROWS_RATIO", 0.25, float),
             max_bad_pdp_rows_ratio=get("OUNASS_PLP_EFFICIENT_MAX_BAD_PDP_ROWS_RATIO", 0.05, float),
             gold_warn_age_days=get("OUNASS_PLP_EFFICIENT_GOLD_WARN_AGE_DAYS", 2, float),
-            gold_max_age_days=get("OUNASS_PLP_EFFICIENT_GOLD_MAX_AGE_DAYS", 3, float),
             stale_crawl_days=get("OUNASS_PLP_EFFICIENT_STALE_CRAWL_DAYS", 7, int),
             max_phase2_pdps=get("OUNASS_PLP_EFFICIENT_MAX_PHASE2_PDPS", 10000, int),
             missing_ratio_cap=get("OUNASS_PLP_EFFICIENT_MISSING_RATIO_CAP", 0.25, float),
@@ -453,7 +451,14 @@ def _check_pdp_rows(rows, vocab, config, result):
 
 
 def _check_gold_age(manifest, config, now, result):
-    """G8: how long ago gold was rebuilt (the export file itself is always fresh)."""
+    """
+    G8: how long ago gold was rebuilt (the export file itself is always fresh).
+    Warn only (2026-10-22): stale gold costs money, not correctness. Prices
+    come from the listing pages; gold only supplies the known products, so
+    products found since the last rebuild look new and get product-page
+    crawls in Phase 2 (capped by the ceiling) until dbt runs. Stopping the
+    crawl would leave everything unrefreshed instead.
+    """
     if manifest is None:
         result.problems.append(Problem(
             "G8", WARN, "gold age unknown: no export manifest (local input files)", "manifest"))
@@ -465,18 +470,17 @@ def _check_gold_age(manifest, config, now, result):
             built = built.replace(tzinfo=timezone.utc)
     except (TypeError, ValueError):
         result.problems.append(Problem(
-            "G8", STOP, f"gold_built_at missing or unreadable ({built_raw!r})", "manifest"))
+            "G8", WARN, f"gold age unknown: gold_built_at missing or unreadable ({built_raw!r})",
+            "manifest"))
         return
     age = (now - built).total_seconds() / 86400
     result.gold_age_days = age
-    if age >= config.gold_max_age_days:
+    if age >= config.gold_warn_age_days:
         result.problems.append(Problem(
-            "G8", STOP,
-            f"gold last rebuilt {age:.1f} days ago (>= {config.gold_max_age_days:g}): dbt is likely stuck",
+            "G8", WARN,
+            f"gold last rebuilt {age:.1f} days ago (dbt hasn't run since): products found "
+            f"since then look new and get product-page crawls in Phase 2 until it does",
             "manifest"))
-    elif age >= config.gold_warn_age_days:
-        result.problems.append(Problem(
-            "G8", WARN, f"gold last rebuilt {age:.1f} days ago", "manifest"))
 
 
 def _check_coverage(config, result):
@@ -971,6 +975,8 @@ def manifest_block(inputs=None, result=None, run=None, startup_error=None, mode=
             "products_stale": len(result.stale_pdp_rows),
             "problems_by_check": by_check,
             "stop_messages": [p.message for p in result.by_severity(STOP)][:MANIFEST_MAX_MESSAGES],
+            "warning_messages": [f"{p.check}: {p.message}"
+                                 for p in result.by_severity(WARN)][:MANIFEST_MAX_MESSAGES],
         }
         if result.skipped_plp_rows:
             degradations.append(_degradation(

@@ -33,7 +33,7 @@ applies. The first in this order is the run's `failure_reason`.
 | Marker | `failure_reason` | Written when | Example | What to do |
 |---|---|---|---|---|
 | `_FAIL_ABORTED` | `aborted` | The crawl closed for any reason other than finishing (`exit_reason` ≠ `finished`) | Ctrl+C, ECS task stopped | Re-run. If it recurs, check why the task was stopped |
-| `_FAIL_STARTUP_CHECK` | `startup_check` | A PLP-efficient run stopped before any request | broken registry, export Lambda failed, gold too old | `make preflight-ounass-plp-efficient` lists every failed check |
+| `_FAIL_STARTUP_CHECK` | `startup_check` | A PLP-efficient run stopped before any request | broken registry, export Lambda failed | `make preflight-ounass-plp-efficient` lists every failed check |
 | `_FAIL_ACCESS` | `access` | **No rows written**, and requests were given up on blocking after every retry round | 2026-10-20 Acler run: Saudi Zyte ban | Manifest `access` block shows which hostnames and errors; check Zyte routing (`CRAWLER_API_ZYTE_GEOLOCATION_BY_HOST`); re-run later |
 | `_FAIL_QUALITY` | `quality` | The quality gate failed, or nothing was written for a reason **other than** blocking | 2026-10-20 Burberry run: URL 404, zero rows | `metadata/quality_report.json`; check the seed URL still exists and the page format |
 | `_FAILED` | `verification` | The **file check** failed: data file missing, hash or row-count mismatch, unreadable manifest, or the copy into `crawls/` failed | upload cut off halfway | Verifier Lambda logs; re-run |

@@ -385,6 +385,10 @@ class OunassSpider(MasterCrawl, scrapy.Spider):
         result = pe.validate(inputs, config)
         self.plp_efficient_result = result
         self.logger.info("\n" + pe.format_report(inputs, result))
+        for problem in result.by_severity(pe.WARN):
+            # One grep-able line per startup warning (e.g. G8 stale gold); the
+            # texts also go in the manifest (plp_efficient.startup.warning_messages).
+            self.logger.warning(f"PLP-efficient startup warning {problem.check}: {problem.message}")
         if result.stop:
             self.logger.error("PLP-efficient run stopped by startup checks; no request made.")
             return

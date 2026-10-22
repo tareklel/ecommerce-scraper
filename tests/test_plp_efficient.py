@@ -205,17 +205,18 @@ def test_g10_empty_product_list_only_warns():
 @pytest.mark.parametrize("age_days, expected", [
     (1.0, None),
     (2.5, pe.WARN),
-    (3.0, pe.STOP),
+    (30.0, pe.WARN),     # warn only, however old: stale gold costs money, not correctness
 ])
 def test_g8_gold_age(age_days, expected):
     result = run(make_inputs(man=manifest(NOW - timedelta(days=age_days))))
     g8 = {p.severity for p in result.problems if p.check == "G8"}
     assert g8 == ({expected} if expected else set())
+    assert not result.stop
 
 
-def test_g8_missing_gold_built_at_stops():
+def test_g8_missing_gold_built_at_warns():
     result = run(make_inputs(man=manifest(gold_built_at=None)))
-    assert ("G8", pe.STOP) in checks(result)
+    assert ("G8", pe.WARN) in checks(result) and not result.stop
 
 
 def test_g8_no_manifest_warns():
@@ -366,8 +367,8 @@ def test_invoke_export_failures_raise_export_error(client):
 
 def test_config_from_settings_mapping():
     config = pe.Config.from_settings({"OUNASS_PLP_EFFICIENT_STALE_CRAWL_DAYS": "14",
-                                      "OUNASS_PLP_EFFICIENT_GOLD_MAX_AGE_DAYS": "5"})
-    assert config.stale_crawl_days == 14 and config.gold_max_age_days == 5.0
+                                      "OUNASS_PLP_EFFICIENT_GOLD_WARN_AGE_DAYS": "5"})
+    assert config.stale_crawl_days == 14 and config.gold_warn_age_days == 5.0
     assert config.max_bad_plp_rows_ratio == 0.25  # default
 
 

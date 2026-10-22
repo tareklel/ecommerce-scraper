@@ -375,7 +375,7 @@ the last round).
 | G4 | Known-but-unseen products per PLP (excluding ones gold has as sold out) | After the sweep: over the cap → that PLP's leftovers held back (rows already written stay) | `OUNASS_PLP_EFFICIENT_MISSING_RATIO_CAP` (0.25) |
 | G6 | PLP-extract `url` = PDP list `url`, not a listing URL | Don't write that row; product left for Phase 2 | — |
 | G7 | PLP hostname ↔ country/language; entry `localeCurrency` = country currency | Startup: skip that PLP. Sweep: stop that PLP at the first wrong-currency entry; its leftovers held back (rows already written stay). | — |
-| G8 | Gold age: gold's last build time from the PDP list manifest. The export itself is always fresh. | Warn at the warn age; stop run at the max age (dbt likely stuck) | `OUNASS_PLP_EFFICIENT_GOLD_WARN_AGE_DAYS` (2), `OUNASS_PLP_EFFICIENT_GOLD_MAX_AGE_DAYS` (3) |
+| G8 | Gold age: gold's last build time from the PDP list manifest. The export itself is always fresh. | **Warn only** (2026-10-22): warn at the warn age, or if the age is unknown; never stops the run | `OUNASS_PLP_EFFICIENT_GOLD_WARN_AGE_DAYS` (2) |
 | G9 | Parity check, per hostname (section 3, "Parity check") [planned, Part 5b] | Confirmed mismatches ≥ 20% (min 2) → that hostname's listing rows dropped, products held back. Not checkable because of blocking → borrow other hostnames' verdict; none checkable → rows dropped (access). Never a whole-run stop. | `OUNASS_PLP_EFFICIENT_PARITY_SAMPLE` (20), `OUNASS_PLP_EFFICIENT_PARITY_MIN_COMPARISONS` (10), `OUNASS_PLP_EFFICIENT_PARITY_MAX_MISMATCH_RATIO` (0.2) |
 | G10 | Canonical values exist in the latest vocabulary | Bad PLP row → as G1. Bad PDP row → quarantine that product. Too many bad PDP rows → stop run. | `OUNASS_PLP_EFFICIENT_MAX_BAD_PDP_ROWS_RATIO` (0.05) |
 | G11 | ID matched but fields differ (drift / reclassification) | After the sweep: over the share → that PLP's leftovers held back (rows already written stay) | `OUNASS_PLP_EFFICIENT_FIELD_MISMATCH_RATIO` (0.05) |
@@ -452,11 +452,20 @@ recorded.
 **G8: gold was rebuilt recently**
 - *Checks:* `gold_built_at` from the export manifest: when gold was last
   **rebuilt**.
-- *Why:* if dbt is stuck, the PDP list reflects an outdated picture. If the
-  scheduled flow runs dbt right before each crawl (dbt → export → crawl),
-  this is a safety net for that step failing or being skipped.
-- *Outcome:* within 1 day OK; **2 days → warn**; **3+ days, or missing →
-  stop.**
+- *Why:* if dbt hasn't run, gold doesn't know the products crawled since
+  its last rebuild. Those products then look **new** and get a product-page
+  crawl in Phase 2 every run until dbt runs again (capped by the Phase 2
+  ceiling). That's extra cost, not wrong data: prices come from the listing
+  pages, and every product-page crawl is a complete row.
+- *Outcome:* **warn only** (changed 2026-10-22; it used to stop the run at
+  3 days). Under 2 days OK; **2+ days, or age unknown → warn**. Stopping
+  the crawl would leave every product unrefreshed while dbt is down,
+  compounding the staleness. The fix for stale gold is a dbt schedule in
+  AWS (`tickets/cicd_pipeline.md`), not a crawl stop.
+- *Where the warning shows:* preflight output; a `PLP-efficient startup
+  warning G8: …` line in the crawl log (CloudWatch); and the manifest
+  (`plp_efficient.startup.warning_messages`, plus `gold_age_days`). It
+  doesn't make the run degraded: nothing is skipped.
 - *Note:* this says nothing about how fresh each product's data is. A gold
   rebuild doesn't refresh product dates; see the next check.
 
@@ -650,8 +659,8 @@ ago) and STALE (5 products last crawled 2026-08-08); exit 0.
 |---|---|---|
 | Run failed with `failure_reason: access` | Nothing written because the site refused us through every retry round | Manifest `access` block (which hostnames, which errors); Saudi routing (`CRAWLER_API_ZYTE_GEOLOCATION_BY_HOST`); re-run later |
 | A run's rows aren't in Athena | Run failed: data left in `crawl-unverified/` | `crawl_manifest_raw` `run_status` / `failure_reason`; markers under `crawls/markers/<site>/<dt>/<run_id>/` |
-| Run stopped at startup | Export Lambda failed, or G2 / G8 / G1 or G10 over threshold | Run preflight: it lists every failed check with the offending rows. For an export failure, check the Lambda's logs in scraper-pipeline. |
-| Run stopped on G8 | gold hasn't been rebuilt for 3+ days | Check scraper-pipeline's dbt runs |
+| Run stopped at startup | Export Lambda failed, or G2 / G1 or G10 over threshold | Run preflight: it lists every failed check with the offending rows. For an export failure, check the Lambda's logs in scraper-pipeline. |
+| `startup warning G8` / Phase 2 much larger than usual | gold hasn't been rebuilt for 2+ days, so recently found products look new | Run dbt in scraper-pipeline (`make dbt-run`); a scheduled dbt job is planned (`tickets/cicd_pipeline.md`) |
 | A PLP was skipped | Bad PLP row (non-canonical value, missing subcategory, hostname ≠ country) | Fix the row in `crawl_plp_registry` |
 | Products quarantined | Gold row with a value not in the vocabulary, often mid-rename | Wait for the dbt rebuild, or fix the seed |
 | A hostname has no PLP-extract rows, `kind = access` | Ounass blocked it through every retry round, and no other hostname could vouch for parity | Manifest `access` block; `--probe-one-page` |
@@ -698,6 +707,7 @@ ago) and STALE (5 products last crawled 2026-08-08); exit 0.
 | 2026-10-05 | Doc created from the agreed design (all sections planned) | — |
 | 2026-10-13 | PDP list scoped to active PLP list rows; `is_active` column added to the PLP list | — |
 | 2026-10-16 | **Part 2 built:** startup checks (G1, G2, G7, G8, G10, stale-crawl), settings, `make preflight-ounass-plp-efficient` (+ `-probe`). Verified against the dev export | — |
+| 2026-10-22 | **G8 warn-only:** stale gold no longer stops the run (setting `…_GOLD_MAX_AGE_DAYS` removed); an unreadable `gold_built_at` warns too. Startup warnings are logged one per line at WARNING and their texts go in the manifest (`startup.warning_messages`) | — |
 | 2026-10-22 | Run statuses and markers for all crawls moved to their own reference, `docs/crawl_run_status.md` (with a drift test); section 6 points to it | — |
 | 2026-10-21 | A listing page lost to blocking degrades the run (`kind: access`, URL named) even when its hostname isn't blocked; opt-in per spider via `access.LISTING_META_KEY`, set for Ounass normal mode. Documented what a degraded run means for raw, and the fetches outside Scrapy the access layer can't see | — |
 | 2026-10-21 | New `failure_reason: access` (`_FAIL_ACCESS`): a run with no rows whose requests were lost to blocking fails as access, not quality, in the crawler and the verifier. A hostname that lost every request is `blocked` regardless of the 5-request minimum | — |

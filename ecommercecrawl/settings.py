@@ -191,12 +191,10 @@ OUNASS_PLP_EFFICIENT_MAX_BAD_PLP_ROWS_RATIO = float(
 OUNASS_PLP_EFFICIENT_MAX_BAD_PDP_ROWS_RATIO = float(
     os.getenv("OUNASS_PLP_EFFICIENT_MAX_BAD_PDP_ROWS_RATIO", "0.05")
 )
-# G8: age of gold's last rebuild (export manifest gold_built_at).
+# G8: age of gold's last rebuild (export manifest gold_built_at). Warn only:
+# stale gold makes products look new (more Phase 2 cost), never wrong data.
 OUNASS_PLP_EFFICIENT_GOLD_WARN_AGE_DAYS = float(
     os.getenv("OUNASS_PLP_EFFICIENT_GOLD_WARN_AGE_DAYS", "2")
-)
-OUNASS_PLP_EFFICIENT_GOLD_MAX_AGE_DAYS = float(
-    os.getenv("OUNASS_PLP_EFFICIENT_GOLD_MAX_AGE_DAYS", "3")
 )
 # Stale-crawl warning: in-scope products whose last_crawl_date is older than
 # this many days (warn only; refreshing them is what the crawl is for).
