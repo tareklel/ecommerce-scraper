@@ -1,5 +1,10 @@
 # Memory
 
+## 2026-10-22 - Dry run #1 done; dbt; images; handoff
+- Dry run #1: degraded (Arabic tote listing held back by the since-fixed G4), 4,035 requests all OK, 3,901 rows, published. dbt rebuilt dev gold: 3,807 known products; preflight clean.
+- Image pipeline has no automatic trigger (manual `make ecs-run-image-pipeline`); order is crawl → dbt → images → dbt. Started by hand for dry run #1's products.
+- Ticket "Resume here" rewritten as a self-contained handoff (commands for dry run #2, checks, gotchas). Orchestration proposal (EventBridge Scheduler + Step Functions running ECS tasks; dbt needs an AWS runner first) added to `tickets/cicd_pipeline.md`.
+
 ## 2026-10-22 - Direction: brand-scoped category rows
 - User direction after dry run #1 (3,897 Phase 2 product pages, all brands): registry `brand` should filter a category listing to that brand's entries (empty = all); other brands ignored. Then compare against gold.
 - Listing entries carry `designerCategoryEnglishName`, `designerCategoryUrl` (slug), `id_designer`. Needs a designer → canonical brand map exported from scraper-pipeline, and a rule for several brands per listing. Not built; guard (a) stays. Notes in the ticket's "Future direction" section.

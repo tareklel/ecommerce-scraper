@@ -6,87 +6,121 @@
 
 Read this first when resuming.
 
-### ▶ Resume here (stopped 2026-10-20)
+### ▶ Resume here (updated 2026-10-22, end of day): read this first
 
-**State:** Parts 0–4 and 5a are built and pushed; the live crawler image is
-`987161e` (crawl-unverified/ upload, run status, access retry rounds). The
-verifier Lambda was deployed 2026-10-20 05:36 UTC. Nothing is uncommitted.
+Written so a **new session** can pick up without the old conversation.
 
-**Cloud check of Part 4b (2026-10-20, two ECS runs in dev):**
-- Run `2026-10-20T07-26-01-401` (`www.ounass.ae/api/women/designers/burberry/bags`,
-  an old makefile test URL that now 404s): 0 rows → `run_status failed`,
-  `failure_reason quality`, markers `_FAIL_QUALITY` + `_FAILED`, nothing
-  copied into `crawls/`, run-started record written, `crawl_manifest_raw`
-  day registered for the failed run, `RUN FAILED` in CloudWatch. **Failure
-  path verified.**
-- Run `2026-10-20T07-28-13-690` (`en-saudi.ounass.com/api/women/designers/acler`):
-  Zyte `520 /download/website-ban` on the only listing request; the access
-  layer waited 2 × 15 min and gave up (32 min run). Correct behaviour, but
-  it exposed two labelling gaps (items 3 and 4 below).
-- **Success path (copy into `crawls/` → `_SUCCESS` → data partition) is
-  still unverified in AWS.**
-- Saudi bans are **intermittent**: the same `httpResponseBody` request
-  (`saudi.ounass.com/api/women/designers/tory-burch`) sometimes works and
-  sometimes gets 520 in the Zyte playground too; one request from here got
-  520. Not our request shape, not geolocation.
+#### State in one paragraph
+Parts 0–4 and 5a are built, deployed and verified in AWS (dev). The live
+crawler image is `sha-9e03971` (GitHub Actions auto-deploys on every
+crawler-code push to `main`). The verifier Lambda was last deployed
+2026-10-22 06:34 UTC. All repos are committed and pushed. Full suite: 445
+tests passing. The mode is still **dev only**: Part 5b (parity) and Part 6
+(downstream) must land before prod, then Part 7 (shadow, go live).
 
-**Done late 2026-10-20:** Saudi hostnames (`saudi`, `en-saudi`,
-`ar.ounass.sa`) now go through Zyte geolocation `TR`
-(`CRAWLER_API_ZYTE_GEOLOCATION_BY_HOST` in `settings.py`; other sites and
-countries unchanged). Default routing was banned 5/5 times that day; the
-same request via `TR` returned 200 with SAR prices. The user confirmed
-prices don't change by exit country. This should make the success-path test
-(item 6) work on Saudi, and turns items 1–2 into a backstop.
+#### Reference docs (how things work now)
+- `docs/ounass_plp_efficient_crawl.md`: the mode, guardrails, settings.
+- `docs/crawl_run_status.md`: run statuses, failure markers (what to do).
+- `docs/fail_quality_contract.md`: quality-gate rules.
+- This ticket: plan, decisions (decision log at the bottom), history.
 
-**Next commit (agreed in principle 2026-10-20, not built):**
-1. **Zyte aggressive retry policy:** `ZYTE_API_RETRY_POLICY =
-   "zyte_api.aggressive_retrying"` (Zyte's documented setting for sites that
-   ban often; retries 520/521 more inside each request). Check on the Zyte
-   usage page that bans aren't billed.
-2. **Retune access rounds for flickering bans:** `ACCESS_RETRY_ROUNDS` 6,
-   `ACCESS_RETRY_COOLDOWN_SECONDS` 300, cap unchanged at 3600.
-3. ✅ **`failure_reason: access`, built 2026-10-21:** no rows + requests
-   given up on access → `failed / access`, `_FAIL_ACCESS` only (crawler
-   `crawler_run_status`, verifier `FAILURE_REASONS`). Verifier deployed
-   2026-10-21 14:29 UTC (code hash matches the local build).
-4. ✅ **Blocked hostname regardless of size, built 2026-10-21:** a
-   hostname that lost every request is `blocked`.
-4b. ✅ **Lost listing page degrades the run, built 2026-10-21** (all
-   crawls, opt-in flag; Ounass normal mode flagged). **Follow-up:** Level
-   Shoes fetches its listing pages with plain `requests`
-   (`level_crawl._get_payload`), outside Scrapy, so it gets no retry rounds
-   and no access record. Move it onto Scrapy/Zyte requests to cover it.
-5. ✅ **Registry guard (a), done 2026-10-21:** G1 rejects a PLP row with
-   `brand` set or a `/designers/` URL (`plp_efficient._page_kind_errors`).
-   Brand-page support (b) is recorded as a possible extension (reference
-   doc, section 10); `plp_covers_pdp`'s brand rule is kept for it. The
-   current seed (4 category rows, brand blank) passes.
-6. ✅ **Success path verified in AWS, 2026-10-21:** dev ECS run
-   `2026-10-21T14-27-38-056` (`saudi.ounass.com/api/women/designers/tory-burch
-   --category bags`, Saudi via Zyte `TR`): 137 requests, all 200, no access
-   failures; 126 rows; file in `crawl-unverified/` copied to `crawls/`,
-   `_SUCCESS`, both Glue partitions registered; manifest `run_status
-   success`, `verification.data_source unverified`. Athena: 126 rows in
-   `bronze_ounass_raw` for the run (`plp_extract_flag = 0` on all), and all
-   three runs of 2026-10-20/21 in `crawl_started_raw`. **Part 4b is fully
-   verified.** The command used (kept for reference):
-   ~~re-run the success-path ECS test~~, e.g.
-   `make ecs-run APP_ENV=dev ECS_RUN_COMMAND="python3 run_crawler.py ounass --env dev --urls https://saudi.ounass.com/api/women/designers/tory-burch --category bags"`
-   and check: file in `crawl-unverified/` and copied to `crawls/`,
-   `_SUCCESS`, data partition, `run_status`, `access` block,
-   `crawl_started_raw` row (query it once in Athena too).
-   Note: `make ecs-run-test` now uses the brand page
-   `saudi.ounass.com/api/women/designers/ami/` with no `--category`, so it
-   crawls every Ami product page (all categories), not just bags.
+#### Where the dev data stands
+- **Dry run #1** (2026-10-22, run `2026-10-22T06-52-02-550`, ECS task
+  `342abe5b…`): `degraded`, 2 h 29 min, 4,035 requests (all 200, no bans),
+  3,901 rows (4 listing-extract + 3,897 product pages), about $2 of Zyte
+  (estimate). The Saudi **Arabic** tote listing (1,059 products) was held
+  back by G4 on "1 of 1 expected not seen"; fixed since (G4/G11 minimum 20).
+- **dbt** rebuilt dev 2026-10-22 11:40 UTC (21/21 models OK). Gold now
+  knows **3,807** in-scope products (sa/ar 1,385, sa/en 2,422). Preflight
+  after it: no problems, no warnings.
+- **Images:** the image pipeline was started by hand 2026-10-22 (ECS task
+  `7f0f11d0…`) to download images for dry run #1's products; a dbt build
+  after it puts them in gold. See "Images" below for the outcome.
 
-**After that: Part 5b (parity)**, as designed in Part 5 below.
+#### Next: dry run #2 (the real test of the saving)
+1. Preflight (no Zyte; invokes the export Lambda):
+   `AWS_DEFAULT_REGION=eu-central-1 .venv/bin/python scripts/preflight_ounass_plp_efficient.py --env dev`
+   Expect "OK: the crawl would start". If gold is 2+ days old it warns
+   (G8); that no longer stops anything.
+2. Launch in ECS (dev):
+   `make ecs-run APP_ENV=dev ECS_RUN_COMMAND="python3 run_crawler.py ounass --env dev --plp-efficient"`
+   (prints the task ARN; the last part is the task ID).
+3. Watch (filters the noisy DEBUG log to milestones):
+   `aws logs tail /ecs/ecommerce-scraper --region eu-central-1 --follow --log-stream-names ecs/scraper/<task-id> --filter-pattern '?"Crawled" ?"PLP-efficient" ?"Access retry" ?"RUN " ?"ACCESS " ?ERROR'`
+   Key line: `PLP-efficient Phase 2: {...}` when the sweep ends.
+4. **Expect:** ~138 listing pages; ~3,800 products refreshed from listings
+   (`refreshed_from_listing`); Phase 2 ~1,150 product pages (the 1,059
+   Arabic totes + ~90 products gold can't map + new arrivals); ~1,300
+   requests, ~50 min. Run #3 should be ~140 listing pages + a few dozen.
+   Note: the ~90 "known but missing from gold" products: confirm why from
+   run #2's numbers (likely unmapped canonical values).
+5. **Check:** the verified manifest
+   `s3://price-comparison-bucket-eu-central-1/bronze/dev/crawls/manifests/ounass/<dt>/<run_id>/data.json`
+   (`raw_json`: `run_status`, `degradations`, `plp_efficient.listings`,
+   `plp_efficient.phase2`, `access`); Athena (workgroup `price-comparison`,
+   database `price_comparison_dev`):
+   `select plp_extract_flag, count(*) from bronze_ounass_raw where site='ounass' and dt='<dt>' and run_id='<run_id>' group by 1`.
+6. Afterwards: `make dbt-run` (in `../scraper-pipeline`, dev) → image
+   pipeline (`make ecs-run-image-pipeline APP_ENV=dev`) → `make dbt-run`
+   again (see "Images" for why this order).
 
-**Dry run #1 (2026-10-22) → future direction:** Phase 2 had to crawl 3,897
-product pages of every brand. The user wants brand-scoped category rows
-instead (crawl only the registry's brands, then compare against gold): see
-"Future direction: brand-scoped category rows" below.
+#### Images
+- Nothing triggers the image pipeline automatically; it's manual
+  (`make ecs-run-image-pipeline`). `tickets/image_pipeline_trigger.md` is a
+  draft; the trigger decision is open (recommended: daily schedule).
+- It reads a **dbt-built** image catalog (latest `dt`), so the order is
+  **crawl → dbt → image pipeline → dbt** (the second dbt puts downloaded
+  images into `gold_product_image_serving_latest` / `gold_product_serving_latest`).
+- The existing `image_pipeline_trigger` Lambda only starts the image
+  **quality checker** after the image pipeline finishes; it does not start
+  the image pipeline.
 
-**Facts learned 2026-10-20 (keep):**
+#### Open decisions / follow-ups (not built)
+- **Orchestration** (crawl → verify → dbt → images → dbt → notify, on a
+  schedule): proposal in `tickets/cicd_pipeline.md`, "Orchestration
+  proposal (2026-10-22)": EventBridge Scheduler + Step Functions running
+  ECS tasks. Needs dbt to run in AWS (a dbt ECS task) first.
+- **Brand-scoped category rows** (user direction): section "Future
+  direction: brand-scoped category rows" below.
+- **Phase 2 speed:** ~27 product pages/min (`CONCURRENT_REQUESTS_PER_DOMAIN
+  = 2`, `DOWNLOAD_DELAY = 1`); test higher concurrency for Zyte requests.
+- **Optional retry tuning** (less needed since Saudi goes via Zyte `TR`):
+  `ZYTE_API_RETRY_POLICY = "zyte_api.aggressive_retrying"`; access rounds
+  6 × 300 s.
+- **Level Shoes** listing pages are fetched with plain `requests`
+  (`level_crawl._get_payload`), outside the access layer.
+- **CI:** one image build failed on a transient `poetry install` error
+  (2026-10-22); consider an automatic retry of the build step.
+
+#### Next build parts
+- **Part 5b, parity** (designed in Part 5 below): required before prod.
+- **Part 6** (scraper-pipeline): discount-clearing fix, labels, keep
+  `plp_extract_flag` in silver, `run_status` in `silver_crawl_manifest`,
+  sold-out recrawl side.
+- **Part 7:** shadow mode in prod 1–2 weeks, then go live.
+
+#### Session gotchas (how to work here)
+- AWS CLI / Terraform work from the agent shell when the user's SSO session
+  is valid; if they fail with `CERTIFICATE_VERIFY_FAILED` or "no
+  credentials", ask the user to log in. **Never** work around TLS or
+  certificates (`context/AGENTS.md` security rules).
+- `git push` over SSH times out on this network; push over HTTPS with the
+  gh login: `git -c credential.helper= -c credential.helper='!gh auth git-credential' push https://github.com/tareklel/ecommerce-scraper.git main`.
+  scraper-pipeline: same, with its own `origin` URL.
+- Routine targeted Terraform deploys (e.g.
+  `terraform plan -target=aws_lambda_function.bronze_manifest_verifier -out=<file>`):
+  run them, check the plan shows only the expected change, apply the saved
+  plan, delete it. Stop and ask on anything unexpected or IAM-related.
+- After any crawler push, confirm the "Crawler image" GitHub Actions run
+  succeeded (`gh run list --limit 1`); `latest` in ECR should be the new
+  `sha-…`.
+- Reading `ZYTE_API_KEY` from `.env` for a local Zyte request needs the
+  user's explicit approval each time.
+- scraper-pipeline dbt: `make dbt-run` (dev only; `.venv` has dbt 1.12.5).
+  Use **targeted** Terraform there too (a full apply would redeploy the
+  API-cache Lambdas).
+
+#### Facts learned 2026-10-20 (keep)
 - The crawler reads listing pages **only** as `/api/` JSON (`routeType:
   plp`); a human listing URL returns HTML and is silently ignored. Product
   pages are HTML with an embedded `window.state`.
@@ -743,8 +777,10 @@ it: did the crawler reach its own end, and did it skip anything on purpose?
   - *To decide during Part 4:* whether an incomplete run's rows are still
     registered for dbt (they're genuine observations), with the run flagged
     incomplete, or held back until someone reviews them. Either way, the
-    run itself must read as a failure. The image-pipeline trigger chains on
-    `_SUCCESS`, so decide whether incomplete runs trigger it too.
+    run itself must read as a failure. (Correction 2026-10-22: no crawl
+    marker triggers the image pipeline; it's started by hand. The
+    `image_pipeline_trigger` Lambda only chains the image quality checker
+    onto the image pipeline's own `_SUCCESS`.)
   - *Hard kills leave no trace today:* a second Ctrl+C, out-of-memory, or a
     forced container kill never closes the spider, so nothing is uploaded
     and the container's file is lost. Write a small **"run started" record**

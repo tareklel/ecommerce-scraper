@@ -103,6 +103,47 @@ Cross-cutting:
    from the crawler instead was rejected: it would couple crawls to dbt.
 5. Website pipeline; nightly drift checks.
 
+
+### Orchestration proposal (2026-10-22, not decided)
+
+**Today nothing runs on a schedule:** crawls (`make ecs-run`), dbt
+(`make dbt-run` on a laptop) and the image pipeline
+(`make ecs-run-image-pipeline`) are all started by hand. Only two links are
+automatic: the verifier Lambda (crawl manifest → markers, publish) and the
+image quality checker (after the image pipeline's `_SUCCESS`).
+
+**Daily flow wanted:**
+1. **Crawls** in parallel (one ECS task per site/mode; Ounass PLP-efficient
+   included). A failed crawl doesn't stop the others.
+2. **Wait for verification:** read each run's `run_status` (verified
+   manifest) before going on. Optionally re-try a crawl that failed with
+   `failure_reason: access` a few hours later (blocking comes in windows).
+3. **dbt build** (silver + gold), if at least one crawl published.
+4. **Image pipeline** (reads the dbt-built image catalog), then the quality
+   checker as today.
+5. **dbt build again** (or only the image models), so downloaded images
+   reach gold.
+6. **Notify:** one daily summary of every run's status and degradations;
+   an alert on `failed` / `killed` (the "Crawl run alerting" item above).
+
+**Recommended tool: AWS Step Functions + EventBridge Scheduler.**
+- Everything is already ECS tasks and Lambdas in one AWS account; Step
+  Functions starts ECS tasks and waits for them (`ecs:runTask.sync`), has
+  retries, waits, branches and parallel steps built in, and shows each run
+  as a diagram with per-step logs.
+- Cost: pennies a month (charged per state transition); EventBridge
+  Scheduler starts it on a cron.
+- Defined in Terraform next to the existing ECS/Lambda resources.
+- **Prerequisite:** dbt must run in AWS: a dbt container image (from
+  scraper-pipeline) run as an ECS task, built by the same GitHub Actions
+  pattern as the crawler image.
+
+**Alternatives considered:** Airflow (MWAA): powerful but ~$350+/month
+minimum and heavy to run for a handful of steps. Dagster / Prefect: good
+data-asset tooling, but another service and account to run. dbt Cloud:
+only covers the dbt step. Revisit Dagster if the pipeline grows into many
+interdependent data assets.
+
 ---
 
 ## ▶ In progress: crawler image via GitHub Actions (direction agreed 2026-10-15)
