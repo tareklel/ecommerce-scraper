@@ -90,6 +90,14 @@ Cross-cutting:
   Context: run statuses defined in PLP-efficient Part 4b
   (`tickets/ounass_plp_efficient_crawl.md`).
 
+**Crawler image build fixes (2026-10-23):** the `poetry install` step in
+the `dockerfile` failed intermittently (`ChefInstallError`): Poetry installs
+into its own environment, downgrading `packaging` mid-install while a
+parallel source build read it. Fixed with `installer.parallel false`. The
+workflow's path filter also only listed `Dockerfile`, while the file is
+`dockerfile`, so dockerfile edits never triggered a build; both names are
+listed now. Longer term: install Poetry in its own virtualenv in the image.
+
 **Rough order:**
 1. Move scraper-pipeline's Terraform state to S3 with locking (biggest risk,
    smallest fix).

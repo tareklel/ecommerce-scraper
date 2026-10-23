@@ -12,7 +12,7 @@ Written so a **new session** can pick up without the old conversation.
 
 #### State in one paragraph
 Parts 0–4 and 5a are built, deployed and verified in AWS (dev). The live
-crawler image is `sha-9e03971` (GitHub Actions auto-deploys on every
+crawler image is `sha-d0aa1c9` (GitHub Actions auto-deploys on every
 crawler-code push to `main`). The verifier Lambda was last deployed
 2026-10-22 06:34 UTC. All repos are committed and pushed. Full suite: 445
 tests passing. The mode is still **dev only**: Part 5b (parity) and Part 6
@@ -120,8 +120,12 @@ tests passing. The mode is still **dev only**: Part 5b (parity) and Part 6
   6 × 300 s.
 - **Level Shoes** listing pages are fetched with plain `requests`
   (`level_crawl._get_payload`), outside the access layer.
-- **CI:** one image build failed on a transient `poetry install` error
-  (2026-10-22); consider an automatic retry of the build step.
+- ✅ **CI image build failures fixed 2026-10-23** (not transient): Poetry
+  installs into its own environment and downgraded `packaging` 26.3 → 25.0
+  in parallel while a source build read it. `installer.parallel false` in
+  the `dockerfile`; the workflow now also watches lowercase `dockerfile`
+  (path filters are case-sensitive, so dockerfile edits never built).
+  Live image: `sha-d0aa1c9` (includes the pagination fix).
 
 #### Next build parts
 - **Part 5b, parity** (designed in Part 5 below): required before prod.

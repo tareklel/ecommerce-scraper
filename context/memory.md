@@ -1,5 +1,9 @@
 # Memory
 
+## 2026-10-23 - CI image build race fixed
+- Intermittent `ChefInstallError` in the image build: Poetry (no virtualenv) downgraded `packaging` 26.3 → 25.0 while a parallel source build read `packaging/tags.py`. `poetry config installer.parallel false` in `dockerfile`.
+- The workflow watched `Dockerfile`, but the tracked file is `dockerfile` (case-sensitive filters), so dockerfile edits never built; both listed now. Live image `sha-d0aa1c9`, which includes the pagination fix.
+
 ## 2026-10-23 - Ounass pagination bug fixed (all crawls)
 - Dry run #2: 59 min / 2,013 requests (half of run #1), 2,962 products refreshed from listings, but Phase 2 1,875 because of 837 "known but not seen" + 1,038 "new".
 - Probe: `fh_sort_by=-newness_ae` (and `_sa`) paginated with ties: 1,517 unique of 1,860 entries (~18% never shown, a different 18% daily). The site's `sortBy=onlineDateWithStock-desc`: 1,854 of 1,860. `PLPSORT_KEY`/`PLPSORT` changed in `ounass_constants.py`, pinned by a test. Affected every Ounass crawl since Nov 2025.
