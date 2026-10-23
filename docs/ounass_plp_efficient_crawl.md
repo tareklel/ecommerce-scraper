@@ -704,6 +704,28 @@ ago) and STALE (5 products last crawled 2026-08-08); exit 0.
   scraper-pipeline. Worth it only to track a few brands without sweeping
   whole categories. The brand rule in matching (`plp_covers_pdp`) is kept
   for that.
+- **Listing pagination must use a sort without ties** (fixed 2026-10-23, all
+  Ounass crawls). Pages are fetched with `sortBy=onlineDateWithStock-desc`
+  (the site's own "Newest", listed in every response's `sortBy`). The old
+  `fh_sort_by=-newness_ae` (Fredhopper syntax, not a listed option) sorted on
+  a value many products share; ties resolved differently per page request
+  (and the answers are cached), so products appeared on two pages and others
+  on none. Probe, `saudi.ounass.com/api/women/bags/shoulder-bags`, one pass
+  each, 2026-10-23:
+
+| Sort parameter | Entries | Unique products |
+|---|---|---|
+| `fh_sort_by=-newness_ae` (used until 2026-10-23) | 1,860 | 1,517 |
+| `fh_sort_by=-newness_sa` | 1,863 | 1,518 |
+| none (site default, "Ounass Picks") | 1,860 | 1,599 |
+| **`sortBy=onlineDateWithStock-desc`** (now used) | 1,860 | **1,854** |
+| `sortBy=price-asc` | 1,862 | 1,854 |
+
+  Effect before the fix: every sweep (normal and PLP-efficient) missed about
+  18% of a listing, a different 18% each day. In PLP-efficient mode the
+  missed products looked "known but not seen" (product-crawled for nothing)
+  and yesterday's missed ones looked "new". Re-probe if Ounass changes its
+  sort options: unique products should equal `pagination.totalHits`.
 - **Exact-half discount rounding** (e.g. 32.5%) is assumed to round up;
   unverified against Ounass.
 
@@ -716,6 +738,7 @@ ago) and STALE (5 products last crawled 2026-08-08); exit 0.
 | 2026-10-05 | Doc created from the agreed design (all sections planned) | — |
 | 2026-10-13 | PDP list scoped to active PLP list rows; `is_active` column added to the PLP list | — |
 | 2026-10-16 | **Part 2 built:** startup checks (G1, G2, G7, G8, G10, stale-crawl), settings, `make preflight-ounass-plp-efficient` (+ `-probe`). Verified against the dev export | — |
+| 2026-10-23 | **Listing sort changed to `sortBy=onlineDateWithStock-desc`** (all Ounass crawls): `fh_sort_by=-newness_ae` paginated with ties and showed only ~82% of each listing per sweep (probe evidence in section 10) | — |
 | 2026-10-22 | **Minimum samples for G4 and G11** (20 products each, `…_MISSING_MIN_EXPECTED`, `…_FIELD_MISMATCH_MIN_SEEN`): dry run #1 held back the Saudi Arabic tote listing (1,059 new products) on "1 of 1 expected products not seen", its only known product having been delisted. Per-listing `expected_products` / `expected_unseen` / `note` in the manifest | — |
 | 2026-10-22 | **G8 warn-only:** stale gold no longer stops the run (setting `…_GOLD_MAX_AGE_DAYS` removed); an unreadable `gold_built_at` warns too. Startup warnings are logged one per line at WARNING and their texts go in the manifest (`startup.warning_messages`) | — |
 | 2026-10-22 | Run statuses and markers for all crawls moved to their own reference, `docs/crawl_run_status.md` (with a drift test); section 6 points to it | — |

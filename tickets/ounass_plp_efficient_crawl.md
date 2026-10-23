@@ -42,7 +42,26 @@ tests passing. The mode is still **dev only**: Part 5b (parity) and Part 6
   (14:57), so gold filtered every new image out; a later dbt fixed it.
   Check: `select count(*), count_if(is_image_available) from gold_product_serving_latest where site='ounass' and country='sa'`.
 
-#### Next: dry run #2 (the real test of the saving)
+#### Dry run #2 (2026-10-23) and the pagination bug it exposed
+- Run `2026-10-23T11-34-10-029` (task `4f42ed88…`): `degraded`, **59 min,
+  2,013 requests** (vs 2 h 29 min / 4,035 for run #1); **2,962 products
+  refreshed from listing pages**; Phase 2 1,875 = 837 "known but not seen"
+  + 1,038 "new"; the Saudi Arabic tote listing held back again by G4
+  ("8 of 20", a real sample now).
+- The 837 / 1,038 were not real churn: 816 of the "unseen" were in stock,
+  and 939 "new" URLs had never been crawled. A probe showed the cause:
+  the listing sort `fh_sort_by=-newness_ae` paginated with ties, so each
+  sweep showed ~82% of a listing (1,517 unique of 1,860 entries), a
+  different 82% each day. **Fixed 2026-10-23** by switching to the site's
+  own `sortBy=onlineDateWithStock-desc` (1,854 unique of 1,860). This
+  affected **every Ounass crawl since Nov 2025**, not only this mode.
+  Evidence table: reference doc, section 10.
+- **Next: dry run #3** (same steps as below; first `make dbt-run` so gold
+  learns run #2's products). Expect "known but not seen" and "new" to drop
+  to real changes (tens), Phase 2 to shrink to the Arabic totes (if G4 lets
+  them through) plus genuinely new products.
+
+#### Steps for the next dry run (same each time)
 1. Preflight (no Zyte; invokes the export Lambda):
    `AWS_DEFAULT_REGION=eu-central-1 .venv/bin/python scripts/preflight_ounass_plp_efficient.py --env dev`
    Expect "OK: the crawl would start". If gold is 2+ days old it warns
@@ -1121,6 +1140,7 @@ explicit approval under `context/AGENTS.md`).
 | 2026-10-22 | **G8 warn-only.** Stale gold only makes recently found products look new (more Phase 2 cost, capped by the ceiling), never wrong data; stopping the crawl left everything unrefreshed while dbt was down. No automatic dbt run from the crawler (dbt has no cloud runner yet, and it would couple crawls to dbt); a scheduled dbt job in AWS goes in `tickets/cicd_pipeline.md`. Dry run may start from dev gold's 5 known products: run #1 seeds gold via Phase 2, dbt, then run #2 shows the saving. |
 | 2026-10-22 | **Dry run #1 findings.** (1) G4/G11 need a minimum sample (20 products): "1 of 1 expected not seen" held back the Saudi Arabic tote listing and its 1,059 new products. Built. (2) Phase 2 runs at ~27 product pages/min (`CONCURRENT_REQUESTS_PER_DOMAIN = 2`, `DOWNLOAD_DELAY = 1`), so ~4,000 pages take ~2.5 h. Raising concurrency for Zyte requests (Zyte throttles itself) to test separately; matters less once runs are mostly listing refreshes. |
 | 2026-10-22 | **Direction: brand-scoped category rows.** A registry row's `brand` will filter its category listing to that brand's entries (empty = all brands); other brands are ignored, not product-crawled. Needs an Ounass designer → canonical brand map from scraper-pipeline and a decision on several brands per listing. Not built; guard (a) stays meanwhile. See "Future direction" section. |
+| 2026-10-23 | **Ounass listing sort changed to `sortBy=onlineDateWithStock-desc`.** Dry run #2's 837 "known but not seen" + 1,038 "new" were a pagination artefact: `fh_sort_by=-newness_ae` (also `_sa`) sorts with ties, so each sweep showed ~82% of a listing, a different 82% daily. The site's own Newest sort shows 99.7%. Affects all Ounass crawls since Nov 2025. |
 
 ## Open Questions
 

@@ -396,3 +396,11 @@ def test_parse_plp_uses_per_url_category_override(spider):
         list(spider.parse_plp(response))
 
     mock_rules.get_pdps.assert_called_once_with(response, category="clothing")
+
+
+
+def test_listing_sort_is_the_sites_newest_option():
+    # Pinned on purpose: fh_sort_by=-newness_ae paginated with ties, so ~18% of
+    # each listing was never shown (probe 2026-10-23). Changing the sort needs a
+    # new pagination probe (unique products == totalHits).
+    assert (constants.PLPSORT_KEY, constants.PLPSORT) == ("sortBy", "onlineDateWithStock-desc")
