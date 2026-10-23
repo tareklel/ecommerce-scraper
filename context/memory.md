@@ -1,5 +1,8 @@
 # Memory
 
+## 2026-10-23 - Images in gold; ordering lesson
+- Gold now has images for 3,884/3,884 Ounass products (17,263 served images). The first dbt after the downloads ran before the image quality checker finished (14:50 vs 14:57 UTC), so gold filtered all new images out (it requires downloaded AND validated). Order: crawl → dbt → image pipeline → quality checker done → dbt. Recorded in the ticket handoff and the orchestration proposal.
+
 ## 2026-10-22 - Dry run #1 done; dbt; images; handoff
 - Dry run #1: degraded (Arabic tote listing held back by the since-fixed G4), 4,035 requests all OK, 3,901 rows, published. dbt rebuilt dev gold: 3,807 known products; preflight clean.
 - Image pipeline has no automatic trigger (manual `make ecs-run-image-pipeline`); order is crawl → dbt → images → dbt. Started by hand for dry run #1's products.

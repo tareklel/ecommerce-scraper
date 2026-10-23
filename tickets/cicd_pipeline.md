@@ -119,10 +119,14 @@ image quality checker (after the image pipeline's `_SUCCESS`).
    manifest) before going on. Optionally re-try a crawl that failed with
    `failure_reason: access` a few hours later (blocking comes in windows).
 3. **dbt build** (silver + gold), if at least one crawl published.
-4. **Image pipeline** (reads the dbt-built image catalog), then the quality
-   checker as today.
+4. **Image pipeline** (reads the dbt-built image catalog), then the image
+   **quality checker**, and **wait for it to finish**: gold only serves
+   images that are downloaded and validated (`image_validated`).
 5. **dbt build again** (or only the image models), so downloaded images
-   reach gold.
+   reach gold. On 2026-10-22 a dbt run started 7 minutes before the quality
+   checker finished and left all 16,087 new images out of gold; today the
+   checker is started by a Lambda, outside any flow, so the orchestration
+   should run it as an explicit step instead.
 6. **Notify:** one daily summary of every run's status and degradations;
    an alert on `failed` / `killed` (the "Crawl run alerting" item above).
 

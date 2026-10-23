@@ -35,11 +35,12 @@ tests passing. The mode is still **dev only**: Part 5b (parity) and Part 6
   after it: no problems, no warnings.
 - **Images:** the image pipeline ran by hand 2026-10-22 (ECS task
   `7f0f11d0…`, run `2026-10-22T14-25-59-277`): **16,087 images, all OK**,
-  15 min; `_SUCCESS` started the quality checker. **Still to do first thing:
-  `make dbt-run` in `../scraper-pipeline`** so the images reach gold. It
-  failed at 14:41 UTC only because the AWS SSO session expired (`aws sso
-  login` first). Then check gold has images, e.g. in Athena:
-  `select count(*), count_if(is_image_available) from gold_product_serving_latest where site='ounass' and country='sa'`.
+  15 min; `_SUCCESS` started the quality checker. ✅ In gold since
+  2026-10-23 05:52 UTC: **3,884 / 3,884** Ounass products have images
+  (`image_s3_blob_keys`, `is_image_available`). The first dbt after the
+  downloads (14:50 UTC) ran **before** the quality checker finished
+  (14:57), so gold filtered every new image out; a later dbt fixed it.
+  Check: `select count(*), count_if(is_image_available) from gold_product_serving_latest where site='ounass' and country='sa'`.
 
 #### Next: dry run #2 (the real test of the saving)
 1. Preflight (no Zyte; invokes the export Lambda):
@@ -65,16 +66,23 @@ tests passing. The mode is still **dev only**: Part 5b (parity) and Part 6
    database `price_comparison_dev`):
    `select plp_extract_flag, count(*) from bronze_ounass_raw where site='ounass' and dt='<dt>' and run_id='<run_id>' group by 1`.
 6. Afterwards: `make dbt-run` (in `../scraper-pipeline`, dev) → image
-   pipeline (`make ecs-run-image-pipeline APP_ENV=dev`) → `make dbt-run`
-   again (see "Images" for why this order).
+   pipeline (`make ecs-run-image-pipeline APP_ENV=dev`) → **wait for the
+   quality checker** (its output lands in
+   `bronze/dev/images/validated/dt=<dt>/`) → `make dbt-run` again (see
+   "Images" for why this order).
 
 #### Images
 - Nothing triggers the image pipeline automatically; it's manual
   (`make ecs-run-image-pipeline`). `tickets/image_pipeline_trigger.md` is a
   draft; the trigger decision is open (recommended: daily schedule).
 - It reads a **dbt-built** image catalog (latest `dt`), so the order is
-  **crawl → dbt → image pipeline → dbt** (the second dbt puts downloaded
-  images into `gold_product_image_serving_latest` / `gold_product_serving_latest`).
+  **crawl → dbt → image pipeline → quality checker finishes → dbt**. Gold
+  only serves images that are downloaded **and validated**
+  (`image_validated`, written by the quality checker, which the image
+  pipeline's `_SUCCESS` starts automatically and which takes a few
+  minutes). Running dbt before it finishes silently leaves the new images
+  out of gold (happened 2026-10-22); check the
+  `bronze/<env>/images/validated/dt=<dt>/` object exists first.
 - The existing `image_pipeline_trigger` Lambda only starts the image
   **quality checker** after the image pipeline finishes; it does not start
   the image pipeline.
