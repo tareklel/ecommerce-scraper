@@ -56,10 +56,21 @@ tests passing. The mode is still **dev only**: Part 5b (parity) and Part 6
   own `sortBy=onlineDateWithStock-desc` (1,854 unique of 1,860). This
   affected **every Ounass crawl since Nov 2025**, not only this mode.
   Evidence table: reference doc, section 10.
-- **Next: dry run #3** (same steps as below; first `make dbt-run` so gold
-  learns run #2's products). Expect "known but not seen" and "new" to drop
-  to real changes (tens), Phase 2 to shrink to the Arabic totes (if G4 lets
-  them through) plus genuinely new products.
+- ✅ **Dry run #3 (2026-10-26, run `2026-10-26T14-30-50-711`, task
+  `080ed4a9…`), first with the fixed pagination:** `success`, 63 min, 1,919
+  requests, 0 errors, no blocking, no listing held back. **4,612 of 4,703
+  known products (98%) refreshed from listing pages**; "known but not seen"
+  91 (~2% per listing: 24 / 35 / 32, 0 on the Arabic totes), down from 837.
+  Phase 2 was still 1,780 because of a one-off catch-up: 1,295 never-crawled
+  Arabic totes (held back in runs #1–#2) + ~120–145 per listing that the old
+  sort never showed.
+- Before it: dbt, image pipeline (run `2026-10-26T13-54-24-502`), wait for
+  the quality checker, dbt: all 5,038 gold products have images; dev API
+  cache refreshed; local snapshot refreshed for the web repo.
+- **Next: dry run #4** = expected steady state: `make dbt-run` first (gold
+  learns run #3's products), then the steps below. Expect ~140 listing pages
+  + ~100–250 product pages, ~300–400 requests, ~10–15 min (vs ~4,000
+  requests for a full product-page crawl).
 
 #### Steps for the next dry run (same each time)
 1. Preflight (no Zyte; invokes the export Lambda):

@@ -1,5 +1,9 @@
 # Memory
 
+## 2026-10-26 - Dry run #3: pagination fix confirmed
+- Run `2026-10-26T14-30-50-711`: success, 1,919 requests, 4,612/4,703 known products refreshed from listings, "known but not seen" 91 (was 837), no listing held back. Phase 2 1,780 was a one-off catch-up (never-crawled Arabic totes + products the old sort never showed). Run #4 (after dbt) should be ~300–400 requests.
+- Images: dbt → image pipeline → wait for checker → dbt; all 5,038 gold products have images. Dev API cache + local web snapshot refreshed.
+
 ## 2026-10-23 - CI image build race fixed
 - Intermittent `ChefInstallError` in the image build: Poetry (no virtualenv) downgraded `packaging` 26.3 → 25.0 while a parallel source build read `packaging/tags.py`. `poetry config installer.parallel false` in `dockerfile`.
 - The workflow watched `Dockerfile`, but the tracked file is `dockerfile` (case-sensitive filters), so dockerfile edits never built; both listed now. Live image `sha-d0aa1c9`, which includes the pagination fix.
