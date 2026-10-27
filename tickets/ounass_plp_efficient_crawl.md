@@ -105,7 +105,11 @@ tests passing. The mode is still **dev only**: Part 5b (parity) and Part 6
   women, 5 men); all 6,724 gold rows have images; 1 unmapped Ounass product
   left (Arabic brand `صفية`, no `brand_id`). Local web snapshot not
   refreshed since (40 min download).
-- **Open (decide):** (1) out-of-scope products in a listing (e.g. `Mens`
+- **Deferred (user, 2026-10-27):** both items below, for now. Out-of-scope
+  products keep being product-crawled daily (~10 requests, ~half a cent).
+  If it grows, prefer refreshing them from the listing (no extra request,
+  price stays fresh) over a skip list (price goes stale).
+- **Was open:** (1) out-of-scope products in a listing (e.g. `Mens`
   in women's shoulder bags, ~10 requests a day now): proposal = the export
   also writes `out_of_scope.csv` (gold products for an active row's
   site/country/language that match no active row), the crawler skips them
@@ -1205,6 +1209,7 @@ explicit approval under `context/AGENTS.md`).
 | 2026-10-22 | **Dry run #1 findings.** (1) G4/G11 need a minimum sample (20 products): "1 of 1 expected not seen" held back the Saudi Arabic tote listing and its 1,059 new products. Built. (2) Phase 2 runs at ~27 product pages/min (`CONCURRENT_REQUESTS_PER_DOMAIN = 2`, `DOWNLOAD_DELAY = 1`), so ~4,000 pages take ~2.5 h. Raising concurrency for Zyte requests (Zyte throttles itself) to test separately; matters less once runs are mostly listing refreshes. |
 | 2026-10-22 | **Direction: brand-scoped category rows.** A registry row's `brand` will filter its category listing to that brand's entries (empty = all brands); other brands are ignored, not product-crawled. Needs an Ounass designer → canonical brand map from scraper-pipeline and a decision on several brands per listing. Not built; guard (a) stays meanwhile. See "Future direction" section. |
 | 2026-10-23 | **Ounass listing sort changed to `sortBy=onlineDateWithStock-desc`.** Dry run #2's 837 "known but not seen" + 1,038 "new" were a pagination artefact: `fh_sort_by=-newness_ae` (also `_sa`) sorts with ties, so each sweep showed ~82% of a listing, a different 82% daily. The site's own Newest sort shows 99.7%. Affects all Ounass crawls since Nov 2025. |
+| 2026-10-27 | **Dry run #4 / seeds.** Steady state 372 requests; ~200 were products gold dropped (11 unmapped Ounass brands, `Unisex`). Fixed in seeds: brands reuse existing canonicals where they exist, `Unisex` → women. Out-of-scope listing entries (e.g. `Mens` in a women's listing, ~10 requests/day) and a "gold keeps dropping it" guard: deferred; if needed later, refresh out-of-scope entries from the listing rather than skip them. |
 
 ## Open Questions
 
