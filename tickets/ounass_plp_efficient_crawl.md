@@ -98,14 +98,28 @@ tests passing. The mode is still **dev only**: Part 5b (parity) and Part 6
   genuinely new + 14 men's ≈ 45 → **~185 requests a day** (vs ~4,000 for a
   full product-page crawl, ~95% fewer). The men's 14 need a scope decision
   (see "Next").
-- **Next (decide):** (1) scraper-pipeline seeds: map the 11 Ounass brands
-  (5 new canonical brands) and decide `Unisex` (map to women for now, or a
-  new canonical gender that registry rows can include); (2) products of
-  another gender inside a women's listing: accept (~14 requests a day) or
-  widen the export's scope rule; (3) a guard so this can't hide again: a
-  "new" product already product-crawled in an earlier run is not new;
-  count it separately (e.g. `counts.recrawled_unservable`) and warn, since
-  it means gold is dropping it.
+- ✅ **Seeds fixed 2026-10-27** (scraper-pipeline `f361501`): 11 Ounass
+  brands mapped (6 to existing canonicals, 5 new with EN/AR labels) and
+  `Unisex` → women (user decision). Dev: seed, dbt, image pipeline, quality
+  checker, dbt, API cache export. All 105 run #4 products now in gold (100
+  women, 5 men); all 6,724 gold rows have images; 1 unmapped Ounass product
+  left (Arabic brand `صفية`, no `brand_id`). Local web snapshot not
+  refreshed since (40 min download).
+- **Open (decide):** (1) out-of-scope products in a listing (e.g. `Mens`
+  in women's shoulder bags, ~10 requests a day now): proposal = the export
+  also writes `out_of_scope.csv` (gold products for an active row's
+  site/country/language that match no active row), the crawler skips them
+  on sight (`counts.out_of_scope`); trade-off: their gold price stops
+  refreshing (alternative: refresh from the listing, no gender check);
+  (2) a guard so unservable products can't hide again: a "new" product
+  already product-crawled in an earlier run is counted separately and
+  warned about, since it means gold is dropping it.
+- **For Part 6:** dbt test `test_bronze_product_image_urls_no_cross_locale_conflicts`
+  fails on 3 Ounass products: their AR and EN product pages were crawled
+  on different days and Ounass changed the gallery in between (`?ts=` and
+  image count). This mode makes that normal (a language's product page is
+  only crawled when needed); the test, a pre-rollout guard, needs
+  rethinking.
 
 #### Steps for the next dry run (same each time)
 1. Preflight (no Zyte; invokes the export Lambda):

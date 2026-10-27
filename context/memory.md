@@ -3,6 +3,7 @@
 ## 2026-10-27 - Dry run #4: steady state; gold drops ~95 Ounass products
 - Run `2026-10-27T10-47-47-266`: success, 8.5 min, 372 requests (138 listing + 234 product pages), 6,078/6,102 known products refreshed from listings.
 - The 210 "new" were mostly products gold drops: Ounass brands missing from `dim_map_brand` (70 products, 11 brands), `Unisex` gender not in `dim_map_gender` (24), `Mens` products in women's listings (7, outside registry scope). They are re-crawled every run until fixed. ~95 Ounass bag products never reach gold for these reasons, in every crawl mode. Fix belongs in scraper-pipeline seeds (decision pending); after it, ~185 requests a day.
+- Fixed the same day (scraper-pipeline `f361501`: 11 brands, `Unisex` → women); all 105 products in gold, all gold rows have images, dev API cache refreshed. Open: skipping out-of-scope listing entries (`out_of_scope.csv`), and a guard for products gold keeps dropping.
 
 ## 2026-10-26 - Dry run #3: pagination fix confirmed
 - Run `2026-10-26T14-30-50-711`: success, 1,919 requests, 4,612/4,703 known products refreshed from listings, "known but not seen" 91 (was 837), no listing held back. Phase 2 1,780 was a one-off catch-up (never-crawled Arabic totes + products the old sort never showed). Run #4 (after dbt) should be ~300–400 requests.
