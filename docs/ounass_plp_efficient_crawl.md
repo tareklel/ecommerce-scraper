@@ -677,7 +677,13 @@ ago) and STALE (5 products last crawled 2026-08-08); exit 0.
 
 - **Unmapped products:** products gold can't map to canonical values aren't
   in the PDP list, so they look new and get a PDP crawl every run until the
-  mapping is fixed.
+  mapping is fixed. Dry run #4 (2026-10-27) measured it: of 210 "new"
+  product pages, ~95% were products crawled before that gold drops,
+  because their brand isn't in `dim_map_brand` for Ounass (70 products, 11
+  brands) or their gender is `Unisex`, which `dim_map_gender` doesn't map
+  (24). Another 7 were `Mens` products inside a women's listing: in gold,
+  but outside the registry row's scope. Fix: scraper-pipeline seeds
+  (ticket, dry run #4).
 - **Promotion-campaign labels** (e.g. `EXTRA25`) are PDP-only and missing
   from PLP-extract rows.
 - **Swatch-only (sold-out) colours** get a Phase 2 PDP check until the 3-day
@@ -738,6 +744,7 @@ ago) and STALE (5 products last crawled 2026-08-08); exit 0.
 | 2026-10-05 | Doc created from the agreed design (all sections planned) | — |
 | 2026-10-13 | PDP list scoped to active PLP list rows; `is_active` column added to the PLP list | — |
 | 2026-10-16 | **Part 2 built:** startup checks (G1, G2, G7, G8, G10, stale-crawl), settings, `make preflight-ounass-plp-efficient` (+ `-probe`). Verified against the dev export | — |
+| 2026-10-27 | Dry run #4 (steady state): 372 requests, 8.5 min, 99.6% of known products refreshed from listings; Phase 2 inflated by products gold drops (unmapped brands, `Unisex`), recorded in section 10 | — |
 | 2026-10-23 | **Listing sort changed to `sortBy=onlineDateWithStock-desc`** (all Ounass crawls): `fh_sort_by=-newness_ae` paginated with ties and showed only ~82% of each listing per sweep (probe evidence in section 10) | — |
 | 2026-10-22 | **Minimum samples for G4 and G11** (20 products each, `…_MISSING_MIN_EXPECTED`, `…_FIELD_MISMATCH_MIN_SEEN`): dry run #1 held back the Saudi Arabic tote listing (1,059 new products) on "1 of 1 expected products not seen", its only known product having been delisted. Per-listing `expected_products` / `expected_unseen` / `note` in the manifest | — |
 | 2026-10-22 | **G8 warn-only:** stale gold no longer stops the run (setting `…_GOLD_MAX_AGE_DAYS` removed); an unreadable `gold_built_at` warns too. Startup warnings are logged one per line at WARNING and their texts go in the manifest (`startup.warning_messages`) | — |

@@ -6,7 +6,7 @@
 
 Read this first when resuming.
 
-### ▶ Resume here (updated 2026-10-22, end of day): read this first
+### ▶ Resume here (updated 2026-10-27, after dry run #4): read this first
 
 Written so a **new session** can pick up without the old conversation.
 
@@ -67,10 +67,45 @@ tests passing. The mode is still **dev only**: Part 5b (parity) and Part 6
 - Before it: dbt, image pipeline (run `2026-10-26T13-54-24-502`), wait for
   the quality checker, dbt: all 5,038 gold products have images; dev API
   cache refreshed; local snapshot refreshed for the web repo.
-- **Next: dry run #4** = expected steady state: `make dbt-run` first (gold
-  learns run #3's products), then the steps below. Expect ~140 listing pages
-  + ~100–250 product pages, ~300–400 requests, ~10–15 min (vs ~4,000
-  requests for a full product-page crawl).
+- ✅ **Dry run #4 (2026-10-27, run `2026-10-27T10-47-47-266`, task
+  `2e958825…`), first steady-state run** (dbt first; preflight: 6,102 known
+  products, nothing quarantined or held back): `success`, **8.5 min, 372
+  requests** (138 listing pages + 234 product pages), all 200, no blocking.
+  **6,078 of 6,102 known products (99.6%) refreshed from listing pages.**
+  Phase 2 234 = 24 "known but not seen" (all sold out) + 210 "new". Local
+  web snapshot refreshed the same morning (5,038 products, 13,308 images).
+- **The 210 "new" were not new: ~95% are products gold drops.** 211 of the
+  234 product pages had already been crawled in run #3 (91 of the products
+  even in run #2). They are in silver but never reach gold, so the export
+  never lists them as known, so every run product-crawls them again. Of
+  the 105 products (×2 languages):
+  - **70: brand not in `dim_map_brand` for Ounass** → `brand_canonical`
+    null → filtered out of gold. Brands (raw): Givenchy 14, Dragon
+    Diffusion 14, Polo Ralph Lauren 11, TALEL 8, MAISON de SABRÉ 6, Ami
+    Paris 6, Pucci 4, Dolce Vita 2, Soeur 2, René Caovilla 2, Valentino
+    Pre-Loved 1. Givenchy, Dragon Diffusion, Polo Ralph Lauren, Pucci and
+    Ami already have canonical brands (mapped for other sites); TALEL,
+    Maison de Sabré, Dolce Vita, Soeur, René Caovilla have none yet.
+  - **24: gender `Unisex`**, which `dim_map_gender` doesn't map for Ounass
+    (only `Womens` / `Mens`) → gender null → filtered out of gold.
+  - **7: gender `Mens`** in a women's listing: in gold, but outside the
+    registry rows' scope (women), so not in the export.
+  - **~4: genuinely new** (not in silver before this run).
+  Across all Ounass bags in silver, 95 products are dropped from gold this
+  way (shoulder 42, tote 53): an existing data gap, not caused by this
+  mode; this mode only made it visible (and pays ~200 requests a day for it).
+- **Expected after the mappings are fixed:** Phase 2 ≈ 24 sold-out + ~8
+  genuinely new + 14 men's ≈ 45 → **~185 requests a day** (vs ~4,000 for a
+  full product-page crawl, ~95% fewer). The men's 14 need a scope decision
+  (see "Next").
+- **Next (decide):** (1) scraper-pipeline seeds: map the 11 Ounass brands
+  (5 new canonical brands) and decide `Unisex` (map to women for now, or a
+  new canonical gender that registry rows can include); (2) products of
+  another gender inside a women's listing: accept (~14 requests a day) or
+  widen the export's scope rule; (3) a guard so this can't hide again: a
+  "new" product already product-crawled in an earlier run is not new;
+  count it separately (e.g. `counts.recrawled_unservable`) and warn, since
+  it means gold is dropping it.
 
 #### Steps for the next dry run (same each time)
 1. Preflight (no Zyte; invokes the export Lambda):
@@ -83,12 +118,12 @@ tests passing. The mode is still **dev only**: Part 5b (parity) and Part 6
 3. Watch (filters the noisy DEBUG log to milestones):
    `aws logs tail /ecs/ecommerce-scraper --region eu-central-1 --follow --log-stream-names ecs/scraper/<task-id> --filter-pattern '?"Crawled" ?"PLP-efficient" ?"Access retry" ?"RUN " ?"ACCESS " ?ERROR'`
    Key line: `PLP-efficient Phase 2: {...}` when the sweep ends.
-4. **Expect:** ~138 listing pages; ~3,800 products refreshed from listings
-   (`refreshed_from_listing`); Phase 2 ~1,150 product pages (the 1,059
-   Arabic totes + ~90 products gold can't map + new arrivals); ~1,300
-   requests, ~50 min. Run #3 should be ~140 listing pages + a few dozen.
-   Note: the ~90 "known but missing from gold" products: confirm why from
-   run #2's numbers (likely unmapped canonical values).
+4. **Expect (steady state, as of run #4):** 138 listing pages; ~99% of
+   known products refreshed from listings (`refreshed_from_listing`);
+   Phase 2 ~230 product pages until the brand/gender mappings are fixed
+   (~45 after); ~370 requests, ~9 min.
+   Confirmed 2026-10-27: the "known but missing from gold" products are
+   unmapped brands and `Unisex` gender (dry run #4 above).
 5. **Check:** the verified manifest
    `s3://price-comparison-bucket-eu-central-1/bronze/dev/crawls/manifests/ounass/<dt>/<run_id>/data.json`
    (`raw_json`: `run_status`, `degradations`, `plp_efficient.listings`,
