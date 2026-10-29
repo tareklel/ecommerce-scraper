@@ -667,7 +667,9 @@ row per product and merges it onto yesterday's state with
 wrote null for "no discount", which silver read as "not observed", so an
 ended sale kept its old discount forever (all crawl modes). Now both write
 `0` (`ounass_rules.get_discount`, `plp_hit_discount`). Website and API treat
-only `> 0` as on sale.
+only `> 0` as on sale. Only on positive evidence, though: the PDP path writes
+`0` when the page's `discountPercent` is present but empty, and null when the
+field is **missing** (a renamed field must not wipe every real discount).
 
 **⚠ Never full-refresh (or drop and rebuild) the Ounass silver models.**
 The `coalesce(new, previous)` merge only works between runs. A first build or
@@ -676,9 +678,13 @@ row**, which, in this mode, is usually a PLP-extract row. Everything only
 product pages carry (currency, stock, name, brand label, …) comes out null,
 and gold drops the product (it joins on currency). Happened in dev
 2026-10-29: after a rebuild, gold had 276 Ounass rows instead of ~6,500.
-Fix planned (Part 6): within one batch, take each field's latest non-null
-value, so a rebuild equals day-by-day merging. Until then, add a column to
-these models with an explicit `ALTER TABLE … ADD COLUMNS`, not a rebuild.
+The same loss hit incremental runs whenever one batch held a product page
+and a later listing row (dbt skipping a day). **Fix** (scraper-pipeline
+`8cb5da4`, branch `rebuild-safe-silver`, lands after the bad commits are
+reverted): each field takes its latest non-null value within the batch, so
+a rebuild equals day-by-day merging. Dev was repaired with it 2026-10-29
+(gold back to 6,560 Ounass rows; the rebuilt dim matched the old one). Until
+it's on `main`, don't rebuild these models.
 
 **Kept for analysis:** `plp_extract_flag` (silver fact
 `last_plp_extract_flag`, which path last set the price) and `primary_label`

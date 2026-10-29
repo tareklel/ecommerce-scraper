@@ -144,10 +144,14 @@ tests passing. The mode is still **dev only**: Part 5b (parity) and Part 6
     `coalesce(…, 0) > 0`). Pushed (it went out with `b975595`) and in the
     live image. One risk: `get_discount` returns `0` even when the PDP state
     has **no `discountPercent` key**, so if Ounass renamed that field every
-    product page would report "no discount" and wipe real discounts. Proposed:
-    `0` only when the key is present (null/0), null when it's absent; then
-    check the next crawl's full-price product rows carry `0`. Awaiting
-    decision.
+    product page would report "no discount" and wipe real discounts. ✅
+    Fixed 2026-10-29 (user agreed): `0` only when the key is present
+    (null/0), null when it's absent. Check on the next crawl: full-price
+    product rows carry `0` (if they carry null, Ounass omits the key on
+    full-price pages and the rule needs revisiting).
+  - Seed duplicate found while verifying: Themoirè has two canonical slugs
+    (`themoir`, `themoire`), both mapped for the same Ounass labels; which
+    wins is arbitrary. To clean up.
   - scraper-pipeline `9267ceb` (`last_plp_extract_flag` in silver fact) and
     `186d7f3` (`primary_label` in silver i18n / gold): logic fine, but
     **not pushed**, and the bot rebuilt `silver_product_fact_ounass_daily`
@@ -1044,8 +1048,12 @@ reports parity and access per hostname.
 models treat blanks safely between runs (see "How silver merges new raw
 rows"), **but not on a rebuild** (first item below).
 
-- [ ] **Rebuild-safe Ounass silver models** (found 2026-10-29, blocks the
-  two unpushed items below): a first build / `--full-refresh` takes each
+- [x] **Rebuild-safe Ounass silver models** (found 2026-10-29). Written
+  and applied in dev 2026-10-29: scraper-pipeline `8cb5da4` (branch
+  `rebuild-safe-silver`), dev rebuilt, gold back to 6,560 Ounass rows, 37/38
+  dbt tests (the known gallery test fails). **Not on `main` yet:** the bot
+  pushed `9267ceb` / `186d7f3` meanwhile; they get reverted first (user
+  instructs the bot), then this lands on top. Was: a first build / `--full-refresh` takes each
   product's latest raw row, usually a listing row, so every PDP-only field
   (currency, stock, name, brand label, …) comes out null and gold drops the
   product. Within a batch, take each field's latest non-null value (e.g.

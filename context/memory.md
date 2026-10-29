@@ -1,5 +1,9 @@
 # Memory
 
+## 2026-10-29 - get_discount key-present rule; scraper-pipeline silver made rebuild-safe
+- `ounass_rules.get_discount`: `0` only when `discountPercent` is present (null/0), None when missing (a renamed field must not wipe discounts). Verify on the next crawl that full-price product rows carry `0`.
+- scraper-pipeline `8cb5da4` (branch `rebuild-safe-silver`, worktree `../scraper-pipeline-rebuild-safe`): fact/dim/i18n take each field's latest non-null value per batch. Dev repaired with it (gold 6,560 Ounass rows). Not on main: the bot pushed `9267ceb`/`186d7f3` first; it reverts them, then `8cb5da4` is rebased on top and pushed.
+
 ## 2026-10-29 - Dry run #5; on-sale parity top-ups; review of bot's Part 6 work
 - Dry run #5: success, 304 requests, parity pass on both hostnames (49 free comparisons each, 0 top-ups) but only 1 on sale per hostname. Fix: on-sale top-ups up to half the sample always, even when free comparisons fill it.
 - Bot commits reviewed. `309f3bd` (discount 0, both paths): right and safe downstream (only `> 0` counts as sale), but `get_discount` returns 0 even when `discountPercent` is absent (a renamed field would wipe discounts); key-present rule proposed. scraper-pipeline `9267ceb` / `186d7f3`: unpushed; their dev rebuild of silver fact / i18n nulled PDP-only fields (rebuild takes the latest row = listing row), dev gold 276 Ounass rows. Prod and dev API cache unaffected. Fix needed: per-field latest non-null within a batch. Never full-refresh Ounass silver until then (reference doc section 7).
