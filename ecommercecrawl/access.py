@@ -187,8 +187,10 @@ class AccessRetryMiddleware:
         raise AccessDeferred(f"access error {label}; retrying in a later round: {request.url}")
 
     def process_response(self, request, response, spider):
-        label = classify_response(response)
         host = host_of(request.url)
+        if not host:
+            return response   # data: / file: requests (e.g. releasing held rows)
+        label = classify_response(response)
         if label is None:
             self.tracker.success(host, self._round(request))
             return response
@@ -200,8 +202,10 @@ class AccessRetryMiddleware:
     def process_exception(self, request, exception, spider):
         if isinstance(exception, IgnoreRequest):
             return None
-        label = classify_exception(exception)
         host = host_of(request.url)
+        if not host:
+            return None
+        label = classify_exception(exception)
         if label is None:
             self.tracker.other(host)
             return None

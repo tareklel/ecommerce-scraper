@@ -226,6 +226,26 @@ OUNASS_PLP_EFFICIENT_MISSING_MIN_EXPECTED = int(
 OUNASS_PLP_EFFICIENT_FIELD_MISMATCH_MIN_SEEN = int(
     os.getenv("OUNASS_PLP_EFFICIENT_FIELD_MISMATCH_MIN_SEEN", "20")
 )
+# G9 parity check (ecommercecrawl/plp_parity.py): per hostname, listing prices
+# are compared with product pages before that hostname's listing rows are
+# written. New products (product page fetched in Phase 2 anyway) count first;
+# hostnames short of SAMPLE get top-up product pages, on-sale ones first.
+OUNASS_PLP_EFFICIENT_PARITY_SAMPLE = int(
+    os.getenv("OUNASS_PLP_EFFICIENT_PARITY_SAMPLE", "20")
+)
+# Below this many usable comparisons a hostname judges itself only if none was
+# lost to blocking; otherwise it borrows the verdict of checked hostnames.
+OUNASS_PLP_EFFICIENT_PARITY_MIN_COMPARISONS = int(
+    os.getenv("OUNASS_PLP_EFFICIENT_PARITY_MIN_COMPARISONS", "10")
+)
+# Fail when confirmed mismatches (still different after re-fetching both pages)
+# reach this share of usable comparisons and at least MIN_MISMATCHES of them.
+OUNASS_PLP_EFFICIENT_PARITY_MAX_MISMATCH_RATIO = float(
+    os.getenv("OUNASS_PLP_EFFICIENT_PARITY_MAX_MISMATCH_RATIO", "0.2")
+)
+OUNASS_PLP_EFFICIENT_PARITY_MIN_MISMATCHES = int(
+    os.getenv("OUNASS_PLP_EFFICIENT_PARITY_MIN_MISMATCHES", "2")
+)
 
 # Access retry rounds, all crawls (ecommercecrawl/access.py; documented in
 # docs/ounass_plp_efficient_crawl.md, section 5). A request that still fails on

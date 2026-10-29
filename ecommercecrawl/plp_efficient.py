@@ -19,6 +19,7 @@ from datetime import date, datetime, timezone
 from decimal import ROUND_HALF_UP, Decimal
 from urllib.parse import urlparse
 
+from ecommercecrawl import plp_parity
 from ecommercecrawl.constants.ounass_constants import (
     COUNTRY_CURRENCY,
     TLD_COUNTRY_MAP,
@@ -86,6 +87,11 @@ class Config:
     field_mismatch_ratio: float = 0.05
     missing_min_expected: int = 20
     field_mismatch_min_seen: int = 20
+    # Parity check (G9, Part 5b): per hostname.
+    parity_sample: int = 20
+    parity_min_comparisons: int = 10
+    parity_max_mismatch_ratio: float = 0.2
+    parity_min_mismatches: int = 2
     site: str = "ounass"
 
     @classmethod
@@ -105,6 +111,10 @@ class Config:
             field_mismatch_ratio=get("OUNASS_PLP_EFFICIENT_FIELD_MISMATCH_RATIO", 0.05, float),
             missing_min_expected=get("OUNASS_PLP_EFFICIENT_MISSING_MIN_EXPECTED", 20, int),
             field_mismatch_min_seen=get("OUNASS_PLP_EFFICIENT_FIELD_MISMATCH_MIN_SEEN", 20, int),
+            parity_sample=get("OUNASS_PLP_EFFICIENT_PARITY_SAMPLE", 20, int),
+            parity_min_comparisons=get("OUNASS_PLP_EFFICIENT_PARITY_MIN_COMPARISONS", 10, int),
+            parity_max_mismatch_ratio=get("OUNASS_PLP_EFFICIENT_PARITY_MAX_MISMATCH_RATIO", 0.2, float),
+            parity_min_mismatches=get("OUNASS_PLP_EFFICIENT_PARITY_MIN_MISMATCHES", 2, int),
         )
 
 
@@ -606,6 +616,10 @@ def format_report(inputs, result, max_rows_per_check=20):
 # Run state (Part 3): Phase 1 decisions per listing entry, Phase 2 selection
 # ---------------------------------------------------------------------------
 
+def first_label(labels):
+    return labels[0] if labels else None
+
+
 def _clean_label(value):
     # Same whitespace normalization as ounass_rules.get_primary_label.
     if not isinstance(value, str):
@@ -695,6 +709,13 @@ class PlpEfficientRun:
                                   if brand is None or brand == pdp.get("brand")]
         self.crawled = set()
         self.new_urls = {}   # url -> index of the listing it was found on
+        self.new_keys = {}   # url -> product key of a new product
+        # Listing rows wait here, per hostname, until that hostname's parity
+        # verdict (Part 5b): {host: {key: row}}. Written on pass, dropped otherwise.
+        self.held = {}
+        self.parity = plp_parity.ParityCheck(config, seed=run_id)
+        self.pdp_rows = set()   # keys that got a product-page row this run
+        self.release = None     # what release_rows() decided
         self.stats = [
             {"url": plp["url"], "pages_requested": 0, "pages_parsed": 0, "pages_failed": 0,
              "pages_failed_access": 0,
@@ -749,7 +770,8 @@ class PlpEfficientRun:
     def handle_hit(self, idx, hit, plp_url):
         """
         Decide what to do with one listing entry. Returns one of:
-          ("emit", row)       known product, fields match: PLP-extract row, no PDP request
+          ("hold", row)       known product, fields match: PLP-extract row, held for the
+                              parity verdict (release_rows), no PDP request
           ("new", url)        not in the PDP list: PDP-crawl it in Phase 2
           ("mismatch", None)  known ID, fields differ (G11 drift count): Phase 2 decides
           ("skip", reason)    quarantined, already refreshed by an overlapping listing, ...
@@ -771,12 +793,16 @@ class PlpEfficientRun:
             url = f"{parsed.scheme}://{parsed.netloc}/{slug}.html"
             if url not in self.new_urls:
                 self.new_urls[url] = idx
+                self.new_keys[url] = key
                 stats["new"] += 1
+                # Its product page comes in Phase 2: a free parity comparison.
+                self._listing_seen(key, hit, plp_url)
             return ("new", url)
         if key in self.crawled:
             return ("skip", "already refreshed by an overlapping listing")
         if not plp_covers_pdp(plp, pdp):
             stats["mismatched"] += 1
+            self._listing_seen(key, hit, plp_url)
             return ("mismatch", None)
         stats["matched"] += 1
         row = self._extract_row(hit, plp, pdp, plp_url)
@@ -786,7 +812,18 @@ class PlpEfficientRun:
             return ("skip", "entry has no selling price")
         self.crawled.add(key)
         stats["emitted"] += 1
-        return ("emit", row)
+        self.held.setdefault(self._host(plp_url), {})[key] = row
+        self._listing_seen(key, hit, plp_url)
+        return ("hold", row)
+
+    @staticmethod
+    def _host(url):
+        return (urlparse(url).hostname or "").lower()
+
+    def _listing_seen(self, key, hit, plp_url):
+        price = plp_hit_selling_price(hit)
+        self.parity.listing_seen(key, plp_url, price if price and price > 0 else None,
+                                 plp_hit_discount(hit), first_label(plp_hit_primary_label(hit)))
 
     def _extract_row(self, hit, plp, pdp, plp_url):
         price = plp_hit_selling_price(hit)
@@ -918,17 +955,69 @@ class PlpEfficientRun:
         }
         return self.phase2
 
+    # --- Parity (Part 5b) --------------------------------------------------------
+
+    def plan_parity(self):
+        """
+        After select_phase2: choose the parity comparisons. Products Phase 2
+        fetches anyway are compared for free; hostnames short of the sample
+        get top-ups from their held listing rows. Returns the top-up product
+        pages to fetch, [(key, url)].
+        """
+        phase2_keys = {}
+        if self.phase2 and not self.phase2["phase2_ceiling_exceeded"]:
+            known_by_url = {pdp["url"]: key for key, pdp in self.pdps.items()}
+            for url in self.phase2["urls"]:
+                key = self.new_keys.get(url) or known_by_url.get(url)
+                if key is not None:
+                    phase2_keys[key] = url
+        return self.parity.plan(phase2_keys, self.held)
+
+    def pdp_row_written(self, item):
+        """A product-page row went out this run; it replaces a held listing row."""
+        self.pdp_rows.add(plp_parity.item_key(item))
+
+    def release_rows(self):
+        """
+        Parity verdict per hostname, then which held listing rows to write:
+        pass → written (except products that got a product-page row this
+        run); fail or not checked → dropped, their products keep their
+        previous values. Returns the rows to write.
+        """
+        verdicts = self.parity.finish(self.held.keys())
+        rows, dropped = [], {}
+        for host, held in sorted(self.held.items()):
+            keep = [(k, r) for k, r in held.items() if k not in self.pdp_rows]
+            if verdicts[host]["verdict"] == plp_parity.PASS:
+                rows.extend(r for _, r in keep)
+            else:
+                dropped[host] = len(keep)
+        self.release = {"written": len(rows), "dropped": dropped,
+                        "replaced_by_product_page": sum(
+                            1 for held in self.held.values() for k in held if k in self.pdp_rows)}
+        return rows
+
     def summary(self):
         """Counts for logs now and the run manifest's plp_efficient block (Part 4)."""
         return {
             "listings": len(self.plps),
             "known_products": len(self.pdps),
             "quarantined": len(self.quarantined),
-            "refreshed_from_listing": len(self.crawled),
+            "refreshed_from_listing": self.refreshed_from_listing(),
             "new_products": len(self.new_urls),
             "per_listing": self.stats,
             "phase2": self.phase2,
+            "parity": self.parity_block(),
         }
+
+    def refreshed_from_listing(self):
+        """Listing rows actually written (all matched ones until the verdict is in)."""
+        return self.release["written"] if self.release else len(self.crawled)
+
+    def parity_block(self):
+        if self.parity.verdicts is None:
+            return None
+        return {"hosts": self.parity.verdicts, "release": self.release}
 
 
 # ---------------------------------------------------------------------------
@@ -965,6 +1054,7 @@ def manifest_block(inputs=None, result=None, run=None, startup_error=None, mode=
         "phase2": None,
         "refreshed_from_listing": None,
         "new_products": None,
+        "parity": None,
         "degradations": [],
     }
     degradations = block["degradations"]
@@ -1021,8 +1111,22 @@ def manifest_block(inputs=None, result=None, run=None, startup_error=None, mode=
                 kind = ACCESS if reason.startswith("G3") and run.failed_on_access_only(idx) else CONTENT
                 degradations.append(_degradation(kind, stats["url"], f"listing held back: {reason}"))
         block["listings"] = listings
-        block["refreshed_from_listing"] = len(run.crawled)
+        block["refreshed_from_listing"] = run.refreshed_from_listing()
         block["new_products"] = len(run.new_urls)
+        block["parity"] = run.parity_block()
+        for host, v in (run.parity.verdicts or {}).items():
+            dropped = (run.release or {}).get("dropped", {}).get(host)
+            if v["verdict"] == plp_parity.FAIL:
+                degradations.append(_degradation(
+                    CONTENT, host,
+                    f"parity failed ({v['basis']}): {v['confirmed']} of {v['compared']} listing prices "
+                    f"disagree with the product page; {dropped or 0} listing rows dropped"))
+            elif v["verdict"] == plp_parity.NOT_CHECKED and dropped:
+                lost = v["excluded"].get(plp_parity.ACCESS)
+                degradations.append(_degradation(
+                    ACCESS if lost else CONTENT, host,
+                    f"parity not checked (no usable comparison{'; ' + str(lost) + ' lost to blocking' if lost else ''}); "
+                    f"{dropped} listing rows dropped"))
         if run.phase2:
             block["phase2"] = {k: v for k, v in run.phase2.items() if k not in ("urls", "listing_health")}
             if run.phase2["phase2_ceiling_exceeded"]:

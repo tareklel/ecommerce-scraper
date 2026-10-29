@@ -8,8 +8,9 @@ options and the build plan live in `tickets/ounass_plp_efficient_crawl.md`.
 **Build status (2026-10-16): inputs, startup checks, preflight (Part 2) and
 the crawl itself (Part 3: sweep, PLP-extract rows, Phase 2) built and
 smoke-tested locally; run observability (Part 4: manifest block,
-quality-gate split, run status, publish-on-pass) built. Not yet safe for
-cloud runs: the daily parity check (Part 5) is still planned.** Each section is marked
+quality-gate split, run status, publish-on-pass) built; access layer (Part
+5a) and the parity check (Part 5b, 2026-10-29) built. Dev only until the
+downstream fixes (Part 6) and shadow mode (Part 7).** Each section is marked
 **[planned]** or **[built]**. Flip a marker when the matching ticket part
 lands, and correct the section if the build differs from the plan.
 
@@ -119,7 +120,7 @@ PLP or directly in Phase 2. That's why scoping happens in the export.
 
 ---
 
-## 3. How a run works [built; parity planned, Part 5b]
+## 3. How a run works [built]
 
 ```mermaid
 flowchart TD
@@ -129,24 +130,25 @@ flowchart TD
 
     subgraph p1 ["Phase 1: every PLP, every page"]
         hit["Listing entry"] --> known{"visibleSku in PDP list for this<br/>site + country + language?"}
-        known -- no --> new["New product → Phase 2"]
+        known -- no --> new["New product → Phase 2<br/>(listing price kept for parity)"]
         known -- yes --> fields{"gender, category, subcategory match<br/>(brand matches or PLP brand null)?"}
-        fields -- yes --> row["PLP-extract row, mark crawled<br/>(held per hostname until its parity verdict) [Part 5b]"]
+        fields -- yes --> row["PLP-extract row, mark crawled<br/>held per hostname until its parity verdict"]
         fields -- no --> mismatch["Not crawled → Phase 2<br/>(counts toward G11)"]
-        row -. "sample (~20 per hostname)" .-> parity["Parity sample: fetch the product page<br/>right away, compare price + discount [Part 5b]"]
     end
 
     p1 --> retry["Access retry rounds: re-send requests that failed<br/>on blocking, after a cool-down [all crawls]"]
-    retry --> verdict{"Parity verdict per hostname [Part 5b]"}
-    verdict -- "pass" --> release["Write that hostname's held listing rows"]
-    verdict -- "fail / not checkable" --> drop["Drop them; products held back<br/>(degraded: content or access)"]
-    release --> p2
-    drop --> p2
+    retry --> p2
 
-    subgraph p2 ["Phase 2"]
+    subgraph p2 ["Phase 2 + parity fetches"]
         hold["Hold back products of skipped / partial / stopped PLPs"] --> caps{"G4 cap, 10,000 ceiling"}
-        caps --> crawl["PDP-crawl everything still not crawled<br/>plp_extract_flag = 0"]
+        caps --> crawl["PDP-crawl everything still not crawled<br/>plp_extract_flag = 0<br/>(new products = free parity comparisons)"]
+        topup["Parity top-ups: product pages for held rows<br/>until ~20 comparisons per hostname, on-sale first"]
     end
+
+    p2 --> recheck["Re-check each mismatch: listing page + product page again"]
+    recheck --> verdict{"Parity verdict per hostname (G9)"}
+    verdict -- "pass" --> release["Write that hostname's held listing rows"]
+    verdict -- "fail / not checkable" --> drop["Drop them; products keep previous values<br/>(degraded: content or access)"]
 ```
 
 ### Matching
@@ -163,43 +165,80 @@ flowchart TD
 - A product **quarantined** at startup (bad PDP list row) is skipped if seen,
   not treated as new.
 
-### Parity check: is the listing still telling the truth? [planned, Part 5b]
+### Parity check: is the listing still telling the truth? [built 2026-10-29, Part 5b]
 
 Listing-extract rows are only as good as our mapping from Ounass's listing
 JSON (section 4). Part 0 proved it matches the product page (42/42), but if
 Ounass renames a price field or changes what a field means, the mapping
-would silently save wrong prices. So every run double-checks a sample
-against the product page:
+would silently save wrong prices. So every run compares listing prices with
+product pages, per hostname, **before** that hostname's listing rows are
+written (`ecommercecrawl/plp_parity.py`):
 
-1. **Sample:** about 20 listing-refreshed products per hostname
-   (`…_PARITY_SAMPLE`), spread across that hostname's listings, about half
-   on sale when it has sale items (discounts are the most fragile field).
-   Each product page is fetched **right after** its listing page.
-2. **Compare** price and discount. Labels are compared but only logged
-   (promotion labels exist only on product pages, section 10).
-3. **Re-check on a mismatch:** re-fetch **both** the listing page and the
-   product page. If they now agree, the first result was a real price change
-   between the two fetches (e.g. a sale starting): cleared, and the listing
-   row takes the re-fetched value. Re-fetching only the product page can't
-   tell a price change from a broken mapping.
-4. **Access errors are excluded**, never counted as mismatches (section 5):
-   a product page that's blocked, or a product now sold out, just isn't a
-   usable comparison.
-5. **Verdict, per hostname:**
-   - ≥ `…_PARITY_MIN_COMPARISONS` (10) usable comparisons → own verdict:
-     **fail** if confirmed mismatches ≥ `…_PARITY_MAX_MISMATCH_RATIO` (20%)
-     of them, and at least 2. One confirmed mismatch = warning only.
-   - Fewer because of blocking → takes the verdict of the hostnames that
-     were checked (the listing format is shared across Ounass hostnames).
-   - No hostname checkable at all → not checked.
-6. **Effect:** listing rows are held in memory per hostname until its
-   verdict. **Pass** → written. **Fail** (content) or **not checked**
-   (access) → dropped, those products held back (keep yesterday's values,
-   retried tomorrow), and the run is **degraded**. There's no whole-run
-   stop: nothing wrong is written, and product-page rows stay valid.
+1. **Free comparisons first:** every product the run fetches a product page
+   for anyway (Phase 2: new products, and known products whose listing
+   fields disagreed with gold) whose listing entry showed a price. The
+   listing price is kept from the sweep; the comparison costs no request.
+   All of them are compared, however many (catch-up days have hundreds).
+   New and known entries go through the same listing code, so a broken
+   mapping shows on both.
+2. **Top-ups:** a hostname with fewer than `…_PARITY_SAMPLE` (20) free
+   comparisons gets product pages fetched for some of its held
+   listing-refreshed products, enough to reach 20. On-sale products first,
+   so at least half the comparisons have a discount where possible (new
+   arrivals are rarely on sale, and discounts are the most fragile field).
+   A topped-up product's product-page row is written, and replaces its
+   listing row.
+3. **Compare** price and discount (no discount = `None` or `0` on either
+   side). Labels are compared but only counted (`label_differs`): promotion
+   labels exist only on product pages (section 10).
+4. **Re-check each mismatch:** re-fetch **both** the listing page the entry
+   was on and the product page. Agree now → a real price change between
+   the two fetches (Phase 2 runs minutes after the sweep): **cleared**.
+   Still different → **confirmed**. Re-fetching only the product page
+   couldn't tell a price change from a broken mapping. Re-check rows aren't
+   written.
+5. **Excluded, never mismatches:** product page blocked (`access`), sold out
+   now (`sold_out`), page fetched but unusable or never came back
+   (`no_product_data`), a different product ID (`different_product`), the
+   entry no longer on that listing page at re-check (`moved`).
+6. **Verdict, per hostname:**
+   - own verdict with ≥ `…_PARITY_MIN_COMPARISONS` (10) usable comparisons,
+     or with fewer when none was lost to blocking (a hostname with few
+     products judges what it has): **fail** if confirmed mismatches are ≥
+     `…_PARITY_MAX_MISMATCH_RATIO` (20%) of them and at least
+     `…_PARITY_MIN_MISMATCHES` (2). One confirmed mismatch = warning only;
+   - short because of blocking (or nothing usable) → takes the verdict of the
+     hostnames with their own (the listing format is shared across Ounass
+     hostnames; any own fail → fail);
+   - no hostname with its own verdict → **not checked**.
+7. **Effect:** **pass** → the held rows are written. **Fail** (content) or
+   **not checked** (access when comparisons were lost to blocking) → dropped:
+   those products keep their previous values and are refreshed tomorrow, and
+   the run is **degraded**. No whole-run stop: product-page rows are valid
+   either way.
 
-Cost: ~20–25 product pages per hostname per run, plus 2 requests per
-re-check.
+How held rows are written: the spider keeps them in memory per hostname
+(`PlpEfficientRun.held`); after the verdict it schedules one `data:,`
+request (no network) whose callback yields the passing rows, so they go
+through the item pipelines like any other row. A run stopped before the
+verdict writes no listing rows; it's `aborted` anyway (section 6).
+
+After the sweep the spider works in steps, each when it's idle again
+(`_plp_efficient_on_idle`): Phase 2 + top-ups → re-checks → verdict and
+release. Every step waits for access retry rounds.
+
+Cost: top-ups only on days with fewer than 20 new products per hostname
+(about 10–15 product pages per hostname on a normal day, none on catch-up
+days), plus 2 requests per mismatch re-check.
+
+Record: manifest `plp_efficient.parity` = `hosts` (per hostname: `sampled`,
+`free`, `top_up`, `on_sale`, `compared`, `agree`, `cleared_on_recheck`,
+`confirmed`, `excluded` by reason, `label_differs`, `verdict`, `basis`
+own/borrowed) and `release` (`written`, `dropped` per hostname,
+`replaced_by_product_page`). Log: `PLP-efficient parity <hostname>: <verdict>
+…` (warning unless a clean pass), one `… mismatch:` line per cleared or
+confirmed mismatch (listing vs product page values, up to 20), and
+`PLP-efficient listing rows: {…}`.
 
 ### After the sweep: what Phase 2 gets [built]
 
@@ -224,13 +263,15 @@ each listing's health once, then decides Phase 2:
 - Known products **no listing covers** (e.g. special PDPs) are always
   PDP-crawled.
 - If the total exceeds the Phase 2 ceiling, **nothing** is PDP-crawled
-  (`phase2_ceiling_exceeded`). Rows already written from listings stay.
+  (`phase2_ceiling_exceeded`). Matched listing rows still stand (parity only
+  decides them).
 
-**Rows already written stay.** Health is judged after the sweep, so a listing
-that trips G11 or G4 (or is stopped by G7 partway) has usually already
-written PLP-extract rows for the products that did match. Those rows are kept
-and go to raw like any other: each one passed the ID, scope and price checks
-on its own. Only the listing's leftovers are held back. The listing's outcome
+**Matched rows stay.** Health is judged after the sweep, so a listing that
+trips G11 or G4 (or is stopped by G7 partway) has usually already produced
+PLP-extract rows for the products that did match. Those rows are kept (held
+for the parity verdict like any other, then written): each one passed the ID,
+scope and price checks on its own. Only the listing's leftovers are held
+back. The listing's outcome
 and counts are in the run log now and go in the manifest from Part 4.
 
 **Partial and stopped runs** (status rules in section 6, "Run status").
@@ -276,7 +317,7 @@ format, re-run the probe before trusting these mappings.
 
 ---
 
-## 5. Guardrails [built except G9 parity (Part 5) and shadow mode (Part 7)]
+## 5. Guardrails [built except shadow mode (Part 7)]
 
 Principle: fail closed, never fall back to a mass PDP recrawl, and stop only as
 much as the problem affects.
@@ -328,8 +369,9 @@ Level Shoes listing pages (`level_crawl._get_payload`, plain `requests`),
 and Ounass's "requests mode" fallback, which is off by default
 (`OUNASS_REQUESTS_TLDS` empty).
 
-In this mode the order after the sweep is: retry rounds → parity verdict →
-Phase 2 (whose product pages get their own rounds at the end). Crawls run as
+In this mode the order after the sweep is: retry rounds → Phase 2 and parity
+top-ups → re-checks → parity verdict; each step waits for the rounds of the
+step before. Crawls run as
 ECS Fargate tasks with no time limit, so the cool-downs only lengthen the
 task; no Lambda waits on them.
 
@@ -357,7 +399,7 @@ the last round).
 - **Manifest (the record):** `degradations` becomes structured, one entry
   per skip: `{"kind": "content" | "access", "scope": <hostname or listing>,
   "message": …}`. Details stay in their blocks: `plp_efficient` (listings,
-  Phase 2, `parity` per hostname from Part 5b) and a top-level `access`
+  Phase 2, `parity` per hostname, section 3) and a top-level `access`
   block for **every** crawl: `rounds_run`, `total_waited_seconds`, and per
   hostname `requests` (final outcomes), `succeeded`, `other_errors`,
   `gave_up`, `recovered_in_rounds`, `deferred`, `access_failures` by label
@@ -373,14 +415,14 @@ the last round).
 |---|---|---|---|
 | G1 | PLP row canonical; gender/category/subcategory set; brand blank and not a `/designers/` URL (category listings only, section 2) | Skip that PLP, hold back its products. Too many bad rows → stop run. | `OUNASS_PLP_EFFICIENT_MAX_BAD_PLP_ROWS_RATIO` (0.25) |
 | G2 | PLP list and PDP list present, all columns | Stop run | — |
-| G3 | Every page of a PLP fetched | After the sweep: that PLP's leftovers held back (rows already written stay) | — |
-| G4 | Known-but-unseen products per PLP (excluding ones gold has as sold out) | After the sweep: over the cap → that PLP's leftovers held back (rows already written stay). Applies only to listings with at least `OUNASS_PLP_EFFICIENT_MISSING_MIN_EXPECTED` (20) expected products; below that the numbers are recorded per listing (`expected_products`, `expected_unseen`, `note`), not acted on. | `OUNASS_PLP_EFFICIENT_MISSING_RATIO_CAP` (0.25) |
+| G3 | Every page of a PLP fetched | After the sweep: that PLP's leftovers held back (matched rows stay) | — |
+| G4 | Known-but-unseen products per PLP (excluding ones gold has as sold out) | After the sweep: over the cap → that PLP's leftovers held back (matched rows stay). Applies only to listings with at least `OUNASS_PLP_EFFICIENT_MISSING_MIN_EXPECTED` (20) expected products; below that the numbers are recorded per listing (`expected_products`, `expected_unseen`, `note`), not acted on. | `OUNASS_PLP_EFFICIENT_MISSING_RATIO_CAP` (0.25) |
 | G6 | PLP-extract `url` = PDP list `url`, not a listing URL | Don't write that row; product left for Phase 2 | — |
-| G7 | PLP hostname ↔ country/language; entry `localeCurrency` = country currency | Startup: skip that PLP. Sweep: stop that PLP at the first wrong-currency entry; its leftovers held back (rows already written stay). | — |
+| G7 | PLP hostname ↔ country/language; entry `localeCurrency` = country currency | Startup: skip that PLP. Sweep: stop that PLP at the first wrong-currency entry; its leftovers held back (matched rows stay). | — |
 | G8 | Gold age: gold's last build time from the PDP list manifest. The export itself is always fresh. | **Warn only** (2026-10-22): warn at the warn age, or if the age is unknown; never stops the run | `OUNASS_PLP_EFFICIENT_GOLD_WARN_AGE_DAYS` (2) |
-| G9 | Parity check, per hostname (section 3, "Parity check") [planned, Part 5b] | Confirmed mismatches ≥ 20% (min 2) → that hostname's listing rows dropped, products held back. Not checkable because of blocking → borrow other hostnames' verdict; none checkable → rows dropped (access). Never a whole-run stop. | `OUNASS_PLP_EFFICIENT_PARITY_SAMPLE` (20), `OUNASS_PLP_EFFICIENT_PARITY_MIN_COMPARISONS` (10), `OUNASS_PLP_EFFICIENT_PARITY_MAX_MISMATCH_RATIO` (0.2) |
+| G9 | Parity check, per hostname (section 3, "Parity check"): new products' product pages first, top-ups to 20 | Confirmed mismatches ≥ 20% (min 2) → that hostname's listing rows dropped, products keep previous values. Short because of blocking → borrow other hostnames' verdict; none with a verdict → rows dropped (access). Never a whole-run stop. | `OUNASS_PLP_EFFICIENT_PARITY_SAMPLE` (20), `OUNASS_PLP_EFFICIENT_PARITY_MIN_COMPARISONS` (10), `OUNASS_PLP_EFFICIENT_PARITY_MAX_MISMATCH_RATIO` (0.2), `OUNASS_PLP_EFFICIENT_PARITY_MIN_MISMATCHES` (2) |
 | G10 | Canonical values exist in the latest vocabulary | Bad PLP row → as G1. Bad PDP row → quarantine that product. Too many bad PDP rows → stop run. | `OUNASS_PLP_EFFICIENT_MAX_BAD_PDP_ROWS_RATIO` (0.05) |
-| G11 | ID matched but fields differ (drift / reclassification) | After the sweep: over the share → that PLP's leftovers held back (rows already written stay). Applies only once at least `OUNASS_PLP_EFFICIENT_FIELD_MISMATCH_MIN_SEEN` (20) products were matched; below that it's recorded as a `note`. | `OUNASS_PLP_EFFICIENT_FIELD_MISMATCH_RATIO` (0.05) |
+| G11 | ID matched but fields differ (drift / reclassification) | After the sweep: over the share → that PLP's leftovers held back (matched rows stay). Applies only once at least `OUNASS_PLP_EFFICIENT_FIELD_MISMATCH_MIN_SEEN` (20) products were matched; below that it's recorded as a `note`. | `OUNASS_PLP_EFFICIENT_FIELD_MISMATCH_RATIO` (0.05) |
 | — | Phase 2 ceiling | Over → skip Phase 2 entirely, `phase2_ceiling_exceeded = true` (logged as an error) | `OUNASS_PLP_EFFICIENT_MAX_PHASE2_PDPS` (10000) |
 
 "Hold back" = neither refreshed nor PDP-crawled this run, and logged.
@@ -744,6 +786,7 @@ ago) and STALE (5 products last crawled 2026-08-08); exit 0.
 | 2026-10-05 | Doc created from the agreed design (all sections planned) | — |
 | 2026-10-13 | PDP list scoped to active PLP list rows; `is_active` column added to the PLP list | — |
 | 2026-10-16 | **Part 2 built:** startup checks (G1, G2, G7, G8, G10, stale-crawl), settings, `make preflight-ounass-plp-efficient` (+ `-probe`). Verified against the dev export | — |
+| 2026-10-29 | **Part 5b built: parity check (G9).** New products' product pages (fetched in Phase 2 anyway) are the first comparisons, free; hostnames short of 20 get top-ups from held rows, on-sale first. Listing rows are now held per hostname and written after the verdict (one `data:,` request), so the verdict comes after Phase 2. Topped-up products' product-page rows replace their listing rows. `refreshed_from_listing` = rows written. New setting `…_PARITY_MIN_MISMATCHES` (2). The access layer ignores non-HTTP requests | — |
 | 2026-10-27 | Dry run #4 (steady state): 372 requests, 8.5 min, 99.6% of known products refreshed from listings; Phase 2 inflated by products gold drops (unmapped brands, `Unisex`), recorded in section 10 | — |
 | 2026-10-23 | **Listing sort changed to `sortBy=onlineDateWithStock-desc`** (all Ounass crawls): `fh_sort_by=-newness_ae` paginated with ties and showed only ~82% of each listing per sweep (probe evidence in section 10) | — |
 | 2026-10-22 | **Minimum samples for G4 and G11** (20 products each, `…_MISSING_MIN_EXPECTED`, `…_FIELD_MISMATCH_MIN_SEEN`): dry run #1 held back the Saudi Arabic tote listing (1,059 new products) on "1 of 1 expected products not seen", its only known product having been delisted. Per-listing `expected_products` / `expected_unseen` / `note` in the manifest | — |

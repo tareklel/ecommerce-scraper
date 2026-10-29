@@ -1,6 +1,6 @@
 # Ticket: Ounass PLP-Efficient Crawl — Refresh Known Products From Listings, Not Product Pages
 
-**Status: Parts 0–2 done (Part 1 dev only; prod pending); Parts 3–7 not started.**
+**Status: Parts 0–5 built (dev only); Part 5b awaits its live run (dry run #5); Parts 6–7 not started.**
 
 ## ▶ Where we are / next steps (handoff, updated 2026-10-20)
 
@@ -118,6 +118,15 @@ tests passing. The mode is still **dev only**: Part 5b (parity) and Part 6
   (2) a guard so unservable products can't hide again: a "new" product
   already product-crawled in an earlier run is counted separately and
   warned about, since it means gold is dropping it.
+- ✅ **Part 5b (parity) built 2026-10-29**, not yet run live: new products
+  first, top-ups to 20 per hostname, listing rows held until the verdict
+  (design in the reference doc, section 3). 467 tests pass; a real Scrapy
+  run confirmed held rows reach the pipelines via the `data:,` release.
+- **Next: dry run #5** (same steps as below). Check: the
+  `PLP-efficient parity <hostname>: pass (own) …` lines, manifest
+  `plp_efficient.parity`, ~40 Phase 2 product pages after the seed fix, a
+  few top-ups per hostname, `refreshed_from_listing` ≈ held rows minus
+  top-ups.
 - **For Part 6:** dbt test `test_bronze_product_image_urls_no_cross_locale_conflicts`
   fails on 3 Ounass products: their AR and EN product pages were crawled
   on different days and Ounass changed the gallery in between (`?ts=` and
@@ -956,24 +965,36 @@ problem, never confused with a content problem.
 **Goal:** catch a broken listing → price mapping on the first day, without
 ever writing the wrong prices.
 
-- [ ] Sample ~20 listing-refreshed products per hostname, spread across
-  listings, ~half on sale when available; product page fetched right after
-  its listing page.
-- [ ] Compare price + discount; label logged only.
-- [ ] On a mismatch re-fetch **both** listing page and product page;
-  agreement now = timing, cleared, and the listing row takes the re-fetched
-  value.
-- [ ] Blocked or sold-out comparisons excluded (access, not content).
-- [ ] Verdict per hostname: ≥ 10 usable → fail at ≥ 20% confirmed (min 2);
-  fewer because blocked → borrow the verdict of checked hostnames; none
-  checkable → not checked.
-- [ ] Hold listing rows per hostname until its verdict; pass → write; fail
-  or not checked → drop, products held back, run degraded (`kind` content
-  or access). **No whole-run stop.**
-- [ ] Manifest `plp_efficient.parity` per hostname (sampled, compared,
-  excluded, confirmed, cleared on re-check, label mismatches, verdict).
-- [ ] Settings `…_PARITY_SAMPLE` (20), `…_PARITY_MIN_COMPARISONS` (10),
-  `…_PARITY_MAX_MISMATCH_RATIO` (0.2).
+Built 2026-10-29 (`ecommercecrawl/plp_parity.py`; tests
+`tests/test_plp_parity.py`). Design changed from the plan (user, 2026-10-27):
+**new products first.** Their product pages are fetched in Phase 2 anyway,
+so comparing their listing price costs nothing; top-ups only fill the gap.
+That moves the verdict after Phase 2.
+
+- [x] Free comparisons: every product Phase 2 fetches whose listing entry
+  had a price (new products; known ones with mismatched fields). All
+  compared.
+- [x] Top-ups to ~20 per hostname from held listing rows, on-sale first (at
+  least half the sample with a discount where possible). Their product-page
+  rows are written and replace their listing rows.
+- [x] Compare price + discount; label counted only.
+- [x] On a mismatch re-fetch **both** listing page and product page;
+  agreement now = timing, cleared (the product-page row already written has
+  the current price); still different = confirmed.
+- [x] Excluded, never mismatches: blocked, sold out, unusable/never came
+  back, different product, entry moved at re-check.
+- [x] Verdict per hostname: ≥ 10 usable (or fewer with none lost to
+  blocking) → fail at ≥ 20% confirmed (min 2); otherwise borrow the
+  verdict of hostnames with their own; none → not checked.
+- [x] Listing rows held per hostname until the verdict, written through one
+  `data:,` request; fail or not checked → dropped, run degraded (`kind`
+  content, or access when comparisons were lost to blocking). **No
+  whole-run stop.**
+- [x] Manifest `plp_efficient.parity` (`hosts`, `release`); log lines per
+  hostname and per mismatch.
+- [x] Settings `…_PARITY_SAMPLE` (20), `…_PARITY_MIN_COMPARISONS` (10),
+  `…_PARITY_MAX_MISMATCH_RATIO` (0.2), `…_PARITY_MIN_MISMATCHES` (2).
+- [ ] Live dev run (dry run #5) reports parity and access per hostname.
 
 **Done when:** tests prove each outcome (pass, one mismatch = warning,
 hostname fail, timing blip cleared by re-check, blocked hostname borrowing
@@ -1210,6 +1231,7 @@ explicit approval under `context/AGENTS.md`).
 | 2026-10-22 | **Direction: brand-scoped category rows.** A registry row's `brand` will filter its category listing to that brand's entries (empty = all brands); other brands are ignored, not product-crawled. Needs an Ounass designer → canonical brand map from scraper-pipeline and a decision on several brands per listing. Not built; guard (a) stays meanwhile. See "Future direction" section. |
 | 2026-10-23 | **Ounass listing sort changed to `sortBy=onlineDateWithStock-desc`.** Dry run #2's 837 "known but not seen" + 1,038 "new" were a pagination artefact: `fh_sort_by=-newness_ae` (also `_sa`) sorts with ties, so each sweep showed ~82% of a listing, a different 82% daily. The site's own Newest sort shows 99.7%. Affects all Ounass crawls since Nov 2025. |
 | 2026-10-27 | **Dry run #4 / seeds.** Steady state 372 requests; ~200 were products gold dropped (11 unmapped Ounass brands, `Unisex`). Fixed in seeds: brands reuse existing canonicals where they exist, `Unisex` → women. Out-of-scope listing entries (e.g. `Mens` in a women's listing, ~10 requests/day) and a "gold keeps dropping it" guard: deferred; if needed later, refresh out-of-scope entries from the listing rather than skip them. |
+| 2026-10-29 | **Parity uses new products first** (user). Products whose product page Phase 2 fetches anyway are free comparisons; top-ups (on-sale first) only fill each hostname up to 20. The verdict therefore comes after Phase 2, and listing rows are held in memory until then (they used to be written during the sweep). |
 
 ## Open Questions
 

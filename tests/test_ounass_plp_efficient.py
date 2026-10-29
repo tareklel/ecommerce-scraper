@@ -93,12 +93,13 @@ def test_primary_label_is_highest_priority_badge():
 
 # --- Phase 1: one listing entry -----------------------------------------------
 
-def test_matching_known_product_emits_plp_extract_row():
+def test_matching_known_product_holds_plp_extract_row_for_parity():
     run = make_run([plp()], [pdp("100")])
     action, row = run.handle_hit(0, hit("100", sell=1800, before=2400,
                                         badges=[{"value": "NEW SEASON", "priority": 30}]),
                                  TOTE + "?p=0")
-    assert action == "emit"
+    assert action == "hold"
+    assert run.held == {"saudi.ounass.com": {("sa", "ar", "100"): row}}
     assert row == {
         "run_id": "run-1", "site": "ounass", "crawl_date": "2026-10-16",
         "url": "https://saudi.ounass.com/shop-made-up-100_19.html",  # from gold, never the listing
@@ -108,9 +109,9 @@ def test_matching_known_product_emits_plp_extract_row():
     }
 
 
-def test_same_product_on_overlapping_listing_is_emitted_once():
+def test_same_product_on_overlapping_listing_is_held_once():
     run = make_run([plp(), plp(url=TOTE + "-2")], [pdp("100")])
-    assert run.handle_hit(0, hit("100"), TOTE)[0] == "emit"
+    assert run.handle_hit(0, hit("100"), TOTE)[0] == "hold"
     assert run.handle_hit(1, hit("100"), TOTE + "-2") == ("skip", "already refreshed by an overlapping listing")
 
 
@@ -207,7 +208,7 @@ def test_partially_fetched_listing_holds_back_its_products_and_new_finds():
     assert phase2["counts"]["held_back"] == 9 and phase2["counts"]["held_back_new"] == 1
 
 
-def test_g11_drift_keeps_emitted_rows_but_holds_back_leftovers():
+def test_g11_drift_keeps_matched_rows_but_holds_back_leftovers():
     # Tote listing: 9 known matching, 1 known ID whose gold fields say shoulder bags.
     rows = [pdp(str(i)) for i in range(9)] + [pdp("x", subcategory="shoulder_bags")] + \
            [pdp(f"t{i}") for i in range(3)]      # 3 tote products never seen
@@ -218,7 +219,7 @@ def test_g11_drift_keeps_emitted_rows_but_holds_back_leftovers():
     emitted = [run.handle_hit(0, hit(str(i)), TOTE)[0] for i in range(9)]
     run.handle_hit(0, hit("x"), TOTE)            # mismatch: 1 of 10 = 10% > 5%
     phase2 = run.select_phase2()
-    assert emitted == ["emit"] * 9               # already-written rows stay
+    assert emitted == ["hold"] * 9               # matched rows stay (subject to parity only)
     assert "G11" in phase2["listing_health"][TOTE]
     assert not any("/shop-made-up-t" in u for u in phase2["urls"])  # leftovers held back
     assert "https://saudi.ounass.com/shop-made-up-x_19.html" in phase2["urls"]  # healthy shoulder listing
@@ -234,11 +235,12 @@ def test_ceiling_exceeded_skips_phase2():
 
 # --- Spider wiring --------------------------------------------------------------
 
-def _settings():
+def _settings(**extra):
     return Settings({
         "CRAWLER_API_SERVICE": "zyte", "OUNASS_FETCH_BACKEND": "auto", "OUNASS_REQUESTS_TLDS": [],
         "OUNASS_CRAWLER_API_PLP_REQUEST_TYPE": "http_response",
         "OUNASS_CRAWLER_API_PDP_REQUEST_TYPE": "http_response",
+        **extra,
     })
 
 
@@ -271,9 +273,21 @@ class _FakeCrawler:
         self.stats = _FakeStats()
 
 
-def _spider(plp_rows, pdp_rows):
+def _pdp_reply(spider, monkeypatch, request, price, discount=None, sold_out=False, sku=None):
+    """Feed one product-page response for `request` through parse_pdp; returns written rows."""
+    key = request.meta.get("parity_key")
+    sku = sku or (key[2] if key else request.url.rsplit("-", 1)[1].split("_")[0])
+    state = {"country": "SA", "currency": "SAR",
+             "pdp": {"visibleSku": sku, "price": price, "discountPercent": discount,
+                     "isOutOfStock": sold_out, "images": [], "contentTabs": []}}
+    monkeypatch.setattr("ecommercecrawl.spiders.ounass_crawl.rules.get_state", lambda response: state)
+    response = TextResponse(url=request.url, body=b"<html></html>", encoding="utf-8", request=request)
+    return list(spider.parse_pdp(response))
+
+
+def _spider(plp_rows, pdp_rows, **settings):
     spider = OunassSpider(plp_efficient=True)
-    spider.settings = _settings()
+    spider.settings = _settings(**settings)
     spider.crawler = _FakeCrawler()
     inputs, _ = validated(plp_rows, pdp_rows)
     spider._load_plp_efficient_inputs = lambda: inputs
@@ -298,8 +312,8 @@ def test_spider_startup_stop_makes_no_request():
     assert spider.plp_run is None and spider.plp_efficient_result.stop
 
 
-def test_spider_sweeps_listing_emits_rows_and_schedules_phase2():
-    spider = _spider([plp()], [pdp(str(i)) for i in range(10)])
+def test_spider_sweeps_listing_holds_rows_and_schedules_phase2_with_parity(monkeypatch):
+    spider = _spider([plp()], [pdp(str(i)) for i in range(10)], OUNASS_PLP_EFFICIENT_PARITY_SAMPLE=3)
     [seed] = list(spider.start_requests())
     assert seed.url == TOTE and seed.meta["plp_idx"] == 0 and seed.errback is not None
 
@@ -316,18 +330,32 @@ def test_spider_sweeps_listing_emits_rows_and_schedules_phase2():
     sorted_p1 = list(spider.parse(_listing_response(first[1].url, 0,
                                                     [hit(str(i)) for i in range(5, 9)] + [hit("777")],
                                                     page=1, total_pages=2)))
-    rows = [r for r in sorted_p0 + sorted_p1 if isinstance(r, dict)]
-    assert len(rows) == 9 and all(r["plp_extract_flag"] == 1 for r in rows)
-    assert not any(isinstance(r, scrapy.Request) and "shop-" in r.url for r in sorted_p0 + sorted_p1)
+    assert sorted_p0 == [] and sorted_p1 == []          # rows are held, not yielded
+    assert len(spider.plp_run.held["saudi.ounass.com"]) == 9
 
     with pytest.raises(DontCloseSpider):
         spider._plp_efficient_on_idle()
-    scheduled = {r.url for r in spider.crawler.engine.requests}
-    assert scheduled == {"https://saudi.ounass.com/shop-made-up-9_19.html",   # known, unseen
-                         "https://saudi.ounass.com/shop-made-up-777_19.html"}  # new
-    assert all(r.callback == spider.parse_pdp for r in spider.crawler.engine.requests)
-    # Second idle: Phase 2 already done, the spider may close.
-    spider._plp_efficient_on_idle()
+    requests = list(spider.crawler.engine.requests)
+    phase2 = {r.url for r in requests if "parity_key" not in r.meta or r.meta["parity_key"][2] in ("9", "777")}
+    assert {"https://saudi.ounass.com/shop-made-up-9_19.html",       # known, unseen
+            "https://saudi.ounass.com/shop-made-up-777_19.html"} <= phase2  # new
+    # Sample of 3: the new product is a free comparison, 2 held products are topped up.
+    compared = [r.meta["parity_key"][2] for r in requests if "parity_key" in r.meta]
+    assert "777" in compared and len(compared) == 3
+    assert all(r.callback == spider.parse_pdp and r.errback is not None for r in requests)
+
+    # Product pages agree with the listing -> pass -> 7 listing rows written
+    # (the 2 topped-up products got product-page rows instead).
+    written = []
+    for request in requests:
+        written += _pdp_reply(spider, monkeypatch, request, price=1800)
+    with pytest.raises(DontCloseSpider):
+        spider._plp_efficient_on_idle()                   # verdict + release
+    [release] = spider.crawler.engine.requests[len(requests):]
+    rows = list(release.callback(TextResponse(url="data:,", body=b"", request=release)))
+    assert len(rows) == 7 and all(r["plp_extract_flag"] == 1 for r in rows)
+    assert spider.plp_run.parity.verdicts["saudi.ounass.com"]["verdict"] == "pass"
+    spider._plp_efficient_on_idle()                       # done: the spider may close
 
 
 def test_spider_failed_listing_page_holds_back_its_products():
@@ -370,20 +398,27 @@ def test_manifest_block_export_failure():
     assert block["inputs"] is None
 
 
-def test_manifest_block_clean_run_has_no_degradations():
-    spider = _spider([plp()], [pdp(str(i)) for i in range(3)])
+def test_manifest_block_clean_run_has_no_degradations(monkeypatch):
+    spider = _spider([plp()], [pdp(str(i)) for i in range(5)], OUNASS_PLP_EFFICIENT_PARITY_SAMPLE=2)
     list(spider.start_requests())
     list(spider.parse(_listing_response(f"{TOTE}?{constants.PLPSORT_KEY}={constants.PLPSORT}&p=0", 0,
-                                        [hit(str(i)) for i in range(3)])))
-    spider._plp_efficient_on_idle()                    # nothing left for Phase 2
+                                        [hit(str(i)) for i in range(5)])))
+    with pytest.raises(DontCloseSpider):
+        spider._plp_efficient_on_idle()                # nothing for Phase 2; 2 parity top-ups
+    for request in list(spider.crawler.engine.requests):
+        _pdp_reply(spider, monkeypatch, request, price=1800)
+    with pytest.raises(DontCloseSpider):
+        spider._plp_efficient_on_idle()
     block = spider.plp_efficient_manifest_block()
     json.dumps(block)
     assert block["startup_stopped"] is False
     assert block["degradations"] == []
-    assert block["refreshed_from_listing"] == 3
+    assert block["refreshed_from_listing"] == 3        # 5 matched, 2 replaced by product pages
     assert block["phase2"]["scheduled"] == 0
+    assert block["parity"]["hosts"]["saudi.ounass.com"]["verdict"] == "pass"
+    assert block["parity"]["release"] == {"written": 3, "dropped": {}, "replaced_by_product_page": 2}
     [listing] = block["listings"]
-    assert listing["emitted"] == 3 and listing["held_back_reason"] is None
+    assert listing["emitted"] == 5 and listing["held_back_reason"] is None
 
 
 def test_manifest_block_names_held_back_listing_and_ceiling():

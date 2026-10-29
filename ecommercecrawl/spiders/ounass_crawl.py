@@ -19,6 +19,7 @@ from scrapy.exceptions import DontCloseSpider
 from scrapy.http import HtmlResponse
 from ecommercecrawl import access
 from ecommercecrawl import plp_efficient as pe
+from ecommercecrawl import plp_parity
 
 
 FETCH_BACKEND_AUTO = "auto"
@@ -295,9 +296,18 @@ class OunassSpider(MasterCrawl, scrapy.Spider):
         the rendered_html retry also misses, the PDP is dropped.
         """
         try:
+            meta = getattr(response, "meta", None) or {}
+            if self.plp_run is not None and meta.get("parity_key") is not None \
+                    and access.classify_response(response) is not None:
+                # A refusal that survived every access retry round: the parity
+                # comparison is lost to access, not to content.
+                if meta.get("parity_recheck"):
+                    self.plp_run.parity.recheck_failed(meta["parity_key"], "pdp", access_error=True)
+                else:
+                    self.plp_run.parity.pdp_failed(meta["parity_key"], access_error=True)
+                return
             state = rules.get_state(response)
             if state is None:
-                meta = getattr(response, "meta", None) or {}
                 if meta.get("force_rendered_pdp"):
                     self.logger.error(
                         f"Failed to parse PDP {response.url}: no state found even with rendered_html"
@@ -317,7 +327,9 @@ class OunassSpider(MasterCrawl, scrapy.Spider):
                     callback=self.parse_pdp,
                     settings=getattr(self, "settings", None),
                     request_type=REQUEST_TYPE_RENDERED_HTML,
-                    meta={"force_rendered_pdp": True},
+                    meta={"force_rendered_pdp": True,
+                          **{k: v for k, v in meta.items() if k.startswith("parity_")}},
+                    errback=self._plp_efficient_pdp_failed if self.plp_run is not None else None,
                 )
                 return
 
@@ -336,6 +348,15 @@ class OunassSpider(MasterCrawl, scrapy.Spider):
                 'plp_extract_flag': 0,
             }
             merged = data_dict | data
+            if self.plp_run is not None:
+                key = meta.get("parity_key")
+                if meta.get("parity_recheck"):
+                    # Re-check fetch for the parity check only: not written again.
+                    self.plp_run.parity.recheck_pdp_seen(key, merged)
+                    return
+                if key is not None:
+                    self.plp_run.parity.pdp_seen(key, merged)
+                self.plp_run.pdp_row_written(merged)
             yield merged
         except Exception as e:
             self.logger.error(f"Failed to parse PDP {response.url}: {e}")
@@ -454,47 +475,164 @@ class OunassSpider(MasterCrawl, scrapy.Spider):
             if not run.check_currency(idx, hit):
                 self.logger.error(f"PLP-efficient listing stopped: {run.stats[idx]['stopped']} ({response.url})")
                 return
-            action, value = run.handle_hit(idx, hit, response.url)
-            if action == "emit":
-                yield value
+            # Known products' rows are held by the run until their hostname's
+            # parity verdict (Part 5b); written later by _plp_efficient_release.
+            run.handle_hit(idx, hit, response.url)
 
     def _plp_efficient_on_idle(self, spider=None):
-        """After the sweep: pick Phase 2 PDPs once, schedule them, keep the spider open."""
+        """
+        After the sweep, in steps, each ending when the spider is idle again:
+        1. Phase 2 product pages + parity top-ups;
+        2. parity re-checks for mismatches (listing page + product page again);
+        3. parity verdict per hostname, held listing rows written or dropped.
+        Every step waits for access retry rounds to finish.
+        """
         run = self.plp_run
-        if run is None or run.phase2 is not None:
+        if run is None or run.release is not None:
             return
         access_retry = getattr(getattr(self, "crawler", None), "access_retry", None)
         if access_retry is not None and access_retry.busy():
-            # Listing pages still waiting for an access retry round: Phase 2
-            # is chosen only once every round is done.
+            # Requests still waiting for an access retry round.
             return
+        if run.phase2 is None:
+            if self._plp_efficient_start_phase2():
+                raise DontCloseSpider
+        rechecks = run.parity.take_rechecks()
+        if rechecks:
+            for key, listing_url, pdp_url in rechecks:
+                self._plp_efficient_parity_recheck(key, listing_url, pdp_url)
+            self.logger.info(f"PLP-efficient parity: re-checking {len(rechecks)} mismatch(es)")
+            raise DontCloseSpider
+        rows = run.release_rows()
+        self._plp_efficient_log_parity()
+        if rows:
+            self._plp_efficient_rows_to_release = rows
+            self.crawler.engine.crawl(scrapy.Request(
+                "data:,", callback=self._plp_efficient_release, dont_filter=True,
+                meta={"plp_efficient_release": True}))
+            raise DontCloseSpider
+
+    def _plp_efficient_start_phase2(self):
+        """Pick and schedule Phase 2 and the parity top-ups. Returns how many requests."""
+        run = self.plp_run
         phase2 = run.select_phase2()
         self.logger.info(f"PLP-efficient Phase 2: {json.dumps({k: v for k, v in phase2.items() if k != 'urls'})}")
         stats = getattr(getattr(self, "crawler", None), "stats", None)
         if stats is not None:
-            stats.set_value("plp_efficient/refreshed_from_listing", len(run.crawled))
+            stats.set_value("plp_efficient/listing_rows_held", len(run.crawled))
             stats.set_value("plp_efficient/phase2_candidates", phase2["candidates"])
             stats.set_value("plp_efficient/phase2_ceiling_exceeded", phase2["phase2_ceiling_exceeded"])
         if phase2["phase2_ceiling_exceeded"]:
             self.logger.error(
                 f"PLP-efficient Phase 2 skipped: {phase2['candidates']} PDPs exceed the ceiling "
                 f"of {run.config.max_phase2_pdps}")
-            return
+        top_ups = run.plan_parity()
+        compared = {c["pdp_url"]: key for key, c in run.parity.comparisons.items()}
         scheduled = 0
         for url in phase2["urls"]:
             if url in self._seen_fetch_urls:
                 continue
             self._seen_fetch_urls.add(url)
-            self.crawler.engine.crawl(build_crawler_api_request(
-                url=url,
-                callback=self.parse_pdp,
-                settings=getattr(self, "settings", None),
-                request_type=self._get_crawler_api_request_type(url),
-            ))
+            self.crawler.engine.crawl(self._plp_efficient_pdp_request(url, compared.get(url)))
             scheduled += 1
         phase2["scheduled"] = scheduled
-        if scheduled:
-            raise DontCloseSpider
+        for key, url in top_ups:
+            self.crawler.engine.crawl(self._plp_efficient_pdp_request(url, key))
+        if top_ups:
+            self.logger.info(f"PLP-efficient parity: {len(top_ups)} product page(s) fetched for the check")
+        return scheduled + len(top_ups)
+
+    def _plp_efficient_pdp_request(self, url, parity_key=None, recheck=False):
+        meta = {}
+        if parity_key is not None:
+            meta["parity_key"] = parity_key
+        if recheck:
+            meta["parity_recheck"] = True
+        return build_crawler_api_request(
+            url=url,
+            callback=self.parse_pdp,
+            settings=getattr(self, "settings", None),
+            request_type=self._get_crawler_api_request_type(url),
+            meta=meta,
+            errback=self._plp_efficient_pdp_failed,
+            dont_filter=recheck,
+        )
+
+    def _plp_efficient_parity_recheck(self, key, listing_url, pdp_url):
+        self.crawler.engine.crawl(build_crawler_api_request(
+            url=listing_url,
+            callback=self._plp_efficient_parity_recheck_listing,
+            settings=getattr(self, "settings", None),
+            request_type=self._get_crawler_api_request_type(listing_url),
+            meta={"parity_key": key, "parity_recheck": True},
+            errback=self._plp_efficient_pdp_failed,
+            dont_filter=True,
+        ))
+        self.crawler.engine.crawl(self._plp_efficient_pdp_request(pdp_url, key, recheck=True))
+
+    def _plp_efficient_parity_recheck_listing(self, response):
+        key = response.meta["parity_key"]
+        parity = self.plp_run.parity
+        if access.classify_response(response) is not None:
+            parity.recheck_failed(key, "listing", access_error=True)
+            return
+        try:
+            hits = json.loads(response.text).get("hits") or []
+        except ValueError:
+            parity.recheck_failed(key, "listing", access_error=False)
+            return
+        hit = next((h for h in hits if pe._clean(h.get("visibleSku")) == key[2]), None)
+        if hit is None:
+            parity.recheck_listing_seen(key, None, None, found=False)
+        else:
+            parity.recheck_listing_seen(key, pe.plp_hit_selling_price(hit), pe.plp_hit_discount(hit))
+
+    @staticmethod
+    def _failure_access_label(failure):
+        response = getattr(failure.value, "response", None)
+        if response is not None:
+            return access.classify_response(response)
+        return access.classify_exception(failure.value)
+
+    def _plp_efficient_pdp_failed(self, failure):
+        """Errback for Phase 2, parity top-up and re-check requests."""
+        if isinstance(failure.value, access.AccessDeferred):
+            return   # comes back after the cool-down
+        meta = failure.request.meta
+        label = self._failure_access_label(failure)
+        self.logger.error(f"PLP-efficient request failed ({label or 'error'}): "
+                          f"{failure.request.url}: {failure.value!r}")
+        key = meta.get("parity_key")
+        if self.plp_run is None or key is None:
+            return
+        parity = self.plp_run.parity
+        if meta.get("parity_recheck"):
+            part = "pdp" if failure.request.callback == self.parse_pdp else "listing"
+            parity.recheck_failed(key, part, access_error=label is not None)
+        else:
+            parity.pdp_failed(key, access_error=label is not None)
+
+    def _plp_efficient_release(self, response):
+        """Write the listing rows that passed the parity check."""
+        rows, self._plp_efficient_rows_to_release = self._plp_efficient_rows_to_release, []
+        yield from rows
+
+    def _plp_efficient_log_parity(self):
+        run = self.plp_run
+        for host, v in sorted((run.parity.verdicts or {}).items()):
+            counts = {k: v[k] for k in ("sampled", "free", "top_up", "on_sale", "compared", "agree",
+                                       "cleared_on_recheck", "confirmed", "excluded", "label_differs")}
+            line = f"PLP-efficient parity {host}: {v['verdict']} ({v['basis'] or 'no verdict'}) {json.dumps(counts)}"
+            if v["verdict"] == plp_parity.PASS and not v["confirmed"]:
+                self.logger.info(line)
+            else:
+                self.logger.warning(line)
+            for example in run.parity.mismatch_examples(host):
+                self.logger.warning(f"PLP-efficient parity {host} mismatch: {json.dumps(example, default=str)}")
+        stats = getattr(getattr(self, "crawler", None), "stats", None)
+        if stats is not None:
+            stats.set_value("plp_efficient/refreshed_from_listing", run.refreshed_from_listing())
+        self.logger.info(f"PLP-efficient listing rows: {json.dumps(run.release)}")
 
     def plp_efficient_manifest_block(self):
         """The run manifest's plp_efficient block (PostCrawlPipeline); None in normal mode."""

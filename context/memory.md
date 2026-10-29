@@ -1,5 +1,10 @@
 # Memory
 
+## 2026-10-29 - Part 5b built: parity check (G9), new products first
+- `ecommercecrawl/plp_parity.py`: per hostname, listing price/discount vs product page. Free comparisons = products Phase 2 fetches anyway (new; known with mismatched fields); top-ups from held rows to 20, on-sale first. Mismatch → re-fetch listing page + product page (cleared vs confirmed). Excluded: access, sold out, no data, different product, moved. Verdict: fail at ≥20% confirmed and ≥2; short because of blocking → borrow; none → not checked.
+- Listing rows are no longer yielded during the sweep: held per hostname (`PlpEfficientRun.held`), written after the verdict via one `data:,` request (checked in a real Scrapy run). Fail / not checked → dropped (degraded, content / access). Topped-up products' product-page rows replace their listing rows. `refreshed_from_listing` = rows written. Access middleware ignores non-HTTP requests.
+- Not yet run live: dry run #5 next.
+
 ## 2026-10-27 - Dry run #4: steady state; gold drops ~95 Ounass products
 - Run `2026-10-27T10-47-47-266`: success, 8.5 min, 372 requests (138 listing + 234 product pages), 6,078/6,102 known products refreshed from listings.
 - The 210 "new" were mostly products gold drops: Ounass brands missing from `dim_map_brand` (70 products, 11 brands), `Unisex` gender not in `dim_map_gender` (24), `Mens` products in women's listings (7, outside registry scope). They are re-crawled every run until fixed. ~95 Ounass bag products never reach gold for these reasons, in every crawl mode. Fix belongs in scraper-pipeline seeds (decision pending); after it, ~185 requests a day.
