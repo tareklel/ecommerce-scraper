@@ -213,9 +213,13 @@ tests passing. The mode is still **dev only**: Part 5b (parity) and Part 6
 
 #### Next build parts
 - **Part 5b, parity** (designed in Part 5 below): required before prod.
-- **Part 6** (scraper-pipeline): discount-clearing fix, labels, keep
-  `plp_extract_flag` in silver, `run_status` in `silver_crawl_manifest`,
-  sold-out recrawl side.
+- **Part 6** (scraper-pipeline): discount-clearing fix ✅ 2026-10-29
+  (this repo's `309f3bd`), label pickup ✅ 2026-10-29
+  (`../scraper-pipeline` `186d7f3`, data layer only), `plp_extract_flag`
+  kept in silver ✅ 2026-10-29 (`../scraper-pipeline` `9267ceb`),
+  image-pipeline null-gallery concern investigated 2026-10-29 (no bug
+  found, same commit). Still open: `run_status` in
+  `silver_crawl_manifest`, sold-out recrawl side.
 - **Part 7:** shadow mode in prod 1–2 weeks, then go live.
 
 #### Session gotchas (how to work here)
@@ -354,7 +358,7 @@ depends on it starts.
 | **3** | Crawler core: Phase 1 / Phase 2, PLP-extract rows, runtime guardrails | this | 2 | ✅ done 2026-10-16 (code, local smoke, IAM applied) |
 | **4** | Run observability: manifest block, quality-gate split, run status | this (+ verifier Lambda) | 3 | ✅ code 2026-10-16; 4b rollout pending (see handoff) |
 | **5** | 5a access layer (all crawls) + 5b daily parity check | this | 3 | 5a ✅ 2026-10-20; 5b next |
-| **6** | Downstream readiness: discount-clearing fix, label pickup, flag kept in silver, 3-day sold-out cutoff | scraper-pipeline | 1 | not started |
+| **6** | Downstream readiness: discount-clearing fix, label pickup, flag kept in silver, 3-day sold-out cutoff | scraper-pipeline | 1 | discount fix + label pickup + flag-kept-in-silver ✅ 2026-10-29; run_status in silver_crawl_manifest + sold-out recrawl side still open |
 | **7** | Shadow mode (1–2 weeks), tune thresholds, then go live | both | 1–6 | not started |
 
 Parts 1 and 6 (scraper-pipeline) can run in parallel with Parts 2–5 (this
@@ -1017,16 +1021,35 @@ reports parity and access per hostname.
 **Goal:** what the crawler writes is used correctly downstream. The silver
 models already treat blanks safely (see "How silver merges new raw rows").
 
-- [ ] **Fix the discount-clearing bug** (existing, not caused by this
-  ticket): an ended sale must clear `price_discount`. Likely fix: emit `0`
-  for "no discount" on both paths, which changes `ounass_rules.get_discount`
-  (PDP) and the PLP rule here. Agree the fix across both repos.
-- [ ] Pick up `primary_label` in silver/gold, if label changes are meant to
-  reach the website (no silver model reads it today).
-- [ ] Keep `plp_extract_flag` through silver for analysis (listing-refresh vs
-  PDP-refresh share).
-- [ ] Image pipeline ignores rows with `image_urls = null` +
+- [x] **Fix the discount-clearing bug** (existing, not caused by this
+  ticket): an ended sale must clear `price_discount`. Fixed 2026-10-29
+  (this repo, `309f3bd`): `get_discount` (PDP) and `plp_hit_discount`
+  (PLP) now return `0`, not `None`, for an observed no-discount case;
+  `None` stays reserved for "price data missing/invalid". No
+  scraper-pipeline change needed -- its merge already does
+  `coalesce(new, old)`, so a real `0` now correctly overrides a stale
+  discount. Verified `plp_parity.discounts_equal` and its truthiness
+  checks already treat `0`/`None` as equivalent, so parity is unaffected.
+- [x] Pick up `primary_label` in silver/gold, if label changes are meant to
+  reach the website (no silver model reads it today). Done 2026-10-29
+  (`../scraper-pipeline` `186d7f3`): surfaced in `silver_product_i18n_ounass`
+  and `gold_product_serving_latest` (Ounass only). Data layer only --
+  website display is a separate, not-yet-made decision; try it on for
+  size on the site later.
+- [x] Keep `plp_extract_flag` through silver for analysis (listing-refresh vs
+  PDP-refresh share). Done 2026-10-29 (`../scraper-pipeline` `9267ceb`):
+  `last_plp_extract_flag` on `silver_product_fact_ounass_daily`.
+- [x] Image pipeline ignores rows with `image_urls = null` +
   `plp_extract_flag = 1` instead of treating them as failed galleries.
+  Investigated 2026-10-29 (`../scraper-pipeline` `9267ceb`): no bug found.
+  `silver_product_dim_ounass`'s existing gallery retention already treats
+  any null gallery (real PDP failure or a listing refresh that never
+  observes images) as "not observed, keep the previous gallery", and
+  `silver_product_image_download_status` only unnests that retained
+  non-null gallery -- so a listing-refresh row never reaches the image
+  pipeline as a failure in the first place. Corrected the model's
+  comment, which only named the PDP-failure case. If this was observed
+  somewhere else (a log line, a metric), flag it -- not found yet.
 - [ ] **Run status in silver** (added 2026-10-19): `silver_crawl_manifest`
   extracts `run_status`, `failure_reason`, `degradations` and the
   `verification.data_source` / `published_key` fields the verifier now
@@ -1242,6 +1265,7 @@ explicit approval under `context/AGENTS.md`).
 | 2026-10-22 | **Direction: brand-scoped category rows.** A registry row's `brand` will filter its category listing to that brand's entries (empty = all brands); other brands are ignored, not product-crawled. Needs an Ounass designer → canonical brand map from scraper-pipeline and a decision on several brands per listing. Not built; guard (a) stays meanwhile. See "Future direction" section. |
 | 2026-10-23 | **Ounass listing sort changed to `sortBy=onlineDateWithStock-desc`.** Dry run #2's 837 "known but not seen" + 1,038 "new" were a pagination artefact: `fh_sort_by=-newness_ae` (also `_sa`) sorts with ties, so each sweep showed ~82% of a listing, a different 82% daily. The site's own Newest sort shows 99.7%. Affects all Ounass crawls since Nov 2025. |
 | 2026-10-27 | **Dry run #4 / seeds.** Steady state 372 requests; ~200 were products gold dropped (11 unmapped Ounass brands, `Unisex`). Fixed in seeds: brands reuse existing canonicals where they exist, `Unisex` → women. Out-of-scope listing entries (e.g. `Mens` in a women's listing, ~10 requests/day) and a "gold keeps dropping it" guard: deferred; if needed later, refresh out-of-scope entries from the listing rather than skip them. |
+| 2026-10-29 | **Part 6, items 1/2/3/4.** Discount-clearing bug fixed (this repo `309f3bd`): `get_discount`/`plp_hit_discount` return `0`, not `None`, for an observed no-discount case, so silver's `coalesce(new, old)` retention correctly clears an ended sale instead of keeping it forever; `None` stays reserved for missing price data. `primary_label` surfaced in `silver_product_i18n_ounass`/`gold_product_serving_latest` (`../scraper-pipeline` `186d7f3`), Ounass only, data layer only -- website display deferred, to try on for size later. `last_plp_extract_flag` kept through `silver_product_fact_ounass_daily` for analysis (`../scraper-pipeline` `9267ceb`). The image-pipeline null-gallery concern (item 4) was investigated and no bug found: `silver_product_dim_ounass`'s existing retention already treats a listing-refresh row's null gallery as "not observed, keep the previous gallery", same as a real PDP failure, so it never reaches the image pipeline as a failure. |
 | 2026-10-29 | **Parity uses new products first** (user). Products whose product page Phase 2 fetches anyway are free comparisons; top-ups (on-sale first) only fill each hostname up to 20. The verdict therefore comes after Phase 2, and listing rows are held in memory until then (they used to be written during the sweep). |
 
 ## Open Questions
