@@ -200,10 +200,13 @@ def get_sold_out(state):
     return normalized_badge in SOLD_OUT_LABELS_NORMALIZED
     
 def get_discount(state):
-    try:
-        return state['pdp']['discountPercent']
-    except KeyError:
-        return None
+    # 0, not None: an ended sale must clear a previously observed discount
+    # downstream (silver's state-retention merge keeps the old value on
+    # null, since null means "not observed" everywhere else). None here
+    # would make an ended sale look identical to "not observed" and the
+    # stale discount would never clear.
+    value = safe_get(state, ['pdp', 'discountPercent'])
+    return value if value is not None else 0
 
 def get_primary_label(state):
     value = safe_get(state, ['pdp', 'badge', 'value'])

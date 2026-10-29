@@ -370,3 +370,10 @@
 - `download_one_job` now passes `canonical_content_type_for_extension(content_ext)` into `_upload_blob`.
 - Added 4 focused tests covering the uploader's `ExtraArgs` behavior (set when known, omitted when not) and the end-to-end `download_one_job` S3 path for JPEG/PNG/GIF/WebP; all 9 tests in `tests/test_image_downloader.py` pass.
 - Part of `scraper-pipeline/ticket/set-image-content-type-metadata.md`. The dev S3 backfill (existing `bronze/dev/images/by-hash/` objects, 1176 total, currently all `binary/octet-stream`) and the required CloudFront `/i/*` cache invalidation afterward were blocked by a "Modify Shared Resources" permission denial on the in-place `copy-object` call; that part is still open and needs explicit user action.
+
+## 2026-10-29 - Part 6 item 1: Ounass discount-clearing fix
+- `get_discount` (`ecommercecrawl/rules/ounass_rules.py`) and `plp_hit_discount` (`ecommercecrawl/plp_efficient.py`) now return `0`, not `None`, when there is no discount. Previously both returned `None` for "no discount" and "data not observed" alike; silver's state-retention merge treats null as "not observed, carry forward the previous value", so an ended sale's discount never cleared downstream.
+- `plp_hit_discount` now distinguishes the two cases explicitly: `None` only when `sell`/`before` price data itself is missing or invalid, `0` when both prices are known and there is genuinely no discount.
+- Verified safe against `plp_parity.py`: `discounts_equal` already treats `None` and `0` as equivalent, and every `if ... ["discount"]` truthiness check in that file treats them identically (both falsy), so parity/on-sale counting is unaffected.
+- Updated `test_get_discount_returns_value_or_none` -> `test_get_discount_returns_value_or_zero` and the `plp_hit_discount` parametrized test's full-price case; added a case for sell > before and a new test for the missing-data-stays-None path. Full suite: 470 passed.
+- No `scraper-pipeline` change needed: the silver merge already does `coalesce(new, old)`, so a real `0` observation correctly overrides a stale discount once the crawler stops emitting `None` for it.

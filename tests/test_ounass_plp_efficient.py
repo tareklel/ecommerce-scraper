@@ -79,10 +79,19 @@ def test_selling_price_uses_customer_group_price_not_price_key():
     (1800, 2400, 25),    # 25.0%
     (115, 135, 15),      # 14.81% -> 15
     (675, 1000, 33),     # exactly 32.5% -> rounds half UP
-    (1850, 1850, None),  # full price -> no discount, like the PDP path
+    (1850, 1850, 0),     # full price -> 0, no discount, like the PDP path
+    (2400, 1800, 0),     # sell above "before" -> 0, not a discount
 ])
 def test_discount_is_computed_from_the_two_prices(sell, before, expected):
     assert pe.plp_hit_discount(hit("1", sell=sell, before=before)) == expected
+
+
+def test_discount_is_none_when_price_data_is_missing():
+    # Missing/invalid price data is "not observed", distinct from "observed,
+    # no discount" (0) -- unlike the no-discount case, this must not clear a
+    # previously observed discount downstream.
+    assert pe.plp_hit_discount(hit("1", sell=None, before=1000)) is None
+    assert pe.plp_hit_discount(hit("1", sell=1000, before=None)) is None
 
 
 def test_primary_label_is_highest_priority_badge():

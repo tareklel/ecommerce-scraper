@@ -305,9 +305,14 @@ def test_get_sold_out_returns_false_for_missing_badge():
     assert rules.get_sold_out(state) is False
 
 
-def test_get_discount_returns_value_or_none():
+def test_get_discount_returns_value_or_zero():
+    # 0, not None, when there is no discount -- an ended sale must clear a
+    # previously observed discount downstream, and null means "not observed"
+    # everywhere else in silver's state-retention merge.
     assert rules.get_discount({"pdp": {"discountPercent": 30}}) == 30
-    assert rules.get_discount({"pdp": {}}) is None
+    assert rules.get_discount({"pdp": {}}) == 0
+    assert rules.get_discount({"pdp": {"discountPercent": None}}) == 0
+    assert rules.get_discount({}) == 0
 
 
 def test_get_primary_label_extracts_value():

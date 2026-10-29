@@ -648,19 +648,25 @@ def plp_hit_selling_price(hit):
 def plp_hit_discount(hit):
     """
     Discount % as the PDP path records it: computed from the entry's two prices,
-    rounded half up (Part 0 parity: 42/42). None when there is no discount, as
-    on the PDP path. Not discountPercentBySaleId, which was 5 points high on
-    some sale items, and not discountText, which is translated display text.
+    rounded half up (Part 0 parity: 42/42). 0 when there is no discount, as on
+    the PDP path post-fix -- an ended sale must clear a previously observed
+    discount downstream (silver's state-retention merge keeps the old value
+    on null, since null means "not observed" everywhere else). None only when
+    the price data itself is missing or invalid, distinct from "observed, no
+    discount." Not discountPercentBySaleId, which was 5 points high on some
+    sale items, and not discountText, which is translated display text.
     """
     sell = plp_hit_selling_price(hit)
     try:
         before = float(hit["price"]) if hit.get("price") is not None else None
     except (TypeError, ValueError):
         before = None
-    if not sell or not before or sell >= before:
+    if sell is None or before is None:
         return None
+    if sell >= before:
+        return 0
     percent = (Decimal(1) - Decimal(str(sell)) / Decimal(str(before))) * 100
-    return int(percent.quantize(Decimal(1), rounding=ROUND_HALF_UP)) or None
+    return int(percent.quantize(Decimal(1), rounding=ROUND_HALF_UP))
 
 
 def plp_hit_primary_label(hit):
