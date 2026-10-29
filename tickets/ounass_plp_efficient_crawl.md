@@ -122,11 +122,22 @@ tests passing. The mode is still **dev only**: Part 5b (parity) and Part 6
   first, top-ups to 20 per hostname, listing rows held until the verdict
   (design in the reference doc, section 3). 467 tests pass; a real Scrapy
   run confirmed held rows reach the pipelines via the `data:,` release.
-- **Next: dry run #5** (same steps as below). Check: the
-  `PLP-efficient parity <hostname>: pass (own) …` lines, manifest
-  `plp_efficient.parity`, ~40 Phase 2 product pages after the seed fix, a
-  few top-ups per hostname, `refreshed_from_listing` ≈ held rows minus
-  top-ups.
+- ✅ **Dry run #5 (2026-10-29, run `2026-10-29T12-58-49-587`, task
+  `b04ae840…`), first with parity, image `sha-c7e4d28`:** `success`, **7.5
+  min, 304 requests**, 6,212 listing rows written (of 6,279 known), none
+  dropped. Parity **pass (own)** on both hostnames: 49 comparisons each,
+  all free (new products), 49 agree, 0 top-ups, 0 re-checks;
+  `label_differs` 11 (promotion labels, accepted loss). Phase 2 165 = 78
+  genuinely new (never crawled; 2 days since run #4) + 65 sold out (not on
+  the listing) + 20 older in stock (10 = the `Mens` rows). The seed fix
+  worked: no phantom "new" products.
+- **Gap found: discounts barely checked.** Only 1 of 49 comparisons per
+  hostname was on sale (new arrivals are rarely discounted), and with ≥ 20
+  free comparisons no top-up runs, so "on-sale first" never applied. 20% of
+  listing rows (1,242 of 6,212) carry a discount. Proposed: always top up
+  on-sale products until ~half the sample (10 per hostname) is on sale,
+  even when free comparisons fill the sample (~10–20 extra requests a
+  day). Awaiting decision.
 - **For Part 6:** dbt test `test_bronze_product_image_urls_no_cross_locale_conflicts`
   fails on 3 Ounass products: their AR and EN product pages were crawled
   on different days and Ounass changed the gallery in between (`?ts=` and
