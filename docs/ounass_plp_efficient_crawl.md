@@ -679,17 +679,19 @@ product pages carry (currency, stock, name, brand label, …) comes out null,
 and gold drops the product (it joins on currency). Happened in dev
 2026-10-29: after a rebuild, gold had 276 Ounass rows instead of ~6,500.
 The same loss hit incremental runs whenever one batch held a product page
-and a later listing row (dbt skipping a day). **Fix** (scraper-pipeline
-`8cb5da4`, branch `rebuild-safe-silver`, lands after the bad commits are
-reverted): each field takes its latest non-null value within the batch, so
-a rebuild equals day-by-day merging. Dev was repaired with it 2026-10-29
-(gold back to 6,560 Ounass rows; the rebuilt dim matched the old one). Until
-it's on `main`, don't rebuild these models.
+and a later listing row (dbt skipping a day). **Fixed 2026-10-29**
+(scraper-pipeline `e637dbf`): each field takes its latest non-null value
+within the batch, so a rebuild equals day-by-day merging and is safe.
+Exception: `primary_label` takes the latest row's value even when null (both
+paths observe the badge, so null = removed). Dev rebuilt with it: gold back
+to 6,560 Ounass rows, the rebuilt dim matched the pre-incident one.
 
 **Kept for analysis:** `plp_extract_flag` (silver fact
-`last_plp_extract_flag`, which path last set the price) and `primary_label`
-(silver i18n / gold; not shown on the website yet). Both in scraper-pipeline
-work in progress, 2026-10-29.
+`last_plp_extract_flag`: which path set the kept price; dev 2026-10-29: 3,107
+products last priced from a listing, 222 from a product page) and
+`primary_label` (silver i18n / gold; not shown on the website yet). Run
+status and killed runs are queryable in `silver_crawl_manifest` /
+`silver_crawl_killed_runs` (scraper-pipeline `77daded`).
 
 **Products gold drops are recrawled every run.** Gold keeps only products
 with a canonical gender, brand, category and subcategory (seed mappings),

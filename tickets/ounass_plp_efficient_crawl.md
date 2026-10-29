@@ -1,6 +1,6 @@
 # Ticket: Ounass PLP-Efficient Crawl — Refresh Known Products From Listings, Not Product Pages
 
-**Status: Parts 0–5 built and run live (dev only); Part 6 in progress (dev gold broken by a silver rebuild 2026-10-29, fix pending); Part 7 not started.**
+**Status: Parts 0–5 built and run live (dev only); Part 6 mostly done (2026-10-29); Part 7 not started.**
 
 ## ▶ Where we are / next steps (handoff, updated 2026-10-20)
 
@@ -384,7 +384,7 @@ depends on it starts.
 | **3** | Crawler core: Phase 1 / Phase 2, PLP-extract rows, runtime guardrails | this | 2 | ✅ done 2026-10-16 (code, local smoke, IAM applied) |
 | **4** | Run observability: manifest block, quality-gate split, run status | this (+ verifier Lambda) | 3 | ✅ code 2026-10-16; 4b rollout pending (see handoff) |
 | **5** | 5a access layer (all crawls) + 5b daily parity check | this | 3 | 5a ✅ 2026-10-20; 5b next |
-| **6** | Downstream readiness: discount-clearing fix, label pickup, flag kept in silver, 3-day sold-out cutoff | scraper-pipeline | 1 | discount fix ✅ 2026-10-29 (crawler side); label pickup + flag-kept-in-silver committed but **not pushed**, and their dev rebuild broke dev gold (see handoff "Review of the bot's Part 6 work"); rebuild-safe silver merge needed first; run_status in silver_crawl_manifest + sold-out recrawl side still open |
+| **6** | Downstream readiness: discount-clearing fix, label pickup, flag kept in silver, 3-day sold-out cutoff | scraper-pipeline | 1 | discount fix, rebuild-safe silver, label pickup, flag kept in silver, run status in silver ✅ 2026-10-29; sold-out recrawl side and the cross-language gallery test still open |
 | **7** | Shadow mode (1–2 weeks), tune thresholds, then go live | both | 1–6 | not started |
 
 Parts 1 and 6 (scraper-pipeline) can run in parallel with Parts 2–5 (this
@@ -1049,11 +1049,11 @@ models treat blanks safely between runs (see "How silver merges new raw
 rows"), **but not on a rebuild** (first item below).
 
 - [x] **Rebuild-safe Ounass silver models** (found 2026-10-29). Written
-  and applied in dev 2026-10-29: scraper-pipeline `8cb5da4` (branch
-  `rebuild-safe-silver`), dev rebuilt, gold back to 6,560 Ounass rows, 37/38
-  dbt tests (the known gallery test fails). **Not on `main` yet:** the bot
-  pushed `9267ceb` / `186d7f3` meanwhile; they get reverted first (user
-  instructs the bot), then this lands on top. Was: a first build / `--full-refresh` takes each
+  and applied in dev 2026-10-29: scraper-pipeline `e637dbf`, on top of the
+  bot's `9267ceb` / `186d7f3` / `77daded` (combined, not reverted: their
+  columns were fine, only the rebuild on the old models broke dev). Dev
+  rebuilt from it: fact / i18n complete, gold 6,560 Ounass rows (3,510 with
+  a label), 37/38 dbt tests (the known gallery test fails). Was: a first build / `--full-refresh` takes each
   product's latest raw row, usually a listing row, so every PDP-only field
   (currency, stock, name, brand label, …) comes out null and gold drops the
   product. Within a batch, take each field's latest non-null value (e.g.
@@ -1075,12 +1075,12 @@ rows"), **but not on a rebuild** (first item below).
   (`../scraper-pipeline` `186d7f3`): surfaced in `silver_product_i18n_ounass`
   and `gold_product_serving_latest` (Ounass only). Data layer only --
   website display is a separate, not-yet-made decision; try it on for
-  size on the site later. ⚠ Not pushed; adding the column rebuilt the dev
-  table (see first item).
+  size on the site later. Pushed and rebuilt safely 2026-10-29 (first item):
+  latest row's badge even when null, so a removed badge clears.
 - [x] Keep `plp_extract_flag` through silver for analysis (listing-refresh vs
   PDP-refresh share). Done 2026-10-29 (`../scraper-pipeline` `9267ceb`):
-  `last_plp_extract_flag` on `silver_product_fact_ounass_daily`. ⚠ Not
-  pushed; adding the column rebuilt the dev table (see first item).
+  `last_plp_extract_flag` on `silver_product_fact_ounass_daily`. Pushed
+  and rebuilt safely 2026-10-29 (first item).
 - [x] Image pipeline ignores rows with `image_urls = null` +
   `plp_extract_flag = 1` instead of treating them as failed galleries.
   Investigated 2026-10-29 (`../scraper-pipeline` `9267ceb`): no bug found.
