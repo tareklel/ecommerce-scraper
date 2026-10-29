@@ -1,6 +1,6 @@
 # Ticket: Ounass PLP-Efficient Crawl — Refresh Known Products From Listings, Not Product Pages
 
-**Status: Parts 0–5 built (dev only); Part 5b awaits its live run (dry run #5); Parts 6–7 not started.**
+**Status: Parts 0–5 built and run live (dev only); Part 6 in progress (dev gold broken by a silver rebuild 2026-10-29, fix pending); Part 7 not started.**
 
 ## ▶ Where we are / next steps (handoff, updated 2026-10-20)
 
@@ -134,10 +134,32 @@ tests passing. The mode is still **dev only**: Part 5b (parity) and Part 6
 - **Gap found: discounts barely checked.** Only 1 of 49 comparisons per
   hostname was on sale (new arrivals are rarely discounted), and with ≥ 20
   free comparisons no top-up runs, so "on-sale first" never applied. 20% of
-  listing rows (1,242 of 6,212) carry a discount. Proposed: always top up
-  on-sale products until ~half the sample (10 per hostname) is on sale,
-  even when free comparisons fill the sample (~10–20 extra requests a
-  day). Awaiting decision.
+  listing rows (1,242 of 6,212) carry a discount. ✅ Fixed 2026-10-29
+  (user agreed): on-sale top-ups up to half the sample (10 per hostname)
+  always, even when free comparisons fill it. Not yet run live.
+- ⚠ **Review of the bot's Part 6 work (2026-10-29):**
+  - `309f3bd` (this repo, discount `0` on both paths): correct diagnosis
+    (silver's `coalesce` never cleared an ended sale), and safe downstream
+    (API and website treat only `> 0` as on sale; recrawl model uses
+    `coalesce(…, 0) > 0`). Pushed (it went out with `b975595`) and in the
+    live image. One risk: `get_discount` returns `0` even when the PDP state
+    has **no `discountPercent` key**, so if Ounass renamed that field every
+    product page would report "no discount" and wipe real discounts. Proposed:
+    `0` only when the key is present (null/0), null when it's absent; then
+    check the next crawl's full-price product rows carry `0`. Awaiting
+    decision.
+  - scraper-pipeline `9267ceb` (`last_plp_extract_flag` in silver fact) and
+    `186d7f3` (`primary_label` in silver i18n / gold): logic fine, but
+    **not pushed**, and the bot rebuilt `silver_product_fact_ounass_daily`
+    and `silver_product_i18n_ounass` in dev to add the columns (tables
+    recreated 17:44). A rebuild takes each product's latest row, usually a
+    listing row, so currency, names and brand labels came out null: **dev
+    gold dropped to 276 Ounass rows** (from ~6,500); i18n has names for 355
+    of 6,569 rows. Prod has no such tables; the dev API cache (2026-10-27)
+    and the website are unaffected. Fix proposed: silver models take each
+    field's latest non-null value within a batch (rebuild-safe), then
+    rebuild dev. Awaiting decision. Documented as a hazard in the reference
+    doc, section 7.
 - **For Part 6:** dbt test `test_bronze_product_image_urls_no_cross_locale_conflicts`
   fails on 3 Ounass products: their AR and EN product pages were crawled
   on different days and Ounass changed the gallery in between (`?ts=` and
@@ -358,7 +380,7 @@ depends on it starts.
 | **3** | Crawler core: Phase 1 / Phase 2, PLP-extract rows, runtime guardrails | this | 2 | ✅ done 2026-10-16 (code, local smoke, IAM applied) |
 | **4** | Run observability: manifest block, quality-gate split, run status | this (+ verifier Lambda) | 3 | ✅ code 2026-10-16; 4b rollout pending (see handoff) |
 | **5** | 5a access layer (all crawls) + 5b daily parity check | this | 3 | 5a ✅ 2026-10-20; 5b next |
-| **6** | Downstream readiness: discount-clearing fix, label pickup, flag kept in silver, 3-day sold-out cutoff | scraper-pipeline | 1 | discount fix + label pickup + flag-kept-in-silver ✅ 2026-10-29; run_status in silver_crawl_manifest + sold-out recrawl side still open |
+| **6** | Downstream readiness: discount-clearing fix, label pickup, flag kept in silver, 3-day sold-out cutoff | scraper-pipeline | 1 | discount fix ✅ 2026-10-29 (crawler side); label pickup + flag-kept-in-silver committed but **not pushed**, and their dev rebuild broke dev gold (see handoff "Review of the bot's Part 6 work"); rebuild-safe silver merge needed first; run_status in silver_crawl_manifest + sold-out recrawl side still open |
 | **7** | Shadow mode (1–2 weeks), tune thresholds, then go live | both | 1–6 | not started |
 
 Parts 1 and 6 (scraper-pipeline) can run in parallel with Parts 2–5 (this
@@ -1019,7 +1041,17 @@ reports parity and access per hostname.
 ## Part 6 — Downstream readiness (scraper-pipeline)
 
 **Goal:** what the crawler writes is used correctly downstream. The silver
-models already treat blanks safely (see "How silver merges new raw rows").
+models treat blanks safely between runs (see "How silver merges new raw
+rows"), **but not on a rebuild** (first item below).
+
+- [ ] **Rebuild-safe Ounass silver models** (found 2026-10-29, blocks the
+  two unpushed items below): a first build / `--full-refresh` takes each
+  product's latest raw row, usually a listing row, so every PDP-only field
+  (currency, stock, name, brand label, …) comes out null and gold drops the
+  product. Within a batch, take each field's latest non-null value (e.g.
+  `max_by(x, order) filter (where x is not null)`), so a rebuild equals
+  day-by-day merging. Then rebuild dev fact / i18n and check gold is back
+  to ~6,500 Ounass rows. Reference doc, section 7.
 
 - [x] **Fix the discount-clearing bug** (existing, not caused by this
   ticket): an ended sale must clear `price_discount`. Fixed 2026-10-29
@@ -1035,10 +1067,12 @@ models already treat blanks safely (see "How silver merges new raw rows").
   (`../scraper-pipeline` `186d7f3`): surfaced in `silver_product_i18n_ounass`
   and `gold_product_serving_latest` (Ounass only). Data layer only --
   website display is a separate, not-yet-made decision; try it on for
-  size on the site later.
+  size on the site later. ⚠ Not pushed; adding the column rebuilt the dev
+  table (see first item).
 - [x] Keep `plp_extract_flag` through silver for analysis (listing-refresh vs
   PDP-refresh share). Done 2026-10-29 (`../scraper-pipeline` `9267ceb`):
-  `last_plp_extract_flag` on `silver_product_fact_ounass_daily`.
+  `last_plp_extract_flag` on `silver_product_fact_ounass_daily`. ⚠ Not
+  pushed; adding the column rebuilt the dev table (see first item).
 - [x] Image pipeline ignores rows with `image_urls = null` +
   `plp_extract_flag = 1` instead of treating them as failed galleries.
   Investigated 2026-10-29 (`../scraper-pipeline` `9267ceb`): no bug found.

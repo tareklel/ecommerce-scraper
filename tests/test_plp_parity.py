@@ -95,6 +95,30 @@ def test_top_ups_prefer_on_sale_products_up_to_half_the_sample():
     assert len(check.comparisons) == 4 and len(on_sale) == 2
 
 
+def test_on_sale_top_ups_even_when_new_products_fill_the_sample():
+    # Dry run #5: 49 free comparisons per hostname, only 1 on sale.
+    check = parity.ParityCheck(config(parity_sample=4), seed="run")
+    held = {}
+    for i in range(10):
+        check.listing_seen(key(str(i)), TOTE, 1000, 25 if i < 5 else 0, None)
+        held[key(str(i))] = {"url": f"https://{AR}/{i}"}
+    for sku in ("n1", "n2", "n3", "n4", "n5"):
+        check.listing_seen(key(sku), TOTE, 500, 10 if sku == "n1" else 0, None)
+    top_ups = check.plan({key(s): f"https://{AR}/{s}" for s in ("n1", "n2", "n3", "n4", "n5")},
+                         {AR: held})
+    assert len(top_ups) == 1                                  # 2 on sale wanted, 1 free on sale
+    assert check.comparisons[top_ups[0][0]]["listing"]["discount"] == 25
+
+
+def test_no_on_sale_rows_means_no_extra_top_ups():
+    check = parity.ParityCheck(config(parity_sample=2), seed="run")
+    check.listing_seen(key("0"), TOTE, 1000, 0, None)
+    for sku in ("n1", "n2"):
+        check.listing_seen(key(sku), TOTE, 500, 0, None)
+    assert check.plan({key(s): f"https://{AR}/{s}" for s in ("n1", "n2")},
+                      {AR: {key("0"): {"url": f"https://{AR}/0"}}}) == []
+
+
 def test_product_seen_without_price_is_not_compared():
     check = parity.ParityCheck(config(), seed="run")
     check.listing_seen(key("1"), TOTE, None, None, None)

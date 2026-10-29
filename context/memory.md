@@ -1,5 +1,10 @@
 # Memory
 
+## 2026-10-29 - Dry run #5; on-sale parity top-ups; review of bot's Part 6 work
+- Dry run #5: success, 304 requests, parity pass on both hostnames (49 free comparisons each, 0 top-ups) but only 1 on sale per hostname. Fix: on-sale top-ups up to half the sample always, even when free comparisons fill it.
+- Bot commits reviewed. `309f3bd` (discount 0, both paths): right and safe downstream (only `> 0` counts as sale), but `get_discount` returns 0 even when `discountPercent` is absent (a renamed field would wipe discounts); key-present rule proposed. scraper-pipeline `9267ceb` / `186d7f3`: unpushed; their dev rebuild of silver fact / i18n nulled PDP-only fields (rebuild takes the latest row = listing row), dev gold 276 Ounass rows. Prod and dev API cache unaffected. Fix needed: per-field latest non-null within a batch. Never full-refresh Ounass silver until then (reference doc section 7).
+- Reference doc brought up to date: measured runs (s1), on-sale rule (s3), discount 0 (s4), manifest meanings (s6), downstream incl. rebuild hazard and order of operations (s7), how to run in AWS (s8), troubleshooting (s9), out-of-scope products (s10).
+
 ## 2026-10-29 - Part 5b built: parity check (G9), new products first
 - `ecommercecrawl/plp_parity.py`: per hostname, listing price/discount vs product page. Free comparisons = products Phase 2 fetches anyway (new; known with mismatched fields); top-ups from held rows to 20, on-sale first. Mismatch → re-fetch listing page + product page (cleared vs confirmed). Excluded: access, sold out, no data, different product, moved. Verdict: fail at ≥20% confirmed and ≥2; short because of blocking → borrow; none → not checked.
 - Listing rows are no longer yielded during the sweep: held per hostname (`PlpEfficientRun.held`), written after the verdict via one `data:,` request (checked in a real Scrapy run). Fail / not checked → dropped (degraded, content / access). Topped-up products' product-page rows replace their listing rows. `refreshed_from_listing` = rows written. Access middleware ignores non-HTTP requests.

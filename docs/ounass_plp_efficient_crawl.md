@@ -33,6 +33,18 @@ Doing the same through PDPs costs one Zyte request per product.
 Cost case (bags, Saudi, 2026-09-17): ≈ $2/month in this mode vs ≈ $181/month
 for daily full PDP re-crawls (`notes/2026-09-17-ounass-zyte-crawl-cost.md`).
 
+Measured in dev (Saudi tote + shoulder bags, Arabic + English, 4 listings,
+~6,300 known products; ticket "Dry run" entries):
+
+| Run | Requests | Time | Refreshed from listings | Note |
+|---|---|---|---|---|
+| Full product-page crawl (reference) | ~4,000 | ~2.5 h | — | dry run #1, nothing known yet |
+| #4, 2026-10-27 | 372 | 8.5 min | 6,078 of 6,102 (99.6%) | ~200 of 234 product pages were products gold dropped (section 10) |
+| #5, 2026-10-29 | 304 | 7.5 min | 6,212 of 6,279 | first with parity; 2 days of new arrivals |
+
+A steady day: 138 listing pages + new arrivals + products sold out since
+the last run + parity top-ups ≈ 200–300 requests.
+
 With the flag off (the default), the spider behaves exactly as before.
 
 ---
@@ -181,13 +193,16 @@ written (`ecommercecrawl/plp_parity.py`):
    All of them are compared, however many (catch-up days have hundreds).
    New and known entries go through the same listing code, so a broken
    mapping shows on both.
-2. **Top-ups:** a hostname with fewer than `…_PARITY_SAMPLE` (20) free
-   comparisons gets product pages fetched for some of its held
-   listing-refreshed products, enough to reach 20. On-sale products first,
-   so at least half the comparisons have a discount where possible (new
-   arrivals are rarely on sale, and discounts are the most fragile field).
+2. **Top-ups:** product pages fetched for some of a hostname's held
+   listing-refreshed products, for two reasons:
+   - **on sale, always:** until about half the sample (10 of 20) of the
+     hostname's comparisons have a discount, **even when free comparisons
+     already fill the sample**. New arrivals are rarely on sale (dry run #5:
+     1 of 49 free comparisons), and the discount is the most fragile field;
+   - **any, to fill the sample:** when free comparisons are fewer than
+     `…_PARITY_SAMPLE` (20).
    A topped-up product's product-page row is written, and replaces its
-   listing row.
+   listing row (no duplicate row in the same run).
 3. **Compare** price and discount (no discount = `None` or `0` on either
    side). Labels are compared but only counted (`label_differs`): promotion
    labels exist only on product pages (section 10).
@@ -227,9 +242,10 @@ After the sweep the spider works in steps, each when it's idle again
 (`_plp_efficient_on_idle`): Phase 2 + top-ups → re-checks → verdict and
 release. Every step waits for access retry rounds.
 
-Cost: top-ups only on days with fewer than 20 new products per hostname
-(about 10–15 product pages per hostname on a normal day, none on catch-up
-days), plus 2 requests per mismatch re-check.
+Cost: up to 10 on-sale top-ups per hostname every run, plus fill-up top-ups
+on days with fewer than 20 new products per hostname, plus 2 requests per
+mismatch re-check. About 20–40 requests a run for 2 hostnames. Nothing is
+wasted: topped-up products get full product-page rows.
 
 Record: manifest `plp_efficient.parity` = `hosts` (per hostname: `sampled`,
 `free`, `top_up`, `on_sale`, `compared`, `agree`, `cleared_on_recheck`,
@@ -302,7 +318,7 @@ Only these fields are set. Everything else (`product_name`, `image_urls`,
 |---|---|---|
 | `portal_itemid` | `visibleSku` | Equals the PDP extractor's value (42/42) |
 | `price` | `priceByCustomerGroupId["-1"]` | Equals the PDP selling price (42/42). The listing's plain `price` key is the **pre-sale** price on sale items. |
-| `price_discount` | `round_half_up((1 − priceByCustomerGroupId["-1"] / price) × 100)`; null when 0 | Equals the PDP discount (42/42). The listing's own discount fields were 5 points too high on some sale items. `discountText` is translated display text. |
+| `price_discount` | `round_half_up((1 − priceByCustomerGroupId["-1"] / price) × 100)`; **`0` when not on sale**; null only when a price is missing | Equals the PDP discount (42/42). The listing's own discount fields were 5 points too high on some sale items. `discountText` is translated display text. `0`, not null, so an ended sale clears the old discount downstream (section 7; since 2026-10-29, both paths). |
 | `primary_label` | highest-priority `badges[].value` | Equals the PDP badge (41/42). Promotion-campaign labels (e.g. `EXTRA25`) exist only on the PDP: accepted loss. |
 | `url` | **copied from the product's PDP list row** | Never the listing URL. Downstream keeps the latest non-blank `url` as the website link and the recrawl address (section 7). |
 | `site`, `country` | the PLP row | |
@@ -557,10 +573,14 @@ Language is compared case-insensitively: inputs use `ar` / `en`
     valid / quarantined / held back / uncovered / stale, problem counts per
     check and severity, the stop messages;
   - `listings`: per listing, pages requested / parsed / failed, rows
-    emitted, matched, mismatched, unusable, new, and `held_back_reason`;
+    `emitted` (matched and held for parity, not necessarily written),
+    matched, mismatched, unusable, new, and `held_back_reason`;
   - `phase2`: candidates, `phase2_ceiling_exceeded`, counts (known unseen,
     uncovered, new, held back), `scheduled`;
-  - `refreshed_from_listing`, `new_products`;
+  - `refreshed_from_listing` (listing rows actually **written**, after
+    parity), `new_products`;
+  - `parity`: per hostname comparisons and verdict, and `release`
+    (written / dropped / replaced by a product page); section 3;
   - `degradations`: one line per piece of work a guardrail chose to skip.
     Empty = nothing skipped. Feeds the run status (below).
 - **Quality gate, split by row type [built]** (`quality_gate.py`):
@@ -630,30 +650,83 @@ left join crawl_manifest_raw m on m.run_id = s.run_id
 where m.run_id is null;
 ```
 
-## 7. Downstream behaviour (scraper-pipeline) [planned]
+## 7. Downstream behaviour (scraper-pipeline)
 
-- Silver merges each new raw row onto the stored state with
-  `coalesce(new, previous)` (`silver_product_fact_ounass_daily`,
-  `silver_product_dim_ounass`, `silver_product_i18n_ounass`).
-  - So a PLP-extract row's nulls **keep** the previous name, images,
-    category and stock.
-  - Any **non-blank** value overwrites, which is why `url` must be copied
-    from the PDP list.
-- **Known issue (fix planned, ticket Part 6):** when a sale ends, a blank
-  discount can't clear the old one, so ended sales can keep showing a
-  discount. This affects the PDP path too.
-- **Known gap:** no silver model reads `primary_label` yet, so label refreshes
-  don't reach the website.
+**How silver reads a PLP-extract row.** The Ounass silver models
+(`silver_product_fact_ounass_daily`, `silver_product_dim_ounass`,
+`silver_product_i18n_ounass`) are incremental: each run picks the latest raw
+row per product and merges it onto yesterday's state with
+`coalesce(new, previous)`.
+- A PLP-extract row's nulls therefore **keep** the previous name, images,
+  brand, category, currency and stock; only price, discount, label and url
+  change.
+- Any **non-blank** value overwrites, which is why `url` is copied from the
+  PDP list, and why "no discount" must be `0`, not null.
+
+**Discounts clear on ended sales (fixed 2026-10-29).** Before, both paths
+wrote null for "no discount", which silver read as "not observed", so an
+ended sale kept its old discount forever (all crawl modes). Now both write
+`0` (`ounass_rules.get_discount`, `plp_hit_discount`). Website and API treat
+only `> 0` as on sale.
+
+**⚠ Never full-refresh (or drop and rebuild) the Ounass silver models.**
+The `coalesce(new, previous)` merge only works between runs. A first build or
+`--full-refresh` reads all bronze at once and takes each product's **latest
+row**, which, in this mode, is usually a PLP-extract row. Everything only
+product pages carry (currency, stock, name, brand label, …) comes out null,
+and gold drops the product (it joins on currency). Happened in dev
+2026-10-29: after a rebuild, gold had 276 Ounass rows instead of ~6,500.
+Fix planned (Part 6): within one batch, take each field's latest non-null
+value, so a rebuild equals day-by-day merging. Until then, add a column to
+these models with an explicit `ALTER TABLE … ADD COLUMNS`, not a rebuild.
+
+**Kept for analysis:** `plp_extract_flag` (silver fact
+`last_plp_extract_flag`, which path last set the price) and `primary_label`
+(silver i18n / gold; not shown on the website yet). Both in scraper-pipeline
+work in progress, 2026-10-29.
+
+**Products gold drops are recrawled every run.** Gold keeps only products
+with a canonical gender, brand, category and subcategory (seed mappings),
+and the export keeps only those matching an active registry row. Anything
+else on a listing looks new to the crawler and gets a product page every
+day (section 10, "Unmapped products", "Out-of-scope products"). A Phase 2
+"new" count that stays high day after day means this, not real arrivals.
+
+**After a crawl, in this order** (manual today; orchestration planned in
+`tickets/cicd_pipeline.md`):
+1. `make dbt-run` (scraper-pipeline): gold learns the run's products.
+2. Image pipeline (`make ecs-run-image-pipeline APP_ENV=dev`) for new
+   products' images.
+3. **Wait for the image quality checker** (its output lands in
+   `bronze/<env>/images/validated/dt=<dt>/`). Gold shows only validated
+   images; a dbt run before it finishes filters every new image out.
+4. `make dbt-run` again.
+5. `make api-cache-export-dev` (the website's data).
+
+The next crawl needs step 1 at least: without it, yesterday's new products
+are still unknown and get product pages again.
+
+**Language versions age apart.** A product's Arabic and English product
+pages are now crawled only when needed, often on different days, so their
+galleries can differ (Ounass changes `?ts=` and sometimes image count). The
+dbt test `test_bronze_product_image_urls_no_cross_locale_conflicts` flags
+this (3 products on 2026-10-27); silver keeps the latest gallery
+deterministically. The test needs rethinking for this mode (Part 6).
 
 ---
 
-## 8. How to run [planned]
+## 8. How to run [built; dev]
 
 | Step | Command |
 |---|---|
 | Check inputs before spending budget **[built]** | `make preflight-ounass-plp-efficient` (exit 0 = would start, 1 = would stop). With the 1-request Zyte probe: `make preflight-ounass-plp-efficient-probe`. Local files: `make preflight-ounass-plp-efficient PREFLIGHT_ARGS="--plp-list plp.csv --pdp-list pdp.csv --vocabulary vocabulary.json [--manifest manifest.json]"`. Prod: `APP_ENV=prod make preflight-ounass-plp-efficient`. |
-| Shadow run | _to fill in (Part 4/7)_ |
-| Live run, local (Part 3) | `ZYTE_API_KEY=… .venv/bin/python run_crawler.py ounass --plp-efficient` invokes the export Lambda. With local files: `… --plp-efficient --plp-list plp.csv --pdp-list pdp.csv --vocabulary vocabulary.json [--plp-manifest manifest.json]`. Not with `--urls` / `--urls-source`. Cap Phase 2 for a test with `OUNASS_PLP_EFFICIENT_MAX_PHASE2_PDPS=20`. **Local only until Part 4.** |
+| Before the run | `make dbt-run` in scraper-pipeline if a crawl ran since the last one (section 7) |
+| Run in AWS (dev) | `make ecs-run APP_ENV=dev ECS_RUN_COMMAND="python3 run_crawler.py ounass --env dev --plp-efficient"`; prints the task ARN (last part = task id). Uses the crawler image `latest` (built by CI on every push to `main`) |
+| Watch | `aws logs tail /ecs/ecommerce-scraper --region eu-central-1 --follow --log-stream-names ecs/scraper/<task-id> --filter-pattern '?"PLP-efficient" ?"Access retry" ?"RUN " ?"ACCESS " ?ERROR'`. Milestones: `PLP-efficient Phase 2: {…}` (sweep done), `PLP-efficient parity <hostname>: …`, `PLP-efficient listing rows: {…}`, `RUN DEGRADED` / `RUN FAILED` |
+| Check | marker under `bronze/<env>/crawls/markers/ounass/<dt>/<run_id>/` (`_SUCCESS` or a failure marker, `docs/crawl_run_status.md`); manifest `plp_efficient` block |
+| After the run | section 7, "After a crawl, in this order" |
+| Shadow run | _Part 7_ |
+| Live run, local | `ZYTE_API_KEY=… .venv/bin/python run_crawler.py ounass --plp-efficient` invokes the export Lambda. With local files: `… --plp-efficient --plp-list plp.csv --pdp-list pdp.csv --vocabulary vocabulary.json [--plp-manifest manifest.json]`. Not with `--urls` / `--urls-source`. Cap Phase 2 for a test with `OUNASS_PLP_EFFICIENT_MAX_PHASE2_PDPS=20`. Uploads only with `S3_UPLOAD_ENABLED=true` |
 | Re-verify listing ↔ product-page parity | `.venv/bin/python scripts/probe_ounass_plp_parity.py --plp-url <api listing url>` (needs `ZYTE_API_KEY`; ~30 Zyte requests) **[built]** |
 
 ---
@@ -711,7 +784,9 @@ ago) and STALE (5 products last crawled 2026-08-08); exit 0.
 | A hostname has no PLP-extract rows, `kind = content` | G9 parity failed: listing format likely changed | Manifest `plp_efficient.parity`; re-run the parity probe; update section 4 |
 | A PLP's leftovers held back | G3 page failure, G7 currency mismatch, G11 field-mismatch spike or G4 missing spike | Manifest per-PLP outcomes; check for a canonical rename or Ounass reclassification |
 | Phase 2 skipped | G4 cap or the 10,000 ceiling | Manifest `plp_efficient.phase2` and `degradations`; check the PDP list's scope |
-| Many products refreshed every day via PDP instead of PLP | Unmapped products (absent from gold) or swatch-only sold-out colours | Accepted losses; see section 10 |
+| Many products refreshed every day via PDP instead of PLP | Unmapped products (absent from gold), out-of-scope products in a listing, or swatch-only sold-out colours | Section 10. To tell: are the "new" products already in bronze from earlier runs? Then gold is dropping them: check `brand_canonical` / `gender` nulls in `silver_product_dim_ounass` and add the seed mapping |
+| Gold suddenly lost most Ounass products | An Ounass silver model was rebuilt (first build / `--full-refresh`) | Section 7, "Never full-refresh"; Glue `CreateTime` of the silver tables |
+| Phase 2 "known but not seen" much higher than ~2% per listing | Listing pagination showing only part of the listing (fixed 2026-10-23), or real churn after days without a run | Section 10, "Listing pagination"; compare unique entries per sweep with `pagination.totalHits` |
 
 ---
 
@@ -726,8 +801,17 @@ ago) and STALE (5 products last crawled 2026-08-08); exit 0.
   (24). Another 7 were `Mens` products inside a women's listing: in gold,
   but outside the registry row's scope. Fix: scraper-pipeline seeds
   (ticket, dry run #4).
+- **Out-of-scope products in a listing:** Ounass lists some `Mens` products
+  in women's listings. Gold has them as men, so the export (scoped by the
+  registry row's gender, like category) leaves them out, and the crawler
+  can't tell "excluded on purpose" from "never seen": they get a product
+  page every run (~10 requests a day, 2026-10-29). Deferred (user,
+  2026-10-27); if it grows, refresh them from the listing (an
+  `out_of_scope` list from the export, matched without the gender check)
+  rather than skip them, so their gold price stays fresh.
 - **Promotion-campaign labels** (e.g. `EXTRA25`) are PDP-only and missing
-  from PLP-extract rows.
+  from PLP-extract rows (parity counts them as `label_differs`, ~20% of
+  comparisons on 2026-10-29).
 - **Swatch-only (sold-out) colours** get a Phase 2 PDP check until the 3-day
   sold-out cutoff removes them.
 - **Saudi blocking:** paginated Saudi listing requests got Zyte "Website Ban"
@@ -786,6 +870,7 @@ ago) and STALE (5 products last crawled 2026-08-08); exit 0.
 | 2026-10-05 | Doc created from the agreed design (all sections planned) | — |
 | 2026-10-13 | PDP list scoped to active PLP list rows; `is_active` column added to the PLP list | — |
 | 2026-10-16 | **Part 2 built:** startup checks (G1, G2, G7, G8, G10, stale-crawl), settings, `make preflight-ounass-plp-efficient` (+ `-probe`). Verified against the dev export | — |
+| 2026-10-29 | Parity always tops up on-sale products to half the sample (dry run #5: 1 of 49 free comparisons on sale). `price_discount` `0` = no discount on both paths. Sections 1 (measured runs), 7 (downstream: merge rule, full-refresh hazard, order of operations, language drift), 8 (how to run in AWS), 9, 10 (out-of-scope products) brought up to date | — |
 | 2026-10-29 | **Part 5b built: parity check (G9).** New products' product pages (fetched in Phase 2 anyway) are the first comparisons, free; hostnames short of 20 get top-ups from held rows, on-sale first. Listing rows are now held per hostname and written after the verdict (one `data:,` request), so the verdict comes after Phase 2. Topped-up products' product-page rows replace their listing rows. `refreshed_from_listing` = rows written. New setting `…_PARITY_MIN_MISMATCHES` (2). The access layer ignores non-HTTP requests | — |
 | 2026-10-27 | Dry run #4 (steady state): 372 requests, 8.5 min, 99.6% of known products refreshed from listings; Phase 2 inflated by products gold drops (unmapped brands, `Unisex`), recorded in section 10 | — |
 | 2026-10-23 | **Listing sort changed to `sortBy=onlineDateWithStock-desc`** (all Ounass crawls): `fh_sort_by=-newness_ae` paginated with ties and showed only ~82% of each listing per sweep (probe evidence in section 10) | — |

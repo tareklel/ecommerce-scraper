@@ -126,10 +126,11 @@ class ParityCheck:
         for host in sorted(held_by_host):
             free = [c for c in self.comparisons.values() if c["host"] == host]
             need = max(0, sample - len(free))
-            if not need:
-                continue
+            # Discounts are the most fragile field and new arrivals are rarely
+            # on sale (dry run #5: 1 of 49 free comparisons), so on-sale
+            # top-ups go up to half the sample even when free ones fill it.
             free_on_sale = sum(1 for c in free if c["listing"]["discount"])
-            want_on_sale = min(need, max(0, math.ceil(sample / 2) - free_on_sale))
+            want_on_sale = max(0, math.ceil(sample / 2) - free_on_sale)
             candidates = [k for k in sorted(held_by_host[host])
                           if k in self.listing and k not in self.comparisons]
             on_sale = [k for k in candidates if self.listing[k]["discount"]]
@@ -137,7 +138,7 @@ class ParityCheck:
             chosen = on_sale[:want_on_sale]
             rest = [k for k in candidates if k not in set(chosen)]
             self.rng.shuffle(rest)
-            chosen += rest[:need - len(chosen)]
+            chosen += rest[:max(0, need - len(chosen))]
             for key in chosen:
                 url = held_by_host[host][key]["url"]
                 self._new_comparison(key, TOP_UP, url)
