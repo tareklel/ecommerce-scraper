@@ -1,6 +1,6 @@
 # Ticket: Ounass PLP-Efficient Crawl — Refresh Known Products From Listings, Not Product Pages
 
-**Status: Parts 0–5 built and run live (dev only); Part 6 mostly done (2026-10-29); Part 7 not started.**
+**Status: Parts 0–6 done (dev only, 2026-11-02); Part 7 (shadow mode, prod, go live) not started.**
 
 ## ▶ Where we are / next steps (handoff, updated 2026-10-20)
 
@@ -257,15 +257,16 @@ tests passing. The mode is still **dev only**: Part 5b (parity) and Part 6
   Live image: `sha-d0aa1c9` (includes the pagination fix).
 
 #### Next build parts
-- **Part 5b, parity** (designed in Part 5 below): required before prod.
-- **Part 6** (scraper-pipeline): discount-clearing fix ✅ 2026-10-29
-  (this repo's `309f3bd`), label pickup ✅ 2026-10-29
-  (`../scraper-pipeline` `186d7f3`, data layer only), `plp_extract_flag`
-  kept in silver ✅ 2026-10-29 (`../scraper-pipeline` `9267ceb`),
-  image-pipeline null-gallery concern investigated 2026-10-29 (no bug
-  found, same commit). Still open: `run_status` in
-  `silver_crawl_manifest`, sold-out recrawl side.
-- **Part 7:** shadow mode in prod 1–2 weeks, then go live.
+- ✅ **Part 5b, parity:** built and run live (dry runs #5–#6).
+- ✅ **Part 6** (scraper-pipeline + this repo): done 2026-11-02; see the
+  Part 6 section for each item and its evidence. One follow-up: confirm
+  the first crawl after `5f10377` writes discount `0` on full-price
+  product rows.
+- **Part 7:** shadow mode 1–2 weeks, then go live. Prerequisites: a daily
+  schedule (crawl → dbt → image pipeline → wait for the quality checker →
+  dbt → API cache; proposal in `tickets/cicd_pipeline.md`) and a prod data
+  side (no prod gold exists yet: prod seeds, dbt, export Lambda against
+  prod gold, prod registry rows).
 
 #### Session gotchas (how to work here)
 - AWS CLI / Terraform work from the agent shell when the user's SSO session
@@ -403,7 +404,7 @@ depends on it starts.
 | **3** | Crawler core: Phase 1 / Phase 2, PLP-extract rows, runtime guardrails | this | 2 | ✅ done 2026-10-16 (code, local smoke, IAM applied) |
 | **4** | Run observability: manifest block, quality-gate split, run status | this (+ verifier Lambda) | 3 | ✅ code 2026-10-16; 4b rollout pending (see handoff) |
 | **5** | 5a access layer (all crawls) + 5b daily parity check | this | 3 | 5a ✅ 2026-10-20; 5b next |
-| **6** | Downstream readiness: discount-clearing fix, label pickup, flag kept in silver, 3-day sold-out cutoff | scraper-pipeline | 1 | discount fix, rebuild-safe silver, label pickup, flag kept in silver, run status in silver ✅ 2026-10-29; sold-out recrawl side and the cross-language gallery test still open |
+| **6** | Downstream readiness: discount-clearing fix, label pickup, flag kept in silver, 3-day sold-out cutoff | scraper-pipeline | 1 | ✅ done 2026-11-02 (discount fix, rebuild-safe silver, label pickup, flag kept in silver, run status in silver, sold-out decision, gallery test) |
 | **7** | Shadow mode (1–2 weeks), tune thresholds, then go live | both | 1–6 | not started |
 
 Parts 1 and 6 (scraper-pipeline) can run in parallel with Parts 2–5 (this
@@ -1111,20 +1112,47 @@ rows"), **but not on a rebuild** (first item below).
   pipeline as a failure in the first place. Corrected the model's
   comment, which only named the PDP-failure case. If this was observed
   somewhere else (a log line, a metric), flag it -- not found yet.
-- [ ] **Run status in silver** (added 2026-10-19): `silver_crawl_manifest`
+- [x] **Run status in silver** (added 2026-10-19): `silver_crawl_manifest`
   extracts `run_status`, `failure_reason`, `degradations` and the
   `verification.data_source` / `published_key` fields the verifier now
   writes into `raw_json` (Part 4b), so degraded and failed runs are
   queryable without hand-written `json_extract`. Optionally a model joining
-  `crawl_started_raw` to the manifests to list killed runs.
-- [ ] **3-day sold-out cutoff, recrawl side:** products sold out for 3+ days
-  drop out of `gold_pdp_recrawl_ounass_daily`'s `oos_recheck`, so they stop
-  being PDP-checked daily. The export side is in Part 1. Decide whether
-  they're ever rechecked (e.g. weekly).
+  `crawl_started_raw` to the manifests to list killed runs. Done 2026-10-29
+  (scraper-pipeline `77daded`, plus `silver_crawl_killed_runs`); verified
+  2026-11-02: Ounass 5 success / 2 degraded / 2 failed (quality), older
+  pre-feature runs null, degradations parsed, 0 killed runs (correct).
+- [x] **3-day sold-out cutoff, recrawl side.** Decided 2026-11-02 (user):
+  products sold out 3+ days drop out of the export and are **not
+  rechecked**; if one shows up on a listing again it isn't known, so it's
+  crawled as new (product page) and gold gets its stock back. Verified in
+  dry run #6: 15 restocked product rows, last seen sold out 2026-10-23 –
+  10-29, came back this way. (The ticket assumed a 3-day cutoff in
+  `gold_pdp_recrawl_ounass_daily` too; that model has none: it lists every
+  product not crawled today. Its fate for Ounass is Part 7, open question 2.)
+- [x] **Cross-language gallery test** (found 2026-10-27):
+  `test_bronze_product_image_urls_no_cross_locale_conflicts` compared each
+  language's latest gallery, which in this mode are often crawled days
+  apart while Ounass changes galleries (time drift, not a regional
+  difference). Fixed 2026-11-02 (scraper-pipeline): it compares only
+  languages observed in the same run (each product's latest run with two
+  or more). Passes.
+- [x] **Seed gap found by the tests 2026-11-02:** Ounass's Arabic label for
+  Elleme is `ايليم` (every observation since 2026-10-22), the seed only had
+  `إلمي`. Added to the existing `elleme` canonical (scraper-pipeline
+  `eecb0b3`). Seed loaded in dev; the dbt run + test after it was cut off by
+  AWS TLS errors (`CERTIFICATE_VERIFY_FAILED`, network/proxy side), so dev
+  gold doesn't show the label yet: rerun `make dbt-run && make dbt-test`
+  once AWS is reachable (expect 38/38).
 
 **Done when:** a dev run with PLP-extract rows updates price/discount/label
 in gold without changing names, images, URLs or stock, and an ended sale
 clears its discount.
+
+**Part 6 done 2026-11-02.** Dry runs #4–#6 refresh price, discount and label
+from listings while names, images, URLs and stock keep their values (gold
+complete after every dbt run). Ended sales: listing rows write `0` (4,968 in
+run #6); product-page rows write `0` from the next crawl on (`5f10377`, the
+two-field rule) — confirm in the first run after it.
 
 ## Part 7 — Shadow mode, then go live
 

@@ -1,5 +1,12 @@
 # Memory
 
+## 2026-11-02 - Part 6 finished
+- Sold out 3+ days: dropped, not rechecked (user); restocks come back via listings as new products (run #6: 15 rows). `gold_pdp_recrawl_ounass_daily` has no 3-day cutoff (ticket premise was wrong).
+- Run status in silver verified (77daded): 5 success / 2 degraded / 2 failed-quality, 0 killed.
+- Gallery test compares languages within the same run (scraper-pipeline). Seed gap: Ounass Arabic Elleme label `ايليم` added to `elleme`.
+- Pending: `make dbt-run && make dbt-test` in scraper-pipeline (cut off 2026-11-02 by AWS TLS `CERTIFICATE_VERIFY_FAILED`; expect 38/38).
+- Open follow-up: first crawl after `5f10377` should show discount `0` on full-price product rows. Next: Part 7 (needs daily schedule + prod data side).
+
 ## 2026-11-02 - Dry run #6
 - Success, 409 requests, 7.5 min (4 days since #5). Parity pass, 10 on-sale comparisons per hostname (on-sale top-ups work). dbt seed (Themoirè fix `0f76871`, pushed) + dbt before the crawl (else 2 `themoire` products quarantined), dbt after: gold 6,875.
 - Product-page rows never carry discount `0`: Ounass omits `discountPercent` (and `slashedPrice`) on full-price pages. Implemented (user agreed): positive `discountPercent` → value; both absent (and a price) → 0; `slashedPrice` above price without a percent → null. Verify on the next crawl.

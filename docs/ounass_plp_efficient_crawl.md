@@ -722,8 +722,9 @@ are still unknown and get product pages again.
 pages are now crawled only when needed, often on different days, so their
 galleries can differ (Ounass changes `?ts=` and sometimes image count). The
 dbt test `test_bronze_product_image_urls_no_cross_locale_conflicts` flags
-this (3 products on 2026-10-27); silver keeps the latest gallery
-deterministically. The test needs rethinking for this mode (Part 6).
+this; since 2026-11-02 it compares only languages observed in the same run
+(time drift isn't a regional difference). Silver keeps the latest gallery
+deterministically.
 
 ---
 
@@ -826,6 +827,11 @@ ago) and STALE (5 products last crawled 2026-08-08); exit 0.
   comparisons on 2026-10-29).
 - **Swatch-only (sold-out) colours** get a Phase 2 PDP check until the 3-day
   sold-out cutoff removes them.
+- **Sold out 3+ days: dropped, not rechecked** (user, 2026-11-02). The
+  export leaves them out; if one comes back in stock it reappears on its
+  listing, isn't known, and gets a product page as a new product, which
+  restores its stock in gold (dry run #6: 15 restocked rows caught this way).
+  A restocked product that no listing shows stays sold out in gold.
 - **Saudi blocking:** paginated Saudi listing requests got Zyte "Website Ban"
   / HTTP 429 on 2026-09-30 and 2026-10-03. Expect degraded Saudi runs.
   Blocking is an access problem for the whole hostname, handled apart from
@@ -882,6 +888,7 @@ ago) and STALE (5 products last crawled 2026-08-08); exit 0.
 | 2026-10-05 | Doc created from the agreed design (all sections planned) | — |
 | 2026-10-13 | PDP list scoped to active PLP list rows; `is_active` column added to the PLP list | — |
 | 2026-10-16 | **Part 2 built:** startup checks (G1, G2, G7, G8, G10, stale-crawl), settings, `make preflight-ounass-plp-efficient` (+ `-probe`). Verified against the dev export | — |
+| 2026-11-02 | PDP discount `0` when both sale fields are absent (dry run #6: Ounass omits them on full-price pages). Sold out 3+ days: dropped, not rechecked (section 10). Gallery test compares languages within one run (section 7). Part 6 done | — |
 | 2026-10-29 | Parity always tops up on-sale products to half the sample (dry run #5: 1 of 49 free comparisons on sale). `price_discount` `0` = no discount on both paths. Sections 1 (measured runs), 7 (downstream: merge rule, full-refresh hazard, order of operations, language drift), 8 (how to run in AWS), 9, 10 (out-of-scope products) brought up to date | — |
 | 2026-10-29 | **Part 5b built: parity check (G9).** New products' product pages (fetched in Phase 2 anyway) are the first comparisons, free; hostnames short of 20 get top-ups from held rows, on-sale first. Listing rows are now held per hostname and written after the verdict (one `data:,` request), so the verdict comes after Phase 2. Topped-up products' product-page rows replace their listing rows. `refreshed_from_listing` = rows written. New setting `…_PARITY_MIN_MISMATCHES` (2). The access layer ignores non-HTTP requests | — |
 | 2026-10-27 | Dry run #4 (steady state): 372 requests, 8.5 min, 99.6% of known products refreshed from listings; Phase 2 inflated by products gold drops (unmapped brands, `Unisex`), recorded in section 10 | — |
