@@ -1,14 +1,114 @@
 # Ticket: CI/CD for the Crawler, Data Pipeline and Website
 
-**Status: to plan. One slice in progress: the crawler image via GitHub
-Actions (see "In progress").** Written 2026-10-13 as a placeholder after
-deploy problems surfaced while building the Ounass PLP-efficient crawl. This
-ticket records **why** CI/CD is needed and a rough target; the actual plan is
-the first task.
+**Status: in progress; follow "▶ Next steps" below.** The crawler image
+slice is done. Written 2026-10-13 after deploy problems surfaced while
+building the Ounass PLP-efficient crawl. The sections after "Next steps"
+record why CI/CD is needed, the target, and history.
 
 Scope spans all three repos (`ecommerce-scraper`, `../scraper-pipeline`,
 `../price-comparison-web`). It lives here because the most urgent piece (the
 crawler image) is in this repo.
+
+---
+
+## ▶ Next steps (updated 2026-11-02)
+
+Work top to bottom and tick items off as they finish. Check each item against
+the repos before starting, because this list can go out of date.
+
+**Decided 2026-11-02 (user):**
+- Orchestrate with **Step Functions**, started **by hand** for now. Add the
+  EventBridge schedule later (step 7).
+- Crawl **about weekly** while the site is unfinished. Thresholds already
+  raised for this: G8 warn age 8 days, stale-crawl warning 14 days.
+- **What gets crawled comes from `../scraper-pipeline/canonical_seeds/crawl_plp_registry.csv`**
+  (`is_active` per listing): version-controlled, reviewed and tested, no
+  second list. Sites to run = sites with active rows. A CSV edit takes effect
+  only after `dbt seed`, so the flow seeds first (steps 3 and 4).
+- **Images stay on** in every run: gold only serves validated images.
+- Runs use dev until `../scraper-pipeline/ticket/migrate-validated-dev-to-prod.md`
+  passes.
+
+**Verified 2026-11-02:** scraper-pipeline's Terraform has no `backend` block
+and its state is still a local file on OneDrive; dbt has no cloud job yet;
+scraper-pipeline and price-comparison-web have no `.github/workflows`.
+
+**Steps:**
+
+- [ ] **1. Move scraper-pipeline's Terraform state to S3 with locking.**
+  Biggest risk, smallest fix. `terraform/backend.hcl.example` and
+  `terraform/state/` are the starting points. Back up the state first and
+  confirm `terraform plan` shows no changes afterwards.
+- [ ] **2. Run dbt in AWS (dev).** This blocks the flow in step 3. Plan is in
+  `../scraper-pipeline/ticket/migrate-dbt-to-cloud-jobs.md`: a dbt container
+  image built by GitHub Actions (same pattern as the crawler image), run as an
+  ECS task. Watch for:
+  - **Never `--full-refresh` the Ounass silver models**
+    (`docs/ounass_plp_efficient_crawl.md`, section 7).
+  - The flow runs dbt twice, so the API-cache export rule in
+    `terraform/eventbridge_api_export.tf` would fire twice if enabled. Decide
+    how it should fire before enabling it.
+- [ ] **3. Build the state machine (dev, Terraform).** Follow "Orchestration
+  proposal" below: crawls in parallel, wait for verification, dbt, image
+  pipeline and quality checker, dbt again. A failed crawl doesn't stop the
+  others. It starts with `dbt seed --select crawl_plp_registry` plus that
+  seed's tests, before any crawl and any Zyte spend, because the crawl-start
+  export reads the seeded table. No schedule is attached yet.
+  Optional: re-try a crawl that failed with `failure_reason: access` a few
+  hours later, since a missed site now waits a week.
+- [ ] **4. Drive runs from the registry, with one start command.** A run is:
+  1. Edit `crawl_plp_registry.csv` if needed, commit and push. CI rebuilds the
+     dbt image, which carries the seeds.
+  2. `make weekly-run` (to be written), which prints the active sites and
+     starts the state machine. It must fail if the dbt image isn't built from
+     the latest registry commit, or the run seeds the old list.
+  3. Check the result. After a long break, check whether Phase 2 hit
+     `OUNASS_PLP_EFFICIENT_MAX_PHASE2_PDPS` (10,000), because that skips
+     product pages for the whole run.
+
+  To build:
+  - **Other sites need a reader.** Only Ounass PLP-efficient reads the registry
+    today: the export supports only `ounass`, and Level Shoes and Bloomingdale's
+    crawl from a `--urls-source` CSV. Export each other site's active URLs to
+    S3 for `--urls-source`, and list the active sites for the flow.
+  - **Site key vs spider name:** the registry uses `level-shoes`
+    (`dim_canonical_site`), the spider is `level`, so the flow needs a mapping.
+  - **Crawl mode isn't in the registry.** Proposed: Ounass always runs
+    `--plp-efficient`, others run normally.
+  - **Whole-site off** means flipping every row of that site to `is_active`
+    false. Fine for now; revisit if it becomes annoying.
+  - **Fast CSV check in CI:** the seed's dbt tests need Athena, so also check
+    the CSV's columns and values in the PR.
+
+  Adding other sites is safe for Ounass (checked 2026-11-02): both export
+  queries filter on `site = 'ounass'` and `is_active = true`. As a backstop, the
+  crawler's G1 skips any row for another site, though more than 25% bad rows
+  would stop the run. New rows must use canonical values or the seed's
+  `test_crawl_plp_registry_canonical` fails.
+- [ ] **5. Add run alerts.** See "Crawl run alerting" below: one summary per
+  run, and an alert on `failed` / `killed`. Report access problems apart from
+  content problems.
+- [ ] **6. Terraform plan on PR, apply on merge (both repos).** Deploy the
+  pending 2026-07-30 API-cache code deliberately through it. Until then, keep
+  using targeted applies: an untargeted apply can ship that code to prod.
+- [ ] **7. Add the schedule when hands-off runs are wanted.** Not needed yet.
+  - EventBridge Scheduler, for example `cron(0 2 ? * SUN *)`, passing the same
+    site list.
+  - On/off is the schedule's `state`. Use `lifecycle { ignore_changes = [state] }`
+    so Terraform doesn't switch it back, plus `make schedule-on` /
+    `make schedule-off`. `aws scheduler update-schedule` needs the full
+    definition resent, not just the state.
+  - Idle state machines cost nothing, and missed runs aren't caught up.
+  - Update `tickets/crawl_scheduler.md`, which still describes daily per-site
+    rules that start ECS directly.
+- [ ] **8. dbt in CI** (`dbt parse` / compile and Python tests on PRs).
+- [ ] **9. Nightly Terraform drift check.**
+- [ ] **10. Replace `tests/fixtures/bloomingdales_pdp.html`** with a small
+  synthetic fixture, so CI covers Bloomingdale's `extract_product`.
+- [ ] **11. Discuss CI/CD for the website (web UI), after everything above is
+  done.** Not planned yet, and it needs its own discussion first: expect it to
+  raise its own problems. Don't start it from the "Rough target" row below
+  without that discussion.
 
 ---
 
@@ -58,14 +158,14 @@ produced:
 
 ---
 
-## Rough target (to be refined in planning)
+## Rough target
 
 | Layer | Every PR / push | On merge to `main` | Prod |
 |---|---|---|---|
 | Crawler image (this repo) | `pytest` | build, push `<sha>` to ECR | manual "promote `<sha>` to `latest`" |
 | Lambdas + infra (Terraform, both repos) | `fmt`, `validate`, `plan` posted on the PR | apply to dev | apply to prod behind a required approval |
 | dbt (scraper-pipeline) | `dbt parse` / compile, Python tests | `dbt build` changed models in dev | same, behind approval |
-| Website (price-comparison-web) | lint, tests, build | deploy to dev | approval → prod |
+| Website (price-comparison-web), to be discussed last (step 11) | lint, tests, build | deploy to dev | approval → prod |
 
 Cross-cutting:
 - **Auth:** GitHub Actions → AWS via **OIDC**, with narrow per-job roles and
@@ -98,21 +198,10 @@ workflow's path filter also only listed `Dockerfile`, while the file is
 `dockerfile`, so dockerfile edits never triggered a build; both names are
 listed now. Longer term: install Poetry in its own virtualenv in the image.
 
-**Rough order:**
-1. Move scraper-pipeline's Terraform state to S3 with locking (biggest risk,
-   smallest fix).
-2. Crawler image CI (build on push, manual promote).
-3. Terraform plan-on-PR / apply-on-merge for both repos. Deploy the pending
-   2026-07-30 API-cache code deliberately through it.
-4. dbt in CI, plus a **scheduled dbt build in AWS** (e.g. daily after the
-   crawls; added 2026-10-22). Today dbt only runs on a laptop, so gold goes
-   stale whenever nobody runs it; the PLP-efficient crawl then warns (G8)
-   and pays for extra product-page crawls until it's rebuilt. Running dbt
-   from the crawler instead was rejected: it would couple crawls to dbt.
-5. Website pipeline; nightly drift checks.
+**Order of work:** see "▶ Next steps" at the top of this ticket.
 
 
-### Orchestration proposal (2026-10-22, not decided)
+### Orchestration proposal (2026-10-22; decided 2026-11-02, see "Next steps")
 
 **Today nothing runs on a schedule:** crawls (`make ecs-run`), dbt
 (`make dbt-run` on a laptop) and the image pipeline
@@ -120,7 +209,7 @@ listed now. Longer term: install Poetry in its own virtualenv in the image.
 automatic: the verifier Lambda (crawl manifest → markers, publish) and the
 image quality checker (after the image pipeline's `_SUCCESS`).
 
-**Daily flow wanted:**
+**Flow wanted (about weekly for now, started by hand):**
 1. **Crawls** in parallel (one ECS task per site/mode; Ounass PLP-efficient
    included). A failed crawl doesn't stop the others.
 2. **Wait for verification:** read each run's `run_status` (verified
@@ -135,7 +224,7 @@ image quality checker (after the image pipeline's `_SUCCESS`).
    checker finished and left all 16,087 new images out of gold; today the
    checker is started by a Lambda, outside any flow, so the orchestration
    should run it as an explicit step instead.
-6. **Notify:** one daily summary of every run's status and degradations;
+6. **Notify:** one summary per run of every crawl's status and degradations;
    an alert on `failed` / `killed` (the "Crawl run alerting" item above).
 
 **Recommended tool: AWS Step Functions + EventBridge Scheduler.**
@@ -158,7 +247,7 @@ interdependent data assets.
 
 ---
 
-## ▶ In progress: crawler image via GitHub Actions (direction agreed 2026-10-15)
+## Done: crawler image via GitHub Actions (2026-10-15; kept as history)
 
 First slice of this ticket, pulled forward because the cloud crawler image
 is stale and the laptop can't build it.
@@ -308,9 +397,3 @@ the workflows to `main` (which triggers the first build).
 - `../scraper-pipeline/ticket/migrate-validated-dev-to-prod.md`: holds the
   pending API-cache Lambda redeploy note.
 - `tickets/ounass_plp_efficient_crawl.md`: where these problems surfaced.
-
-## First task when picked up
-
-Turn the rough target into a reviewed plan: which repos first, approval
-rules per environment, OIDC role boundaries, and the Terraform state
-migration steps.

@@ -1,5 +1,10 @@
 # Memory
 
+## 2026-11-02 - Weekly crawl thresholds; CI/CD next steps
+- `eb45266`: crawls go about weekly while the site is unfinished (user). G8 gold warn age 2 → 8 days, stale-crawl warning 7 → 14 days, both still warn only. Tests and `docs/ounass_plp_efficient_crawl.md` updated. 482 passed.
+- `tickets/cicd_pipeline.md` now opens with "▶ Next steps", the one ordered list to follow. Decided (user): Step Functions started by hand, schedule later, images on, `crawl_plp_registry.csv` (scraper-pipeline) decides what gets crawled, with `dbt seed` as the flow's first step. Website CI/CD to be discussed after everything else.
+- Checked: other sites' registry rows don't affect the Ounass efficient crawl (export filters on site and `is_active`), but only Ounass reads the registry today, so other sites need a reader. Blocker for the flow: dbt doesn't run in AWS yet.
+
 ## 2026-11-02 - Part 6 finished
 - Sold out 3+ days: dropped, not rechecked (user); restocks come back via listings as new products (run #6: 15 rows). `gold_pdp_recrawl_ounass_daily` has no 3-day cutoff (ticket premise was wrong).
 - Run status in silver verified (77daded): 5 success / 2 degraded / 2 failed-quality, 0 killed.
