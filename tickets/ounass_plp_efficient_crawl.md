@@ -137,6 +137,24 @@ tests passing. The mode is still **dev only**: Part 5b (parity) and Part 6
   listing rows (1,242 of 6,212) carry a discount. ✅ Fixed 2026-10-29
   (user agreed): on-sale top-ups up to half the sample (10 per hostname)
   always, even when free comparisons fill it. Not yet run live.
+- ✅ **Dry run #6 (2026-11-02, run `2026-11-02T13-14-19-670`, task
+  `1afbef82…`, image `sha-06b877c`):** `success`, **7.5 min, 409 requests**
+  (4 days since run #5). Before it: `dbt seed` (incl. the Themoirè
+  duplicate fix, scraper-pipeline `0f76871`) and a dbt run, since gold
+  still had `themoire` for 2 products and the crawl would have quarantined
+  them. Phase 2 260 = 128 new + 132 known unseen (4 days of arrivals and
+  sell-outs). Parity **pass (own)** on both hostnames: 69 comparisons each
+  (64 free, 5 on-sale top-ups), **10 on sale**, all agree; 6,150 listing
+  rows written, 12 replaced by product pages. dbt after: gold 6,875 rows.
+- ⚠ **Discount `0` doesn't reach product-page rows.** Listing rows: 4,968
+  `0`, 1,182 on sale. Product-page rows: 200 null, 70 on sale, **0 zeros**:
+  Ounass omits `discountPercent` on full-price pages, so the key-present
+  rule never fires and ended sales still don't clear on that path. Run #6's
+  product rows show the reliable signal: on sale → `discountPercent` and
+  `slashedPrice` (> price) both present (70/70); full price → both absent
+  (200/200). Proposed: `0` when both are absent, the value when
+  `discountPercent` is present, null when they disagree (one present, one
+  missing: a renamed field). Awaiting decision.
 - ⚠ **Review of the bot's Part 6 work (2026-10-29):**
   - `309f3bd` (this repo, discount `0` on both paths): correct diagnosis
     (silver's `coalesce` never cleared an ended sale), and safe downstream

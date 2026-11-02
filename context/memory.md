@@ -1,5 +1,9 @@
 # Memory
 
+## 2026-11-02 - Dry run #6
+- Success, 409 requests, 7.5 min (4 days since #5). Parity pass, 10 on-sale comparisons per hostname (on-sale top-ups work). dbt seed (Themoirè fix `0f76871`, pushed) + dbt before the crawl (else 2 `themoire` products quarantined), dbt after: gold 6,875.
+- Product-page rows never carry discount `0`: Ounass omits `discountPercent` (and `slashedPrice`) on full-price pages. Proposed rule: both absent → 0; `discountPercent` present → value; disagree → null.
+
 ## 2026-10-29 - get_discount key-present rule; scraper-pipeline silver made rebuild-safe
 - `ounass_rules.get_discount`: `0` only when `discountPercent` is present (null/0), None when missing (a renamed field must not wipe discounts). Verify on the next crawl that full-price product rows carry `0`.
 - scraper-pipeline `8cb5da4` (branch `rebuild-safe-silver`, worktree `../scraper-pipeline-rebuild-safe`): fact/dim/i18n take each field's latest non-null value per batch. Dev repaired with it (gold 6,560 Ounass rows). Combined with the bot's `9267ceb`/`186d7f3`/`77daded` instead of reverting (user: do the needful) and pushed as `e637dbf`; dev rebuilt from it (gold 6,560 Ounass rows). scraper-pipeline has broken `refs/codex/turn-diffs/*` refs (null SHA) that make `git fetch` fail there.
