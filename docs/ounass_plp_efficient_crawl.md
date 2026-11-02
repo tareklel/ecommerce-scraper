@@ -667,9 +667,13 @@ row per product and merges it onto yesterday's state with
 wrote null for "no discount", which silver read as "not observed", so an
 ended sale kept its old discount forever (all crawl modes). Now both write
 `0` (`ounass_rules.get_discount`, `plp_hit_discount`). Website and API treat
-only `> 0` as on sale. Only on positive evidence, though: the PDP path writes
-`0` when the page's `discountPercent` is present but empty, and null when the
-field is **missing** (a renamed field must not wipe every real discount).
+only `> 0` as on sale. On the PDP path `0` needs positive evidence: Ounass
+leaves **both** `discountPercent` and `slashedPrice` out on full-price pages
+(dry run #6: 200/200; sale pages have both, 70/70), so both absent → `0`.
+Sale evidence without a percentage (`slashedPrice` above the price) means a
+renamed field → null, so real discounts aren't wiped. If both fields were
+renamed at once, the parity check's on-sale comparisons (10 per hostname)
+would mismatch.
 
 **⚠ Never full-refresh (or drop and rebuild) the Ounass silver models.**
 The `coalesce(new, previous)` merge only works between runs. A first build or

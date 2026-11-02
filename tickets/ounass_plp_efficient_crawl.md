@@ -154,7 +154,8 @@ tests passing. The mode is still **dev only**: Part 5b (parity) and Part 6
   `slashedPrice` (> price) both present (70/70); full price → both absent
   (200/200). Proposed: `0` when both are absent, the value when
   `discountPercent` is present, null when they disagree (one present, one
-  missing: a renamed field). Awaiting decision.
+  missing: a renamed field). ✅ Done 2026-11-02 (user agreed); check on
+  the next crawl that full-price product rows carry `0`.
 - ⚠ **Review of the bot's Part 6 work (2026-10-29):**
   - `309f3bd` (this repo, discount `0` on both paths): correct diagnosis
     (silver's `coalesce` never cleared an ended sale), and safe downstream

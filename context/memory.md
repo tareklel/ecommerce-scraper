@@ -2,7 +2,7 @@
 
 ## 2026-11-02 - Dry run #6
 - Success, 409 requests, 7.5 min (4 days since #5). Parity pass, 10 on-sale comparisons per hostname (on-sale top-ups work). dbt seed (Themoirè fix `0f76871`, pushed) + dbt before the crawl (else 2 `themoire` products quarantined), dbt after: gold 6,875.
-- Product-page rows never carry discount `0`: Ounass omits `discountPercent` (and `slashedPrice`) on full-price pages. Proposed rule: both absent → 0; `discountPercent` present → value; disagree → null.
+- Product-page rows never carry discount `0`: Ounass omits `discountPercent` (and `slashedPrice`) on full-price pages. Implemented (user agreed): positive `discountPercent` → value; both absent (and a price) → 0; `slashedPrice` above price without a percent → null. Verify on the next crawl.
 
 ## 2026-10-29 - get_discount key-present rule; scraper-pipeline silver made rebuild-safe
 - `ounass_rules.get_discount`: `0` only when `discountPercent` is present (null/0), None when missing (a renamed field must not wipe discounts). Verify on the next crawl that full-price product rows carry `0`.

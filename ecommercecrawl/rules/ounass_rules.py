@@ -200,16 +200,33 @@ def get_sold_out(state):
     return normalized_badge in SOLD_OUT_LABELS_NORMALIZED
     
 def get_discount(state):
-    # 0, not None, when the page says "no discount": an ended sale must clear
-    # a previously observed discount downstream (silver's state-retention
-    # merge keeps the old value on null, since null means "not observed").
-    # Only when the field is there, though: if Ounass renamed or dropped
-    # discountPercent, writing 0 would wipe every real discount, so a
-    # missing field stays None ("not observed").
+    """
+    Discount %, 0 when the page shows no sale, None when it can't be told.
+
+    0, not None, for "no discount": an ended sale must clear a previously
+    observed discount downstream (silver's state-retention merge keeps the
+    old value on null, since null means "not observed").
+
+    Ounass leaves both sale fields out on full-price pages (dry run #6,
+    2026-11-02: 200/200 full-price pages had neither discountPercent nor
+    slashedPrice; 70/70 sale pages had both). So 0 needs both to be absent.
+    Sale evidence without a percentage (slashedPrice above the price) means a
+    field was renamed: None, so real discounts aren't wiped.
+    """
     pdp = state.get('pdp') if isinstance(state, dict) else None
-    if not isinstance(pdp, dict) or 'discountPercent' not in pdp:
+    if not isinstance(pdp, dict):
         return None
-    return pdp['discountPercent'] or 0
+    percent = pdp.get('discountPercent')
+    if percent:
+        return percent
+    price, slashed = pdp.get('price'), pdp.get('slashedPrice')
+    try:
+        on_sale_without_percent = slashed is not None and float(slashed) > float(price)
+    except (TypeError, ValueError):
+        return None
+    if on_sale_without_percent or price is None:
+        return None
+    return 0
 
 def get_primary_label(state):
     value = safe_get(state, ['pdp', 'badge', 'value'])

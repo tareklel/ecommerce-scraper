@@ -305,20 +305,29 @@ def test_get_sold_out_returns_false_for_missing_badge():
     assert rules.get_sold_out(state) is False
 
 
-def test_get_discount_returns_value_or_zero():
-    # 0, not None, when the page says there is no discount -- an ended sale
-    # must clear a previously observed discount downstream, and null means
-    # "not observed" in silver's state-retention merge.
-    assert rules.get_discount({"pdp": {"discountPercent": 30}}) == 30
-    assert rules.get_discount({"pdp": {"discountPercent": None}}) == 0
-    assert rules.get_discount({"pdp": {"discountPercent": 0}}) == 0
+@pytest.mark.parametrize("pdp, expected", [
+    ({"price": 900, "discountPercent": 25, "slashedPrice": 1200}, 25),   # on sale (70/70 in run #6)
+    ({"price": 1200}, 0),                                    # full price: both fields absent (200/200)
+    ({"price": 1200, "discountPercent": None, "slashedPrice": None}, 0),
+    ({"price": 1200, "discountPercent": 0}, 0),
+    ({"price": 1200, "slashedPrice": 1200}, 0),              # was-price not above price: no sale
+])
+def test_get_discount_value_or_zero(pdp, expected):
+    # 0, not None, when the page shows no sale: an ended sale must clear a
+    # previously observed discount downstream (null means "not observed").
+    assert rules.get_discount({"pdp": pdp}) == expected
 
 
-def test_get_discount_missing_field_is_not_observed():
-    # A renamed/dropped field must not be read as "no discount": that would
-    # wipe every real discount downstream.
-    assert rules.get_discount({"pdp": {}}) is None
-    assert rules.get_discount({}) is None
+@pytest.mark.parametrize("state", [
+    {"pdp": {"price": 900, "slashedPrice": 1200}},           # sale evidence, percent missing: renamed field
+    {"pdp": {"price": 900, "discountPercent": 0, "slashedPrice": 1200}},
+    {"pdp": {}},                                             # no price: not a usable page
+    {"pdp": {"price": "n/a", "slashedPrice": 1200}},
+    {},
+])
+def test_get_discount_unclear_page_is_not_observed(state):
+    # Must not be read as "no discount": that would wipe real discounts.
+    assert rules.get_discount(state) is None
 
 
 def test_get_primary_label_extracts_value():
