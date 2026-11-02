@@ -228,7 +228,7 @@ written (`ecommercecrawl/plp_parity.py`):
    - no hostname with its own verdict → **not checked**.
 7. **Effect:** **pass** → the held rows are written. **Fail** (content) or
    **not checked** (access when comparisons were lost to blocking) → dropped:
-   those products keep their previous values and are refreshed tomorrow, and
+   those products keep their previous values and are refreshed next run, and
    the run is **degraded**. No whole-run stop: product-page rows are valid
    either way.
 
@@ -435,7 +435,7 @@ the last round).
 | G4 | Known-but-unseen products per PLP (excluding ones gold has as sold out) | After the sweep: over the cap → that PLP's leftovers held back (matched rows stay). Applies only to listings with at least `OUNASS_PLP_EFFICIENT_MISSING_MIN_EXPECTED` (20) expected products; below that the numbers are recorded per listing (`expected_products`, `expected_unseen`, `note`), not acted on. | `OUNASS_PLP_EFFICIENT_MISSING_RATIO_CAP` (0.25) |
 | G6 | PLP-extract `url` = PDP list `url`, not a listing URL | Don't write that row; product left for Phase 2 | — |
 | G7 | PLP hostname ↔ country/language; entry `localeCurrency` = country currency | Startup: skip that PLP. Sweep: stop that PLP at the first wrong-currency entry; its leftovers held back (matched rows stay). | — |
-| G8 | Gold age: gold's last build time from the PDP list manifest. The export itself is always fresh. | **Warn only** (2026-10-22): warn at the warn age, or if the age is unknown; never stops the run | `OUNASS_PLP_EFFICIENT_GOLD_WARN_AGE_DAYS` (2) |
+| G8 | Gold age: gold's last build time from the PDP list manifest. The export itself is always fresh. | **Warn only** (2026-10-22): warn at the warn age, or if the age is unknown; never stops the run | `OUNASS_PLP_EFFICIENT_GOLD_WARN_AGE_DAYS` (8) |
 | G9 | Parity check, per hostname (section 3, "Parity check"): new products' product pages first, top-ups to 20 | Confirmed mismatches ≥ 20% (min 2) → that hostname's listing rows dropped, products keep previous values. Short because of blocking → borrow other hostnames' verdict; none with a verdict → rows dropped (access). Never a whole-run stop. | `OUNASS_PLP_EFFICIENT_PARITY_SAMPLE` (20), `OUNASS_PLP_EFFICIENT_PARITY_MIN_COMPARISONS` (10), `OUNASS_PLP_EFFICIENT_PARITY_MAX_MISMATCH_RATIO` (0.2), `OUNASS_PLP_EFFICIENT_PARITY_MIN_MISMATCHES` (2) |
 | G10 | Canonical values exist in the latest vocabulary | Bad PLP row → as G1. Bad PDP row → quarantine that product. Too many bad PDP rows → stop run. | `OUNASS_PLP_EFFICIENT_MAX_BAD_PDP_ROWS_RATIO` (0.05) |
 | G11 | ID matched but fields differ (drift / reclassification) | After the sweep: over the share → that PLP's leftovers held back (matched rows stay). Applies only once at least `OUNASS_PLP_EFFICIENT_FIELD_MISMATCH_MIN_SEEN` (20) products were matched; below that it's recorded as a `note`. | `OUNASS_PLP_EFFICIENT_FIELD_MISMATCH_RATIO` (0.05) |
@@ -450,7 +450,7 @@ Other settings:
 | `OUNASS_PLP_EFFICIENT_CRAWL` | `False` | Turns the mode on |
 | `OUNASS_PLP_EFFICIENT_SHADOW` [planned, Part 7] | `False` | Shadow mode: full run, no rows written, outcomes logged to the manifest |
 | `OUNASS_PLP_EFFICIENT_EXPORT_LAMBDA` | `price-comparison-plp-efficient-export-<APP_ENV>` | Name of scraper-pipeline's export Lambda, invoked at crawl start |
-| `OUNASS_PLP_EFFICIENT_STALE_CRAWL_DAYS` | `7` | Stale-crawl warning: products not crawled for more than this many days |
+| `OUNASS_PLP_EFFICIENT_STALE_CRAWL_DAYS` | `14` | Stale-crawl warning: products not crawled for more than this many days |
 | `ACCESS_RETRY_ROUNDS` | `2` | Access retry rounds after the normal retries; 0 = off (all crawls) |
 | `ACCESS_RETRY_COOLDOWN_SECONDS` | `900` | Wait before each round |
 | `ACCESS_RETRY_MAX_TOTAL_SECONDS` | `3600` | Cap on total cool-down per run |
@@ -518,7 +518,10 @@ recorded.
   ceiling). That's extra cost, not wrong data: prices come from the listing
   pages, and every product-page crawl is a complete row.
 - *Outcome:* **warn only** (changed 2026-10-22; it used to stop the run at
-  3 days). Under 2 days OK; **2+ days, or age unknown → warn**. Stopping
+  3 days). Under 8 days OK; **8+ days, or age unknown → warn** (raised from
+  2 on 2026-11-02 for about weekly crawls with gold rebuilt after each; if
+  crawls run more often without dbt, extra Phase 2 cost can go unwarned for
+  up to 8 days). Stopping
   the crawl would leave every product unrefreshed while dbt is down,
   compounding the staleness. The fix for stale gold is a dbt schedule in
   AWS (`tickets/cicd_pipeline.md`), not a crawl stop.
@@ -538,9 +541,10 @@ recorded.
   PLP-efficient runs, it also surfaces products that keep falling through
   the gaps (repeatedly quarantined or held back, so never refreshed).
 - *Outcome:* **warn only**, with the count and oldest date (e.g. "5 products
-  not crawled for more than 7 days; oldest 2026-08-08"). It never stops a run,
+  not crawled for more than 14 days; oldest 2026-08-08"). It never stops a run,
   because refreshing stale products is what the crawl is for. Threshold:
-  `OUNASS_PLP_EFFICIENT_STALE_CRAWL_DAYS` (7).
+  `OUNASS_PLP_EFFICIENT_STALE_CRAWL_DAYS` (14; two weekly runs, raised from 7
+  on 2026-11-02).
 - *Source:* the PDP list export's `last_crawl_date` column (added
   2026-10-16, scraper-pipeline `0345c2b`; dev Lambda redeployed).
 
@@ -610,7 +614,7 @@ skip anything on purpose?**
 
 An aborted run is **failed**, never "partly saved", like an edit abandoned
 before saving: its rows may be genuine, but a half-finished day reads as
-misleading data. The next day's crawl refreshes those products.
+misleading data. The next crawl refreshes those products.
 
 **Where a run's data goes (publish on pass).** Athena reads a whole day
 folder (`crawls/<site>/<dt>/`, every run under it) once any run that day
@@ -790,7 +794,7 @@ ago) and STALE (5 products last crawled 2026-08-08); exit 0.
 | Run failed with `failure_reason: access` | Nothing written because the site refused us through every retry round | Manifest `access` block (which hostnames, which errors); Saudi routing (`CRAWLER_API_ZYTE_GEOLOCATION_BY_HOST`); re-run later |
 | A run's rows aren't in Athena | Run failed: data left in `crawl-unverified/` | `crawl_manifest_raw` `run_status` / `failure_reason`; markers under `crawls/markers/<site>/<dt>/<run_id>/` |
 | Run stopped at startup | Export Lambda failed, or G2 / G1 or G10 over threshold | Run preflight: it lists every failed check with the offending rows. For an export failure, check the Lambda's logs in scraper-pipeline. |
-| `startup warning G8` / Phase 2 much larger than usual | gold hasn't been rebuilt for 2+ days, so recently found products look new | Run dbt in scraper-pipeline (`make dbt-run`); a scheduled dbt job is planned (`tickets/cicd_pipeline.md`) |
+| `startup warning G8` / Phase 2 much larger than usual | gold hasn't been rebuilt for 8+ days, so recently found products look new | Run dbt in scraper-pipeline (`make dbt-run`); a scheduled dbt job is planned (`tickets/cicd_pipeline.md`) |
 | A PLP was skipped | Bad PLP row (non-canonical value, missing subcategory, hostname ≠ country) | Fix the row in `crawl_plp_registry` |
 | Products quarantined | Gold row with a value not in the vocabulary, often mid-rename | Wait for the dbt rebuild, or fix the seed |
 | A hostname has no PLP-extract rows, `kind = access` | Ounass blocked it through every retry round, and no other hostname could vouch for parity | Manifest `access` block; `--probe-one-page` |
@@ -888,6 +892,7 @@ ago) and STALE (5 products last crawled 2026-08-08); exit 0.
 | 2026-10-05 | Doc created from the agreed design (all sections planned) | — |
 | 2026-10-13 | PDP list scoped to active PLP list rows; `is_active` column added to the PLP list | — |
 | 2026-10-16 | **Part 2 built:** startup checks (G1, G2, G7, G8, G10, stale-crawl), settings, `make preflight-ounass-plp-efficient` (+ `-probe`). Verified against the dev export | — |
+| 2026-11-02 | Warning thresholds raised for about weekly crawls: `…_GOLD_WARN_AGE_DAYS` 2 → 8, `…_STALE_CRAWL_DAYS` 7 → 14. Both stay warn only | — |
 | 2026-11-02 | PDP discount `0` when both sale fields are absent (dry run #6: Ounass omits them on full-price pages). Sold out 3+ days: dropped, not rechecked (section 10). Gallery test compares languages within one run (section 7). Part 6 done | — |
 | 2026-10-29 | Parity always tops up on-sale products to half the sample (dry run #5: 1 of 49 free comparisons on sale). `price_discount` `0` = no discount on both paths. Sections 1 (measured runs), 7 (downstream: merge rule, full-refresh hazard, order of operations, language drift), 8 (how to run in AWS), 9, 10 (out-of-scope products) brought up to date | — |
 | 2026-10-29 | **Part 5b built: parity check (G9).** New products' product pages (fetched in Phase 2 anyway) are the first comparisons, free; hostnames short of 20 get top-ups from held rows, on-sale first. Listing rows are now held per hostname and written after the verdict (one `data:,` request), so the verdict comes after Phase 2. Topped-up products' product-page rows replace their listing rows. `refreshed_from_listing` = rows written. New setting `…_PARITY_MIN_MISMATCHES` (2). The access layer ignores non-HTTP requests | — |

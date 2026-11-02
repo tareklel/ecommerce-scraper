@@ -193,13 +193,16 @@ OUNASS_PLP_EFFICIENT_MAX_BAD_PDP_ROWS_RATIO = float(
 )
 # G8: age of gold's last rebuild (export manifest gold_built_at). Warn only:
 # stale gold makes products look new (more Phase 2 cost), never wrong data.
+# 8 days: crawls run about weekly, with gold rebuilt after each, so a normal
+# week stays quiet and a missed rebuild warns on the next run.
 OUNASS_PLP_EFFICIENT_GOLD_WARN_AGE_DAYS = float(
-    os.getenv("OUNASS_PLP_EFFICIENT_GOLD_WARN_AGE_DAYS", "2")
+    os.getenv("OUNASS_PLP_EFFICIENT_GOLD_WARN_AGE_DAYS", "8")
 )
 # Stale-crawl warning: in-scope products whose last_crawl_date is older than
 # this many days (warn only; refreshing them is what the crawl is for).
+# 14 days: two weekly runs, so one late or skipped run stays quiet.
 OUNASS_PLP_EFFICIENT_STALE_CRAWL_DAYS = int(
-    os.getenv("OUNASS_PLP_EFFICIENT_STALE_CRAWL_DAYS", "7")
+    os.getenv("OUNASS_PLP_EFFICIENT_STALE_CRAWL_DAYS", "14")
 )
 # Phase 2 ceiling; preflight also reports if the inputs alone would exceed it.
 OUNASS_PLP_EFFICIENT_MAX_PHASE2_PDPS = int(

@@ -80,8 +80,8 @@ class Inputs:
 class Config:
     max_bad_plp_rows_ratio: float = 0.25
     max_bad_pdp_rows_ratio: float = 0.05
-    gold_warn_age_days: float = 2
-    stale_crawl_days: int = 7
+    gold_warn_age_days: float = 8
+    stale_crawl_days: int = 14
     max_phase2_pdps: int = 10000
     missing_ratio_cap: float = 0.25
     field_mismatch_ratio: float = 0.05
@@ -104,8 +104,8 @@ class Config:
         return cls(
             max_bad_plp_rows_ratio=get("OUNASS_PLP_EFFICIENT_MAX_BAD_PLP_ROWS_RATIO", 0.25, float),
             max_bad_pdp_rows_ratio=get("OUNASS_PLP_EFFICIENT_MAX_BAD_PDP_ROWS_RATIO", 0.05, float),
-            gold_warn_age_days=get("OUNASS_PLP_EFFICIENT_GOLD_WARN_AGE_DAYS", 2, float),
-            stale_crawl_days=get("OUNASS_PLP_EFFICIENT_STALE_CRAWL_DAYS", 7, int),
+            gold_warn_age_days=get("OUNASS_PLP_EFFICIENT_GOLD_WARN_AGE_DAYS", 8, float),
+            stale_crawl_days=get("OUNASS_PLP_EFFICIENT_STALE_CRAWL_DAYS", 14, int),
             max_phase2_pdps=get("OUNASS_PLP_EFFICIENT_MAX_PHASE2_PDPS", 10000, int),
             missing_ratio_cap=get("OUNASS_PLP_EFFICIENT_MISSING_RATIO_CAP", 0.25, float),
             field_mismatch_ratio=get("OUNASS_PLP_EFFICIENT_FIELD_MISMATCH_RATIO", 0.05, float),

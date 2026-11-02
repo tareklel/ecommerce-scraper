@@ -204,7 +204,8 @@ def test_g10_empty_product_list_only_warns():
 
 @pytest.mark.parametrize("age_days, expected", [
     (1.0, None),
-    (2.5, pe.WARN),
+    (7.5, None),         # a normal week between crawls stays quiet
+    (8.5, pe.WARN),
     (30.0, pe.WARN),     # warn only, however old: stale gold costs money, not correctness
 ])
 def test_g8_gold_age(age_days, expected):
@@ -237,7 +238,7 @@ def test_stale_crawl_warns_with_oldest_date_and_never_stops():
 
 
 def test_stale_crawl_threshold_is_exclusive():
-    result = run(make_inputs(pdp_rows=[pdp(last_crawl_date="2026-10-09")]))  # exactly 7 days
+    result = run(make_inputs(pdp_rows=[pdp(last_crawl_date="2026-10-02")]))  # exactly 14 days
     assert not any(p.check == "STALE" for p in result.problems)
 
 
