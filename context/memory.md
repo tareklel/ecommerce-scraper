@@ -1,5 +1,10 @@
 # Memory
 
+## 2026-11-03 - CI/CD architecture doc; daily trial before weekly
+- New `docs/cicd_architecture.md`: long-term reference with Mermaid diagrams of each run and of deploys, plus AWS services and where each setting lives. Mostly not built yet; update it as `tickets/cicd_pipeline.md` steps finish.
+- Decided (user): once the flow works, run daily for 7 days, then switch to about weekly. Schedule config goes in this repo's Terraform, with an `end_date` so the trial stops by itself. Schedule moved to step 6, Terraform CI to step 7; start command renamed `make crawl-flow`.
+- Found: the S3 trigger for the quality checker must go when the flow runs it, or it runs twice. Check the sold-out cutoff (3+ days) before going weekly. price-comparison-web also has a local Terraform state file.
+
 ## 2026-11-02 - Weekly crawl thresholds; CI/CD next steps
 - `eb45266`: crawls go about weekly while the site is unfinished (user). G8 gold warn age 2 → 8 days, stale-crawl warning 7 → 14 days, both still warn only. Tests and `docs/ounass_plp_efficient_crawl.md` updated. 482 passed.
 - `tickets/cicd_pipeline.md` now opens with "▶ Next steps", the one ordered list to follow. Decided (user): Step Functions started by hand, schedule later, images on, `crawl_plp_registry.csv` (scraper-pipeline) decides what gets crawled, with `dbt seed` as the flow's first step. Website CI/CD to be discussed after everything else.

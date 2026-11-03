@@ -15,12 +15,15 @@ crawler image) is in this repo.
 
 Work top to bottom and tick items off as they finish. Check each item against
 the repos before starting, because this list can go out of date.
+Diagrams, AWS services and config locations: `docs/cicd_architecture.md`. Update
+it whenever a step changes what's there.
 
 **Decided 2026-11-02 (user):**
-- Orchestrate with **Step Functions**, started **by hand** for now. Add the
-  EventBridge schedule later (step 7).
-- Crawl **about weekly** while the site is unfinished. Thresholds already
-  raised for this: G8 warn age 8 days, stale-crawl warning 14 days.
+- Orchestrate with **Step Functions**: first test runs by hand, then from an
+  EventBridge schedule (step 6).
+- **Run daily for 7 days, then switch to about weekly** while the site is
+  unfinished (user, 2026-11-03). Thresholds are already set for weekly: G8 warn
+  age 8 days, stale-crawl warning 14 days.
 - **What gets crawled comes from `../scraper-pipeline/canonical_seeds/crawl_plp_registry.csv`**
   (`is_active` per listing): version-controlled, reviewed and tested, no
   second list. Sites to run = sites with active rows. A CSV edit takes effect
@@ -54,12 +57,14 @@ scraper-pipeline and price-comparison-web have no `.github/workflows`.
   others. It starts with `dbt seed --select crawl_plp_registry` plus that
   seed's tests, before any crawl and any Zyte spend, because the crawl-start
   export reads the seeded table. No schedule is attached yet.
-  Optional: re-try a crawl that failed with `failure_reason: access` a few
+  Remove the S3 notification that starts the quality checker
+  (`infra/terraform/lambda.tf`), or it runs twice. Optional: re-try a crawl
+  that failed with `failure_reason: access` a few
   hours later, since a missed site now waits a week.
 - [ ] **4. Drive runs from the registry, with one start command.** A run is:
   1. Edit `crawl_plp_registry.csv` if needed, commit and push. CI rebuilds the
      dbt image, which carries the seeds.
-  2. `make weekly-run` (to be written), which prints the active sites and
+  2. `make crawl-flow` (to be written), which prints the active sites and
      starts the state machine. It must fail if the dbt image isn't built from
      the latest registry commit, or the run seeds the old list.
   3. Check the result. After a long break, check whether Phase 2 hit
@@ -88,12 +93,17 @@ scraper-pipeline and price-comparison-web have no `.github/workflows`.
 - [ ] **5. Add run alerts.** See "Crawl run alerting" below: one summary per
   run, and an alert on `failed` / `killed`. Report access problems apart from
   content problems.
-- [ ] **6. Terraform plan on PR, apply on merge (both repos).** Deploy the
-  pending 2026-07-30 API-cache code deliberately through it. Until then, keep
-  using targeted applies: an untargeted apply can ship that code to prod.
-- [ ] **7. Add the schedule when hands-off runs are wanted.** Not needed yet.
-  - EventBridge Scheduler, for example `cron(0 2 ? * SUN *)`, passing the same
-    site list.
+- [ ] **6. Add the schedule: daily for 7 days, then weekly.**
+  - Config lives in this repo's Terraform: a new
+    `infra/terraform/orchestration.tf` (schedule and state machine), with
+    `crawl_schedule_expression` and `crawl_schedule_end_date` in
+    `variables.tf`. Region `eu-central-1`.
+  - Start: daily, for example `cron(0 2 * * ? *)`, with `end_date` 7 days out so
+    it stops by itself if nobody is watching.
+  - After 7 days, review the runs, then set weekly, for example
+    `cron(0 2 ? * SUN *)`, and clear `end_date`. Before going weekly, check the
+    sold-out cutoff: products sold out 3+ days are dropped and not rechecked,
+    so one weekly sighting may be enough to drop them.
   - On/off is the schedule's `state`. Use `lifecycle { ignore_changes = [state] }`
     so Terraform doesn't switch it back, plus `make schedule-on` /
     `make schedule-off`. `aws scheduler update-schedule` needs the full
@@ -101,6 +111,11 @@ scraper-pipeline and price-comparison-web have no `.github/workflows`.
   - Idle state machines cost nothing, and missed runs aren't caught up.
   - Update `tickets/crawl_scheduler.md`, which still describes daily per-site
     rules that start ECS directly.
+  - PLP-efficient Part 7 needs a daily schedule for 1–2 weeks of shadow mode;
+    revisit the frequency when it starts.
+- [ ] **7. Terraform plan on PR, apply on merge (both repos).** Deploy the
+  pending 2026-07-30 API-cache code deliberately through it. Until then, keep
+  using targeted applies: an untargeted apply can ship that code to prod.
 - [ ] **8. dbt in CI** (`dbt parse` / compile and Python tests on PRs).
 - [ ] **9. Nightly Terraform drift check.**
 - [ ] **10. Replace `tests/fixtures/bloomingdales_pdp.html`** with a small
@@ -108,7 +123,8 @@ scraper-pipeline and price-comparison-web have no `.github/workflows`.
 - [ ] **11. Discuss CI/CD for the website (web UI), after everything above is
   done.** Not planned yet, and it needs its own discussion first: expect it to
   raise its own problems. Don't start it from the "Rough target" row below
-  without that discussion.
+  without that discussion. Its `infra/` also has a local `terraform.tfstate`
+  (seen 2026-11-03), the same risk as step 1.
 
 ---
 
