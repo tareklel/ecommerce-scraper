@@ -32,16 +32,19 @@ it whenever a step changes what's there.
 - Runs use dev until `../scraper-pipeline/ticket/migrate-validated-dev-to-prod.md`
   passes.
 
-**Verified 2026-11-02:** scraper-pipeline's Terraform has no `backend` block
-and its state is still a local file on OneDrive; dbt has no cloud job yet;
-scraper-pipeline and price-comparison-web have no `.github/workflows`.
+**Verified 2026-11-02:** dbt has no cloud job yet; scraper-pipeline and
+price-comparison-web have no `.github/workflows`.
 
 **Steps:**
 
-- [ ] **1. Move scraper-pipeline's Terraform state to S3 with locking.**
-  Biggest risk, smallest fix. `terraform/backend.hcl.example` and
-  `terraform/state/` are the starting points. Back up the state first and
-  confirm `terraform plan` shows no changes afterwards.
+- [x] **1. Move scraper-pipeline's Terraform state to S3 with locking.** Done
+  2026-11-04. It shares this repo's state bucket under its own key
+  (`scraper-pipeline/eu-central-1/terraform.tfstate`). Both repos now use S3 lock
+  files, and the bucket has versioning on. Resources matched the local copy and
+  the plan was identical before and after; nothing was applied. Local backup:
+  `~/tfstate-backups/scraper-pipeline-pre-s3-20261104.tfstate`. The migration
+  reset the state's serial and lineage, so restoring that backup needs
+  `terraform state push -force`.
 - [ ] **2. Run dbt in AWS (dev).** This blocks the flow in step 3. Plan is in
   `../scraper-pipeline/ticket/migrate-dbt-to-cloud-jobs.md`: a dbt container
   image built by GitHub Actions (same pattern as the crawler image), run as an

@@ -120,7 +120,7 @@ flowchart LR
   ecrcrawler[("ECR: ecommerce-scraper<br/>tags sha-... and latest")]
   ecrdbt[("ECR: dbt image")]:::planned
   awsres["Scheduler, Step Functions,<br/>ECS, Lambda, SNS, IAM"]
-  tfstate[("S3: Terraform state<br/>scraper-pipeline moves here, step 1")]
+  tfstate[("S3: Terraform state<br/>versioned, S3 lock files")]
 
   crawler -->|push| buildcrawler -->|assumes| oidc
   pipeline -->|push| builddbt -->|assumes| oidc
@@ -180,3 +180,4 @@ lives in AWS alone, so pausing doesn't need a commit.
 | Date | Change | Commit |
 |---|---|---|
 | 2026-11-03 | Doc created from the agreed plan (mostly not built) | — |
+| 2026-11-04 | Step 1 done: both repos' Terraform state in S3, versioned, with S3 lock files | — |

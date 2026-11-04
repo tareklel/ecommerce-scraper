@@ -1,5 +1,10 @@
 # Memory
 
+## 2026-11-04 - CI/CD step 1: Terraform state in S3 with locking
+- scraper-pipeline's state moved from the OneDrive file to this repo's state bucket under its own key. This repo's backend gains `use_lockfile`, and both now require Terraform 1.10+. Bucket versioning turned on.
+- Checked: scraper-pipeline plan identical before and after (3 to add, 2 to change, not applied); this repo's plan shows no changes.
+- Next: step 2, dbt in AWS. AWS access from the shell comes and goes (`CERTIFICATE_VERIFY_FAILED`).
+
 ## 2026-11-03 - CI/CD architecture doc; daily trial before weekly
 - New `docs/cicd_architecture.md`: long-term reference with Mermaid diagrams of each run and of deploys, plus AWS services and where each setting lives. Mostly not built yet; update it as `tickets/cicd_pipeline.md` steps finish.
 - Decided (user): once the flow works, run daily for 7 days, then switch to about weekly. Schedule config goes in this repo's Terraform, with an `end_date` so the trial stops by itself. Schedule moved to step 6, Terraform CI to step 7; start command renamed `make crawl-flow`.
