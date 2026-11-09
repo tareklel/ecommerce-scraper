@@ -42,7 +42,7 @@ flowchart TD
     s4 -.->|"nothing published"| s9
   end
 
-  dbt1["ECS: dbt task"]:::planned
+  dbt1["ECS: dbt task"]
   reg[("Athena table<br/>crawl_plp_registry")]
   s1 -->|runs| dbt1 -->|writes| reg
 
@@ -63,7 +63,7 @@ flowchart TD
   verifier -->|publishes| published
   s4 -.->|"polls run status"| published
 
-  dbt2["ECS: dbt task"]:::planned
+  dbt2["ECS: dbt task"]
   silver[("Athena + Glue<br/>silver and gold")]
   s5 -->|runs| dbt2 -->|builds| silver
 
@@ -75,7 +75,7 @@ flowchart TD
   results[("S3: image results<br/>gold serves validated only")]
   s7 -->|runs| checker -->|writes| results
 
-  dbt3["ECS: dbt task"]:::planned
+  dbt3["ECS: dbt task"]
   gold[("Athena + Glue<br/>gold")]
   apicache["Lambda: API cache export"]
   s8 -->|runs| dbt3 -->|builds| gold
@@ -213,7 +213,7 @@ flowchart LR
 |---|---|---|
 | EventBridge Scheduler | Starts the flow on a cron | Planned |
 | Step Functions | Runs the steps in order, with waits and branches | Planned |
-| ECS on Fargate | Runs scraper, image and quality tasks, plus a dbt task | Exists (dbt task built 2026-11-09, first run pending) |
+| ECS on Fargate | Runs scraper, image and quality tasks, plus a dbt task | Exists (dbt task tested 2026-11-09) |
 | Lambda | Verifier, export and API cache; site lister | Exists; site lister planned |
 | ECR | Stores container images | Exists, including `price-comparison-dbt` |
 | S3 | Crawl data, images, URL lists, Terraform state | Exists |
@@ -254,3 +254,4 @@ lives in AWS alone, so pausing doesn't need a commit.
 | 2026-11-09 | Lock renewed while dbt runs; website API hides products without images, so the first refresh in a flow is safe | — |
 | 2026-11-09 | Wrapper built (laptop side): refresh whenever gold built even if dbt failed; lock-lost path; prod gets its own lock | — |
 | 2026-11-09 | Cloud dbt task built (dev): ECR repo, task, IAM, image workflow; first image build and run pending | — |
+| 2026-11-09 | Step 2 done: cloud dbt task tested (seed, full run with cache refresh, full test, lock both ways) | — |

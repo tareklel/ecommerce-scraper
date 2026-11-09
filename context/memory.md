@@ -1,5 +1,9 @@
 # Memory
 
+## 2026-11-09 - CI/CD step 2 done: dbt runs in AWS (dev)
+- scraper-pipeline pushed (with the other session's site-nav commits); first dbt image build passed. Cloud task: registry seed + tests, full run 24/24 with automatic dev cache refresh, full test 46/46; lock checked both ways.
+- Next: step 3, the state machine. Website image filter is built (other session) but not deployed to dev; deploy before step 3 runs.
+
 ## 2026-11-09 - AGENTS.md: working alongside other agent sessions
 - Added a "Working Alongside Other Agents" section to `context/AGENTS.md`, matching scraper-pipeline `d47a6a6`: check for other sessions and worktrees before starting, send a heads-up before editing outside this repo or in claimed files, answer heads-ups with context, commit only your own files by path. The dbt-lock rule was left out (it applies to scraper-pipeline).
 
