@@ -105,7 +105,9 @@ flowchart TD
 
 ## Every dbt run: lock, run, refresh the cache
 
-Planned (step 2). Laptop `make` targets and the cloud task use the same wrapper.
+Laptop side built 2026-11-09 (`../scraper-pipeline/scripts/dbt_job.py`, details
+in its `docs/DBT.md`); the cloud task will use the same script. Prod targets
+take their own lock (`locks/dbt-prod.lock`) and refresh nothing.
 dbt and Athena have no lock across runs, so this is the only guard against two
 runs overlapping. Calling `.venv/bin/dbt` directly skips it.
 
@@ -120,11 +122,12 @@ flowchart TD
   caller{"Who asked?"}
   refuse["Stop<br/>show holder and start time"]
   retry["Wait, retry,<br/>fail visibly if never free"]
-  run["Run dbt, renew lock every few minutes<br/>cloud refuses --full-refresh"]
-  ok{"dbt succeeded?"}
+  run["Run dbt, renew lock every 2 min<br/>cloud refuses --full-refresh"]
+  lost["Stop dbt<br/>lock taken over: no refresh, no release"]
   gold{"gold_product_serving_latest built?<br/>from target/run_results.json"}
-  cache["Invoke API cache Lambda (dev)<br/>and wait"]:::planned
+  cache["Invoke API cache Lambda (dev)<br/>and wait"]
   cacheok{"Refresh succeeded?"}
+  ok{"dbt succeeded?"}
   done["Release lock<br/>success"]
   failed["Release lock<br/>report failure"]
 
@@ -137,21 +140,25 @@ flowchart TD
   expired -->|no| caller
   caller -->|laptop| refuse
   caller -->|state machine| retry --> take
-  run --> ok
-  ok -->|no| failed
-  ok -->|yes| gold
-  gold -->|no| done
-  gold -->|yes| cache --> cacheok
-  cacheok -->|yes| done
+  run -.->|"renewal finds lock taken"| lost
+  run --> gold
+  gold -->|"yes, even if other models failed"| cache --> cacheok
+  gold -->|no| ok
+  cacheok -->|yes| ok
   cacheok -->|"no: cache stale"| failed
+  ok -->|yes| done
+  ok -->|no| failed
 
   classDef planned fill:#ddf0f5,stroke:#0b6f8a,color:#16232d
 ```
 
-While dbt runs, the wrapper renews the lock every few minutes. If the process
-dies before releasing (a killed task, a closed laptop), renewal stops and the
-lock expires within minutes; `make dbt-unlock` clears it sooner. If a renewal
-finds the lock was taken over, the run stops at once.
+While dbt runs, the wrapper renews the lock every 2 minutes; it expires 10
+minutes after the last renewal. If the process dies before releasing (a killed
+task, a closed laptop), the lock expires within 10 minutes; `make dbt-unlock`
+clears it sooner. If a renewal finds the lock was taken over, or renewal keeps
+failing (network) until the lock is about to expire, dbt is stopped. The cache
+refreshes whenever gold built, even if other models failed, so the cache always
+matches gold; the run still reports the failure.
 
 The flow builds gold twice, so the cache refreshes twice. After the first build,
 new products have no images yet; the website API hides products without images
@@ -245,3 +252,4 @@ lives in AWS alone, so pausing doesn't need a commit.
 | 2026-11-04 | Step 1 done: both repos' Terraform state in S3, versioned, with S3 lock files | — |
 | 2026-11-09 | Step 2 plan: API cache refreshes when gold builds (wrapper, not the EventBridge rule); shared dbt lock; wrapper diagram added | — |
 | 2026-11-09 | Lock renewed while dbt runs; website API hides products without images, so the first refresh in a flow is safe | — |
+| 2026-11-09 | Wrapper built (laptop side): refresh whenever gold built even if dbt failed; lock-lost path; prod gets its own lock | — |

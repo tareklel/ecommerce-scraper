@@ -1,5 +1,9 @@
 # Memory
 
+## 2026-11-09 - CI/CD step 2: dbt lock built (laptop side)
+- scraper-pipeline `scripts/dbt_job.py`: every table-writing dbt `make` target takes the S3 lock, renews it, refreshes the dev API cache when gold built (even if other models failed), then releases. Prod gets its own lock, no refresh. Checked in dev.
+- `docs/cicd_architecture.md` wrapper diagram updated (refresh on gold even when dbt fails; lock-lost path). Step 2 next: redeploy the dev API cache Lambda, then the cloud parts.
+
 ## 2026-11-09 - CI/CD step 2: lock renewal and image filter decided
 - dbt lock is renewed every few minutes while dbt runs; a crashed run's lock expires within minutes. A run that finds its lock taken over stops.
 - The website API will hide products without images, so the cache refresh after the flow's first gold build is safe (no skip exception). Ticket: `../price-comparison-web/tickets/hide_products_without_images.md`, to build before step 3.
