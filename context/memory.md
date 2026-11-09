@@ -1,5 +1,8 @@
 # Memory
 
+## 2026-11-09 - AGENTS.md: working alongside other agent sessions
+- Added a "Working Alongside Other Agents" section to `context/AGENTS.md`, matching scraper-pipeline `d47a6a6`: check for other sessions and worktrees before starting, send a heads-up before editing outside this repo or in claimed files, answer heads-ups with context, commit only your own files by path. The dbt-lock rule was left out (it applies to scraper-pipeline).
+
 ## 2026-11-09 - CI/CD step 2: cloud dbt task built (not yet run)
 - scraper-pipeline: Dockerfile, image workflow, `terraform/dbt_job.tf` applied with `-target` (11 added: ECR, task, logs, SG, 3 IAM roles, user-approved), `make dbt-job-dev`. Dev API cache Lambda redeployed; first wrapper run (laptop) refreshed the cache, 23/23 models, 43/43 tests.
 - Next: GitHub variable `AWS_DBT_IMAGE_ROLE_ARN`, push scraper-pipeline `main`, test the cloud task. `docs/cicd_architecture.md` and step 2 updated.

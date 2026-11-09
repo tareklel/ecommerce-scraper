@@ -32,3 +32,17 @@ or security-control bypass to endpoint monitoring.
   downloaded product data and images. Keep local fixtures under ignored paths.
 - Normal source inspection, local unit tests, formatting, and builds are allowed when
   they do not access external systems or security-sensitive stores.
+
+# Working Alongside Other Agents
+
+- Other agent sessions may be working at the same time, in this repo or in sibling
+  repos (`../scraper-pipeline`, `../price-comparison-web`). Before starting, check
+  for them (list sessions, `git status`, `git worktree list`).
+- Before editing files outside this repo, or files another session has claimed,
+  send that session a heads-up: what you'll change, which files, and which you'll
+  leave alone. Wait for a reply if they may already be working on it.
+- When a session gives you a heads-up, reply with what you've already done in that
+  area and any context it needs, and keep off the files it claims until it reports
+  back.
+- Commit only your own changes: stage files by path, never `git add -A`, and leave
+  another session's uncommitted work alone.
