@@ -94,7 +94,9 @@ flowchart TD
   (`infra/terraform/lambda.tf`), or it runs twice (step 3).
 - Every dbt run (laptop or cloud) goes through one wrapper. It takes an S3 lock
   (`locks/dbt-dev.lock`), so runs never overlap. After a run that built gold, it
-  refreshes the API cache, then releases the lock. Plan:
+  refreshes the API cache, then releases the lock. The lock is renewed while
+  dbt runs. The website API hides products without images, so the first
+  refresh in a flow is safe. Plan:
   `../scraper-pipeline/ticket/migrate-dbt-to-cloud-jobs.md`, "▶ Agreed plan".
 - Never `--full-refresh` the Ounass silver models
   (`docs/ounass_plp_efficient_crawl.md`, section 7).
@@ -118,7 +120,7 @@ flowchart TD
   caller{"Who asked?"}
   refuse["Stop<br/>show holder and start time"]
   retry["Wait, retry,<br/>fail visibly if never free"]
-  run["Run dbt<br/>cloud refuses --full-refresh"]
+  run["Run dbt, renew lock every few minutes<br/>cloud refuses --full-refresh"]
   ok{"dbt succeeded?"}
   gold{"gold_product_serving_latest built?<br/>from target/run_results.json"}
   cache["Invoke API cache Lambda (dev)<br/>and wait"]:::planned
@@ -146,8 +148,16 @@ flowchart TD
   classDef planned fill:#ddf0f5,stroke:#0b6f8a,color:#16232d
 ```
 
-If the process dies before releasing (a killed task, a closed laptop), the lock
-stays until it expires or `make dbt-unlock` clears it.
+While dbt runs, the wrapper renews the lock every few minutes. If the process
+dies before releasing (a killed task, a closed laptop), renewal stops and the
+lock expires within minutes; `make dbt-unlock` clears it sooner. If a renewal
+finds the lock was taken over, the run stops at once.
+
+The flow builds gold twice, so the cache refreshes twice. After the first build,
+new products have no images yet; the website API hides products without images
+(`../price-comparison-web/tickets/hide_products_without_images.md`), so the
+first refresh only brings fresher prices and new products appear after the
+second build.
 
 ---
 
@@ -234,3 +244,4 @@ lives in AWS alone, so pausing doesn't need a commit.
 | 2026-11-03 | Doc created from the agreed plan (mostly not built) | — |
 | 2026-11-04 | Step 1 done: both repos' Terraform state in S3, versioned, with S3 lock files | — |
 | 2026-11-09 | Step 2 plan: API cache refreshes when gold builds (wrapper, not the EventBridge rule); shared dbt lock; wrapper diagram added | — |
+| 2026-11-09 | Lock renewed while dbt runs; website API hides products without images, so the first refresh in a flow is safe | — |

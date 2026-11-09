@@ -1,5 +1,10 @@
 # Memory
 
+## 2026-11-09 - CI/CD step 2: lock renewal and image filter decided
+- dbt lock is renewed every few minutes while dbt runs; a crashed run's lock expires within minutes. A run that finds its lock taken over stops.
+- The website API will hide products without images, so the cache refresh after the flow's first gold build is safe (no skip exception). Ticket: `../price-comparison-web/tickets/hide_products_without_images.md`, to build before step 3.
+- Updated `docs/cicd_architecture.md` (diagram, notes, change log) and `tickets/cicd_pipeline.md` step 2. Docs only.
+
 ## 2026-11-09 - CI/CD step 2 plan agreed (not built)
 - Plan lives in scraper-pipeline `ticket/migrate-dbt-to-cloud-jobs.md`, "▶ Agreed plan". Dev only.
 - Decided (user): one S3 lock shared by laptop and cloud dbt runs; the API cache refreshes whenever gold builds, from the same wrapper, so the EventBridge rule stays off. Seen 2026-11-04: dev cache written Oct 29, dev gold rebuilt Nov 2.

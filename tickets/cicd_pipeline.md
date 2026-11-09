@@ -54,7 +54,12 @@ price-comparison-web have no `.github/workflows`.
   - **Plan agreed 2026-11-09, not built:** "▶ Agreed plan" in that ticket.
     Dev only; one S3 lock shared by laptop and cloud dbt runs; the API cache
     refreshes whenever gold builds, called by the same wrapper (the EventBridge
-    rule stays off).
+    rule stays off). The lock is renewed while dbt runs, so a crashed run's
+    lock expires within minutes.
+  - **Website API hides products without images** (agreed 2026-11-09):
+    `../price-comparison-web/tickets/hide_products_without_images.md`. Build it
+    before step 3, so the refresh after the flow's first gold build doesn't show
+    new products without pictures.
 - [ ] **3. Build the state machine (dev, Terraform).** Follow "Orchestration
   proposal" below: crawls in parallel, wait for verification, dbt, image
   pipeline and quality checker, dbt again. A failed crawl doesn't stop the
