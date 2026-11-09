@@ -51,9 +51,10 @@ price-comparison-web have no `.github/workflows`.
   ECS task. Watch for:
   - **Never `--full-refresh` the Ounass silver models**
     (`docs/ounass_plp_efficient_crawl.md`, section 7).
-  - The flow runs dbt twice, so the API-cache export rule in
-    `terraform/eventbridge_api_export.tf` would fire twice if enabled. Decide
-    how it should fire before enabling it.
+  - **Plan agreed 2026-11-09, not built:** "▶ Agreed plan" in that ticket.
+    Dev only; one S3 lock shared by laptop and cloud dbt runs; the API cache
+    refreshes whenever gold builds, called by the same wrapper (the EventBridge
+    rule stays off).
 - [ ] **3. Build the state machine (dev, Terraform).** Follow "Orchestration
   proposal" below: crawls in parallel, wait for verification, dbt, image
   pipeline and quality checker, dbt again. A failed crawl doesn't stop the

@@ -79,7 +79,8 @@ flowchart TD
   gold[("Athena + Glue<br/>gold")]
   apicache["Lambda: API cache export"]
   s8 -->|runs| dbt3 -->|builds| gold
-  gold -.->|"after dbt, rule disabled today"| apicache
+  dbt3 -.->|"if gold built"| apicache
+  dbt2 -.->|"if gold built"| apicache
 
   sns["SNS topic<br/>alerts on failed or killed"]:::planned
   inbox["Your inbox"]
@@ -91,11 +92,62 @@ flowchart TD
 **To resolve when building:**
 - Remove the S3 notification that starts the quality checker
   (`infra/terraform/lambda.tf`), or it runs twice (step 3).
-- dbt runs twice per flow, so the API cache rule
-  (`../scraper-pipeline/terraform/eventbridge_api_export.tf`) would fire twice if
-  enabled (step 2).
+- Every dbt run (laptop or cloud) goes through one wrapper. It takes an S3 lock
+  (`locks/dbt-dev.lock`), so runs never overlap. After a run that built gold, it
+  refreshes the API cache, then releases the lock. Plan:
+  `../scraper-pipeline/ticket/migrate-dbt-to-cloud-jobs.md`, "▶ Agreed plan".
 - Never `--full-refresh` the Ounass silver models
   (`docs/ounass_plp_efficient_crawl.md`, section 7).
+
+---
+
+## Every dbt run: lock, run, refresh the cache
+
+Planned (step 2). Laptop `make` targets and the cloud task use the same wrapper.
+dbt and Athena have no lock across runs, so this is the only guard against two
+runs overlapping. Calling `.venv/bin/dbt` directly skips it.
+
+```mermaid
+flowchart TD
+  start["dbt command<br/>make target or cloud task"]
+  writes{"Touches tables?<br/>run, seed, test, build"}
+  direct["Run dbt, no lock<br/>parse, debug, docs"]
+  take["Create locks/dbt-dev.lock<br/>S3 conditional write"]
+  expired{"Lock expired?"}
+  takeover["Replace it,<br/>only if unchanged since read"]
+  caller{"Who asked?"}
+  refuse["Stop<br/>show holder and start time"]
+  retry["Wait, retry,<br/>fail visibly if never free"]
+  run["Run dbt<br/>cloud refuses --full-refresh"]
+  ok{"dbt succeeded?"}
+  gold{"gold_product_serving_latest built?<br/>from target/run_results.json"}
+  cache["Invoke API cache Lambda (dev)<br/>and wait"]:::planned
+  cacheok{"Refresh succeeded?"}
+  done["Release lock<br/>success"]
+  failed["Release lock<br/>report failure"]
+
+  start --> writes
+  writes -->|no| direct
+  writes -->|yes| take
+  take -->|created| run
+  take -->|already exists| expired
+  expired -->|yes| takeover --> run
+  expired -->|no| caller
+  caller -->|laptop| refuse
+  caller -->|state machine| retry --> take
+  run --> ok
+  ok -->|no| failed
+  ok -->|yes| gold
+  gold -->|no| done
+  gold -->|yes| cache --> cacheok
+  cacheok -->|yes| done
+  cacheok -->|"no: cache stale"| failed
+
+  classDef planned fill:#ddf0f5,stroke:#0b6f8a,color:#16232d
+```
+
+If the process dies before releasing (a killed task, a closed laptop), the lock
+stays until it expires or `make dbt-unlock` clears it.
 
 ---
 
@@ -181,3 +233,4 @@ lives in AWS alone, so pausing doesn't need a commit.
 |---|---|---|
 | 2026-11-03 | Doc created from the agreed plan (mostly not built) | — |
 | 2026-11-04 | Step 1 done: both repos' Terraform state in S3, versioned, with S3 lock files | — |
+| 2026-11-09 | Step 2 plan: API cache refreshes when gold builds (wrapper, not the EventBridge rule); shared dbt lock; wrapper diagram added | — |

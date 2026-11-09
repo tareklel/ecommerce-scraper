@@ -1,5 +1,10 @@
 # Memory
 
+## 2026-11-09 - CI/CD step 2 plan agreed (not built)
+- Plan lives in scraper-pipeline `ticket/migrate-dbt-to-cloud-jobs.md`, "▶ Agreed plan". Dev only.
+- Decided (user): one S3 lock shared by laptop and cloud dbt runs; the API cache refreshes whenever gold builds, from the same wrapper, so the EventBridge rule stays off. Seen 2026-11-04: dev cache written Oct 29, dev gold rebuilt Nov 2.
+- `docs/cicd_architecture.md` gains the wrapper diagram (lock, run, cache refresh).
+
 ## 2026-11-04 - CI/CD step 1: Terraform state in S3 with locking
 - scraper-pipeline's state moved from the OneDrive file to this repo's state bucket under its own key. This repo's backend gains `use_lockfile`, and both now require Terraform 1.10+. Bucket versioning turned on.
 - Checked: scraper-pipeline plan identical before and after (3 to add, 2 to change, not applied); this repo's plan shows no changes.
