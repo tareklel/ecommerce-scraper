@@ -181,13 +181,13 @@ flowchart LR
   infra["infra/terraform<br/>in both repos"]
 
   buildcrawler["GitHub Actions<br/>test, build image"]
-  builddbt["GitHub Actions<br/>build dbt image"]:::planned
+  builddbt["GitHub Actions<br/>build dbt image"]
   applytf["Terraform plan and apply<br/>laptop now, Actions at step 7"]:::planned
 
   oidc["OIDC + IAM<br/>short-lived login, no stored keys<br/>crawler role exists, others planned"]
 
   ecrcrawler[("ECR: ecommerce-scraper<br/>tags sha-... and latest")]
-  ecrdbt[("ECR: dbt image")]:::planned
+  ecrdbt[("ECR: dbt image")]
   awsres["Scheduler, Step Functions,<br/>ECS, Lambda, SNS, IAM"]
   tfstate[("S3: Terraform state<br/>versioned, S3 lock files")]
 
@@ -213,9 +213,9 @@ flowchart LR
 |---|---|---|
 | EventBridge Scheduler | Starts the flow on a cron | Planned |
 | Step Functions | Runs the steps in order, with waits and branches | Planned |
-| ECS on Fargate | Runs scraper, image and quality tasks, plus a dbt task | Exists; dbt task planned |
+| ECS on Fargate | Runs scraper, image and quality tasks, plus a dbt task | Exists (dbt task built 2026-11-09, first run pending) |
 | Lambda | Verifier, export and API cache; site lister | Exists; site lister planned |
-| ECR | Stores container images | Exists; dbt repository planned |
+| ECR | Stores container images | Exists, including `price-comparison-dbt` |
 | S3 | Crawl data, images, URL lists, Terraform state | Exists |
 | Athena + Glue | dbt builds and queries the tables here | Exists |
 | SNS | Sends the run summary and failure alerts | Planned |
@@ -253,3 +253,4 @@ lives in AWS alone, so pausing doesn't need a commit.
 | 2026-11-09 | Step 2 plan: API cache refreshes when gold builds (wrapper, not the EventBridge rule); shared dbt lock; wrapper diagram added | — |
 | 2026-11-09 | Lock renewed while dbt runs; website API hides products without images, so the first refresh in a flow is safe | — |
 | 2026-11-09 | Wrapper built (laptop side): refresh whenever gold built even if dbt failed; lock-lost path; prod gets its own lock | — |
+| 2026-11-09 | Cloud dbt task built (dev): ECR repo, task, IAM, image workflow; first image build and run pending | — |

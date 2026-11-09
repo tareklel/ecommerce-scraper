@@ -1,5 +1,9 @@
 # Memory
 
+## 2026-11-09 - CI/CD step 2: cloud dbt task built (not yet run)
+- scraper-pipeline: Dockerfile, image workflow, `terraform/dbt_job.tf` applied with `-target` (11 added: ECR, task, logs, SG, 3 IAM roles, user-approved), `make dbt-job-dev`. Dev API cache Lambda redeployed; first wrapper run (laptop) refreshed the cache, 23/23 models, 43/43 tests.
+- Next: GitHub variable `AWS_DBT_IMAGE_ROLE_ARN`, push scraper-pipeline `main`, test the cloud task. `docs/cicd_architecture.md` and step 2 updated.
+
 ## 2026-11-09 - CI/CD step 2: dbt lock built (laptop side)
 - scraper-pipeline `scripts/dbt_job.py`: every table-writing dbt `make` target takes the S3 lock, renews it, refreshes the dev API cache when gold built (even if other models failed), then releases. Prod gets its own lock, no refresh. Checked in dev.
 - `docs/cicd_architecture.md` wrapper diagram updated (refresh on gold even when dbt fails; lock-lost path). Step 2 next: redeploy the dev API cache Lambda, then the cloud parts.

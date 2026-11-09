@@ -58,8 +58,13 @@ price-comparison-web have no `.github/workflows`.
     lock expires within minutes.
   - **Built 2026-11-09:** the wrapper and lock, laptop side
     (`scripts/dbt_job.py`; `make dbt-lock-status`, `make dbt-unlock`). Checked
-    in dev. Next: redeploy the dev API cache Lambda (targeted), then the cloud
-    parts (image, workflow, ECR, ECS task, IAM).
+    in dev. Dev API cache Lambda redeployed; first wrapper run refreshed the
+    cache (23/23 models, 43/43 tests).
+  - **Built 2026-11-09, not yet run:** the cloud task (image, workflow, ECR,
+    ECS task `price-comparison-dbt-dev`, IAM). Next: GitHub variable
+    `AWS_DBT_IMAGE_ROLE_ARN`, push scraper-pipeline `main`, then
+    `make dbt-job-dev ARGS="debug"`, the registry seed, a full run, and the
+    lock both ways. Then step 2 is done.
   - **Website API hides products without images** (agreed 2026-11-09):
     `../price-comparison-web/tickets/hide_products_without_images.md`. Build it
     before step 3, so the refresh after the flow's first gold build doesn't show
