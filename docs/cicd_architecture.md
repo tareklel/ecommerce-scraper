@@ -18,86 +18,113 @@ VS Code's preview needs a Mermaid extension.
 
 Step Functions decides the order; ECS and Lambda do the work. A failed crawl
 doesn't stop the other sites. Frequency: daily for 7 days, then about weekly.
+Design agreed 2026-11-10 (step 3; details and decisions in
+`tickets/cicd_pipeline.md`). Not built yet.
 
 ```mermaid
 flowchart TD
   sched["EventBridge Scheduler<br/>daily for 7 days, then weekly"]:::planned
   manual["make crawl-flow<br/>start by hand, any time"]:::planned
-  sched -->|cron| s1
-  manual -->|starts| s1
+  sched -->|"start_at: crawl"| s1
+  manual -->|"start_at: crawl or images"| s1
 
   subgraph sfn["Step Functions state machine (planned)"]
-    s1["1. Seed the registry<br/>dbt seed + its tests"]:::planned
-    s2["2. List active sites<br/>sites with active rows"]:::planned
-    s3["3. Crawl in parallel<br/>one failure doesn't stop others"]:::planned
-    s4["4. Wait for verification<br/>until each run has a status"]:::planned
-    s5["5. dbt build<br/>silver and gold"]:::planned
-    s6["6. Download images"]:::planned
-    s7["7. Check image quality<br/>explicit step, no S3 trigger"]:::planned
-    s8["8. dbt build again<br/>new images reach gold"]:::planned
-    s9["9. Send summary<br/>statuses and degradations"]:::planned
-    s1 --> s2 --> s3 --> s4
-    s4 -->|"1+ published"| s5
-    s5 --> s6 --> s7 --> s8 --> s9
-    s4 -.->|"nothing published"| s9
+    s1["1. Start check<br/>refuse if another run is running<br/>make run IDs"]:::planned
+    s2["2. Seed the registry<br/>dbt seed --select crawl_plp_registry + its tests"]:::planned
+    s3["3. List crawls from the registry<br/>active rows per site"]:::planned
+    s4["4. Crawl in parallel, each with CRAWL_RUN_ID<br/>a failed crawl is caught; others go on"]:::planned
+    s5["5. Wait for verification per crawl<br/>no marker 15 min after the task ends = killed"]:::planned
+    s6{"6. Any crawl published?<br/>success or degraded"}:::planned
+    s7["7. dbt run (full)<br/>cache refresh 1: new prices"]:::planned
+    s8["8. Image pipeline<br/>--run-id from step 1"]:::planned
+    s9{"9. Its marker?"}:::planned
+    s10["10. Quality checker<br/>run by the flow, which waits"]:::planned
+    s11["11. dbt run --select<br/>silver_product_image_download_status+<br/>cache refresh 2: new images"]:::planned
+    s12["12. dbt test (full)"]:::planned
+    s13["13. Summary<br/>crawl statuses, images, dbt"]:::planned
+    s1 -->|"start_at: crawl"| s2 --> s3 --> s4 --> s5 --> s6
+    s1 -.->|"start_at: images"| s8
+    s6 -->|yes| s7 --> s8 --> s9
+    s6 -.->|"no: flow failed"| s13
+    s9 -->|"_SUCCESS or _FAILED"| s10 --> s11
+    s9 -.->|"none: nothing to download"| s11
+    s8 -.->|"task crashed: flow failed"| s13
+    s11 --> s12 --> s13
   end
 
   dbt1["ECS: dbt task"]
   reg[("Athena table<br/>crawl_plp_registry")]
-  s1 -->|runs| dbt1 -->|writes| reg
+  s2 -->|runs| dbt1 -->|writes| reg
 
-  lister["Lambda: site lister"]:::planned
-  urls[("S3: URL lists<br/>for non-Ounass crawls")]
-  s2 -->|calls| lister -->|writes| urls
+  helper["Lambda: crawl_flow_helper"]:::planned
+  urls[("S3: crawl-inputs/run/site.csv<br/>Level Shoes, Bloomingdale's")]:::planned
+  s1 -->|calls| helper
+  s3 -->|calls| helper
+  helper -->|"reads (Athena)"| reg
+  helper -->|writes| urls
 
   scraper["ECS: scraper, per site"]
-  exportfn["Lambda: PLP-efficient export<br/>Ounass only"]
+  exportfn["Lambda: PLP-efficient export<br/>Ounass, reads the registry"]
   unverified[("S3: crawl-unverified/")]
-  s3 -->|runs| scraper
-  scraper -->|"gets inputs"| exportfn
+  s4 -->|runs| scraper
+  scraper -->|"Ounass: gets inputs"| exportfn
+  scraper -->|"others: --urls-source"| urls
   scraper -->|uploads| unverified
 
   verifier["Lambda: verifier"]
-  published[("S3: crawls/ and manifests<br/>passing runs only")]
+  markers[("S3: crawls/markers/<br/>_SUCCESS or _FAILED per run")]
   unverified -.->|"S3 event"| verifier
-  verifier -->|publishes| published
-  s4 -.->|"polls run status"| published
+  verifier -->|writes| markers
+  s5 -.->|"polls via helper"| markers
 
   dbt2["ECS: dbt task"]
   silver[("Athena + Glue<br/>silver and gold")]
-  s5 -->|runs| dbt2 -->|builds| silver
+  s7 -->|runs| dbt2 -->|builds| silver
 
   images["ECS: image pipeline"]
-  blobs[("S3: images/by-hash")]
-  s6 -->|runs| images -->|writes| blobs
+  blobs[("S3: images/by-hash<br/>+ download_log marker")]
+  s8 -->|runs| images -->|writes| blobs
+  s9 -.->|"finds via helper"| blobs
 
   checker["ECS: quality checker"]
-  results[("S3: image results<br/>gold serves validated only")]
-  s7 -->|runs| checker -->|writes| results
+  results[("S3: image_validated<br/>gold serves validated only")]
+  s10 -->|runs| checker -->|writes| results
 
   dbt3["ECS: dbt task"]
-  gold[("Athena + Glue<br/>gold")]
+  gold[("Athena + Glue<br/>image status, gold, nav")]
   apicache["Lambda: API cache export"]
-  s8 -->|runs| dbt3 -->|builds| gold
-  dbt3 -.->|"if gold built"| apicache
-  dbt2 -.->|"if gold built"| apicache
+  s11 -->|runs| dbt3 -->|builds| gold
+  dbt2 -.->|"gold built"| apicache
+  dbt3 -.->|"gold built"| apicache
 
   sns["SNS topic<br/>alerts on failed or killed"]:::planned
   inbox["Your inbox"]
-  s9 -->|sends| sns -->|emails| inbox
+  s13 -.->|"step 5"| sns -->|emails| inbox
 
   classDef planned fill:#ddf0f5,stroke:#0b6f8a,color:#16232d
 ```
 
-**To resolve when building:**
+**Which crawl each registry row becomes** (step 3): one crawl per site with
+active rows; a site with none isn't crawled.
+
+| Registry `site` | Spider | How it reads its URLs |
+|---|---|---|
+| `ounass` | `ounass --plp-efficient` | The PLP-efficient export reads the seeded table itself |
+| `level-shoes` | `level` | `--urls-source s3://…/crawl-inputs/<run>/level-shoes.csv`, written by step 3 |
+| `bloomingdales` | `bloomingdales` | `--urls-source s3://…/crawl-inputs/<run>/bloomingdales.csv`, written by step 3 |
+
+**Two dbt runs, two cache refreshes:** the full run after the crawls puts new
+prices on the site (new products stay hidden until they have images: the
+website API's filter, live in dev since 2026-11-09). The second run rebuilds
+only the 4 image-dependent models, so new images arrive about a minute after
+the quality checker.
+
+**Still to remember when building:**
 - Remove the S3 notification that starts the quality checker
-  (`infra/terraform/lambda.tf`), or it runs twice (step 3).
-- Every dbt run (laptop or cloud) goes through one wrapper. It takes an S3 lock
-  (`locks/dbt-dev.lock`), so runs never overlap. After a run that built gold, it
-  refreshes the API cache, then releases the lock. The lock is renewed while
-  dbt runs. The website API hides products without images, so the first
-  refresh in a flow is safe. Plan:
-  `../scraper-pipeline/ticket/migrate-dbt-to-cloud-jobs.md`, "▶ Agreed plan".
+  (`infra/terraform/lambda.tf`), or it runs twice; add
+  `make ecs-run-quality-checker DT= RUN_ID=` for emergencies.
+- Every dbt run (laptop or cloud) goes through one wrapper with the shared
+  lock; the cloud dbt task waits up to 2 hours for it.
 - Never `--full-refresh` the Ounass silver models
   (`docs/ounass_plp_efficient_crawl.md`, section 7).
 
@@ -214,7 +241,7 @@ flowchart LR
 | EventBridge Scheduler | Starts the flow on a cron | Planned |
 | Step Functions | Runs the steps in order, with waits and branches | Planned |
 | ECS on Fargate | Runs scraper, image and quality tasks, plus a dbt task | Exists (dbt task tested 2026-11-09) |
-| Lambda | Verifier, export and API cache; site lister | Exists; site lister planned |
+| Lambda | Verifier, export and API cache; `crawl_flow_helper` (start check, registry reader, verification and marker checks, summary) | Exists; helper planned |
 | ECR | Stores container images | Exists, including `price-comparison-dbt` |
 | S3 | Crawl data, images, URL lists, Terraform state | Exists |
 | Athena + Glue | dbt builds and queries the tables here | Exists |
@@ -255,3 +282,4 @@ lives in AWS alone, so pausing doesn't need a commit.
 | 2026-11-09 | Wrapper built (laptop side): refresh whenever gold built even if dbt failed; lock-lost path; prod gets its own lock | — |
 | 2026-11-09 | Cloud dbt task built (dev): ECR repo, task, IAM, image workflow; first image build and run pending | — |
 | 2026-11-09 | Step 2 done: cloud dbt task tested (seed, full run with cache refresh, full test, lock both ways) | — |
+| 2026-11-10 | Step 3 design agreed: run IDs passed to crawls, registry read for every site, checker in the flow, second dbt run only the image models, images-only start | — |

@@ -1,5 +1,10 @@
 # Memory
 
+## 2026-11-10 - CI/CD step 3 design agreed (not built)
+- Checked with the scraper-pipeline and website sessions first: image filter live in dev; website's export change (releases/ + manifest, legacy keys kept) pending the user's OK, and it makes the cache refresh depend on `gold_site_nav`; prod dbt will run a pinned image (ECR rule for `prod-` needed then).
+- Flow: start check → registry seed + tests → crawl list from the registry (Ounass PLP-efficient; Level Shoes and Bloomingdale's via `--urls-source` CSVs the helper Lambda writes from Athena) → parallel crawls with `CRAWL_RUN_ID` → wait for verification → full dbt run → image pipeline → quality checker (flow-run, also on `_FAILED`; S3 trigger removed) → `dbt run --select silver_product_image_download_status+` → dbt test → summary. Images-only start too.
+- Recorded in `tickets/cicd_pipeline.md` step 3 (step 4 trimmed) and `docs/cicd_architecture.md`. Waiting on the user's registry URLs for the first test run.
+
 ## 2026-11-09 - CI/CD step 2 done: dbt runs in AWS (dev)
 - scraper-pipeline pushed (with the other session's site-nav commits); first dbt image build passed. Cloud task: registry seed + tests, full run 24/24 with automatic dev cache refresh, full test 46/46; lock checked both ways.
 - Next: step 3, the state machine. Website image filter is built (other session) but not deployed to dev; deploy before step 3 runs.

@@ -70,45 +70,97 @@ price-comparison-web have no `.github/workflows`.
     `../price-comparison-web/tickets/hide_products_without_images.md`. Build it
     before step 3, so the refresh after the flow's first gold build doesn't show
     new products without pictures.
-- [ ] **3. Build the state machine (dev, Terraform).** Follow "Orchestration
-  proposal" below: crawls in parallel, wait for verification, dbt, image
-  pipeline and quality checker, dbt again. A failed crawl doesn't stop the
-  others. It starts with `dbt seed --select crawl_plp_registry` plus that
-  seed's tests, before any crawl and any Zyte spend, because the crawl-start
-  export reads the seeded table. No schedule is attached yet.
-  Remove the S3 notification that starts the quality checker
-  (`infra/terraform/lambda.tf`), or it runs twice. Optional: re-try a crawl
-  that failed with `failure_reason: access` a few
-  hours later, since a missed site now waits a week.
-- [ ] **4. Drive runs from the registry, with one start command.** A run is:
-  1. Edit `crawl_plp_registry.csv` if needed, commit and push. CI rebuilds the
-     dbt image, which carries the seeds.
-  2. `make crawl-flow` (to be written), which prints the active sites and
-     starts the state machine. It must fail if the dbt image isn't built from
-     the latest registry commit, or the run seeds the old list.
+- [ ] **3. Build the state machine (dev, Terraform). Design agreed
+  2026-11-10, not built.** Diagram: `docs/cicd_architecture.md`, "What happens
+  on each run". Includes the registry reader for every site (formerly part of
+  step 4).
+  - **Steps:**
+    1. Start check (helper Lambda): refuse if another flow run is running;
+       make a run ID per crawl and one for the image pipeline.
+    2. `dbt seed --select crawl_plp_registry` plus its tests (cloud dbt task),
+       before any crawl or Zyte spend. A failure stops the flow.
+    3. List crawls from the registry (helper Lambda): one crawl per site with
+       active rows. Ounass → `ounass --plp-efficient` (its export reads the
+       seeded table). `level-shoes` → spider `level`, `bloomingdales` →
+       `bloomingdales`: one Athena query per site
+       (`select url ... where site = ... and is_active`), written to
+       `s3://…/bronze/dev/crawl-inputs/<run>/<site>.csv` (one `url` column) and
+       passed as `--urls-source`. An optional `limit` in the start input is
+       added to every crawl (for cheap test runs).
+    4. Crawls in parallel, each with env `CRAWL_RUN_ID`. A failed crawl is
+       caught; the others go on.
+    5. Wait for verification per crawl: poll its markers every minute; no
+       marker 15 minutes after the task ends = `killed`.
+    6. Any crawl published (success or degraded)? If none: summary, flow
+       failed.
+    7. `dbt run` (full). Cache refresh 1: new prices; new products stay hidden
+       until they have images (website API filter, live in dev).
+    8. Image pipeline with `--run-id` from step 1. If its task crashes: summary,
+       flow failed (step 7 already published prices; the next run or an
+       images-only start retries the images).
+    9. Find its marker (helper Lambda). None = nothing to download: skip to 11.
+    10. Quality checker (`--dt --run-id`), started by the flow, which waits. It
+        runs on `_SUCCESS` and `_FAILED` (a partly failed download still has
+        images to validate; today's trigger skipped those).
+    11. `dbt run --select silver_product_image_download_status+` (4 models:
+        image status, image gold, serving gold, `gold_site_nav`). Cache
+        refresh 2: new images.
+    12. `dbt test` (full). A failure is reported; the data is already live.
+    13. Summary (helper Lambda): each crawl's status and degradations, images
+        downloaded and validated, dbt results. Alerts come in step 5.
+  - **Images-only start:** input `{"start_at": "images"}` runs steps 1 and
+    8–13. Use it instead of `make ecs-run-image-pipeline`, which will no longer
+    start the checker.
+  - **Decisions (user, 2026-11-10):** crawls get their run ID from the flow
+    (`CRAWL_RUN_ID`, read by `mastercrawl.py`; unset = today's behaviour); the
+    checker runs on `_FAILED` too; the S3 notification that starts the checker
+    is removed (`infra/terraform/lambda.tf`), with
+    `make ecs-run-quality-checker DT= RUN_ID=` kept for emergencies; time
+    limits 10 hours per crawl, 24 hours per flow; the second dbt run builds only
+    `silver_product_image_download_status+`.
+  - **Edge cases handled:** killed crawl (verification timeout), nothing to
+    download, a failed crawl (caught per branch), every crawl failed, an
+    overlapping flow run. Not handled on purpose: image pipeline or checker
+    crash (stop and report), `dbt test` failure (report), laptop holding the
+    dbt lock (the dbt task waits up to 2 hours), degraded crawls (count as
+    published).
+  - **To build:** the `CRAWL_RUN_ID` change plus a test (pushing redeploys the
+    crawler image); `lambda/crawl_flow_helper` plus tests;
+    `infra/terraform/orchestration.tf` (state machine, its role, the helper's
+    role; IAM needs explicit approval); remove the checker's S3 notification;
+    `make crawl-flow` and `make ecs-run-quality-checker`.
+  - **First test run:** Ounass PLP-efficient plus Level Shoes and Bloomingdale's
+    from the registry, with a small `limit`. Waiting on the user's new registry
+    URLs.
+- [ ] **4. Drive runs from the registry, with one start command.** The registry
+  reader itself is in step 3. A run is:
+  1. Edit `crawl_plp_registry.csv` (scraper-pipeline `canonical_seeds/`) if
+     needed, commit and push. CI rebuilds the dbt image, which carries the
+     seeds.
+  2. `make crawl-flow`, which prints the active sites and starts the state
+     machine. It must fail if the dbt image isn't built from the latest
+     registry commit, or the run seeds the old list.
   3. Check the result. After a long break, check whether Phase 2 hit
      `OUNASS_PLP_EFFICIENT_MAX_PHASE2_PDPS` (10,000), because that skips
      product pages for the whole run.
 
-  To build:
-  - **Other sites need a reader.** Only Ounass PLP-efficient reads the registry
-    today: the export supports only `ounass`, and Level Shoes and Bloomingdale's
-    crawl from a `--urls-source` CSV. Export each other site's active URLs to
-    S3 for `--urls-source`, and list the active sites for the flow.
-  - **Site key vs spider name:** the registry uses `level-shoes`
-    (`dim_canonical_site`), the spider is `level`, so the flow needs a mapping.
-  - **Crawl mode isn't in the registry.** Proposed: Ounass always runs
-    `--plp-efficient`, others run normally.
+  Still to build here:
+  - **The image-freshness check** in `make crawl-flow` (above).
+  - **Fast CSV check in CI:** the seed's dbt tests need Athena, so also check
+    the CSV's columns and values in the PR. A host check for Level Shoes and
+    Bloomingdale's rows (URL host matches the site) belongs here too.
   - **Whole-site off** means flipping every row of that site to `is_active`
     false. Fine for now; revisit if it becomes annoying.
-  - **Fast CSV check in CI:** the seed's dbt tests need Athena, so also check
-    the CSV's columns and values in the PR.
+
+  The registry's columns already fit every site; new rows need canonical
+  `site`, `gender`, `category`, `subcategory` and `brand` values
+  (`test_crawl_plp_registry_canonical`), and Ounass rows need `/api/` URLs on a
+  known host (`test_crawl_plp_registry_ounass_url`).
 
   Adding other sites is safe for Ounass (checked 2026-11-02): both export
   queries filter on `site = 'ounass'` and `is_active = true`. As a backstop, the
   crawler's G1 skips any row for another site, though more than 25% bad rows
-  would stop the run. New rows must use canonical values or the seed's
-  `test_crawl_plp_registry_canonical` fails.
+  would stop the run.
 - [ ] **5. Add run alerts.** See "Crawl run alerting" below: one summary per
   run, and an alert on `failed` / `killed`. Report access problems apart from
   content problems.
