@@ -1,11 +1,16 @@
 import os
 import json
 import csv
+import re
 from datetime import datetime, timezone
 from scrapy import Spider
 import scrapy
 
 from ecommercecrawl.constants.mastercrawl_constants import RUN_ID_DATETIME_FORMAT
+
+
+# Same shape as _generate_run_id's output, e.g. 2026-11-10T02-00-00-000.
+RUN_ID_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}$")
 
 
 def _slot_delay(url):
@@ -25,6 +30,21 @@ class MasterCrawl(Spider):
         ms_part = f"{now.microsecond // 1000:03d}"
         return f"{main_part}-{ms_part}"
 
+    @staticmethod
+    def _initial_run_id():
+        """The run ID for this crawl: CRAWL_RUN_ID when set (the crawl flow
+        passes one so it can find this run's markers afterwards), otherwise a
+        new one. A malformed CRAWL_RUN_ID stops the crawl instead of writing
+        data under an unexpected key."""
+        run_id = os.environ.get("CRAWL_RUN_ID", "").strip()
+        if not run_id:
+            return MasterCrawl._generate_run_id()
+        if not RUN_ID_PATTERN.match(run_id):
+            raise ValueError(
+                f"CRAWL_RUN_ID must look like 2026-11-10T02-00-00-000, got {run_id!r}"
+            )
+        return run_id
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # Initialization of attributes that depend on constructor arguments
@@ -34,7 +54,7 @@ class MasterCrawl(Spider):
         self.items_written = 0
         self.output_filepath = None
         if not hasattr(self, 'run_id'):
-            self.run_id = MasterCrawl._generate_run_id()
+            self.run_id = MasterCrawl._initial_run_id()
             self.date = self.run_id.split('T')[0]  # Extract datetime part for manifest
 
     @classmethod
@@ -47,7 +67,7 @@ class MasterCrawl(Spider):
         spider = super(MasterCrawl, cls).from_crawler(crawler, *args, **kwargs)
         
         spider.settings = crawler.settings
-        spider.run_id = MasterCrawl._generate_run_id()
+        spider.run_id = MasterCrawl._initial_run_id()
         spider.date = spider.run_id.split('T')[0]  # Extract datetime part for manifest
 
         # Capture entry point arguments for the manifest.

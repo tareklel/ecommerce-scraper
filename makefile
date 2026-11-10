@@ -346,6 +346,44 @@ ecs-run-image-pipeline:
 # Run quality checker locally for a given date partition.
 # make run-quality-checker-local DT=2026-05-21 RUN_ID=<run_id>
 # make run-quality-checker-local DT=2026-05-21 RUN_ID=<run_id> APP_ENV=prod
+# Run the quality checker via ECS for one image pipeline batch. Emergency use:
+# the crawl flow runs the checker itself (its S3 trigger was removed 2026-11-10).
+# make ecs-run-quality-checker DT=2026-11-10 RUN_ID=<image pipeline run_id>
+ecs-run-quality-checker:
+	@test -n "$(DT)" -a -n "$(RUN_ID)" || { echo 'Usage: make ecs-run-quality-checker DT=YYYY-MM-DD RUN_ID=<run_id>'; exit 1; }
+	@CLUSTER=$$(cd $(TF_DIR) && AWS_PROFILE=$(AWS_PROFILE) terraform output -raw ecs_cluster_name); \
+	SUBNETS=$$(cd $(TF_DIR) && AWS_PROFILE=$(AWS_PROFILE) terraform output -json default_subnet_ids | python3 -c 'import json,sys; print(",".join(json.load(sys.stdin)))'); \
+	SG=$$(cd $(TF_DIR) && AWS_PROFILE=$(AWS_PROFILE) terraform output -raw ecs_task_security_group_id); \
+	CMD="python scripts/image_quality_checker.py --app-env $(APP_ENV) --dt $(DT) --run-id $(RUN_ID)"; \
+	AWS_PROFILE=$(AWS_PROFILE) aws ecs run-task \
+		--region $(AWS_REGION) \
+		--cluster $$CLUSTER \
+		--task-definition $(IMAGE_NAME)-image-quality-checker \
+		--launch-type FARGATE \
+		--network-configuration "awsvpcConfiguration={subnets=[$$SUBNETS],securityGroups=[$$SG],assignPublicIp=ENABLED}" \
+		--overrides "{\"containerOverrides\":[{\"name\":\"image-quality-checker\",\"command\":[\"$$CMD\"]}]}"
+
+# --------------------------------
+# Crawl flow (Step Functions, dev): infra/terraform/orchestration.tf
+# --------------------------------
+
+# Start the whole flow: registry seed, crawls of every site with active
+# registry rows, dbt, images, dbt, tests. Optional CRAWL_LIMIT=<pages> for a
+# cheap test run. Watch it in the Step Functions console (link printed).
+# make crawl-flow
+# make crawl-flow CRAWL_LIMIT=20
+# make crawl-flow START_AT=images     (images and dbt only, no crawl)
+CRAWL_LIMIT ?=
+START_AT ?= crawl
+crawl-flow:
+	@ARN=$$(cd $(TF_DIR) && AWS_PROFILE=$(AWS_PROFILE) terraform output -raw crawl_flow_state_machine_arn); \
+	INPUT=$$(START_AT="$(START_AT)" CRAWL_LIMIT="$(CRAWL_LIMIT)" python3 -c 'import json,os; d={"start_at": os.environ["START_AT"]}; l=os.environ["CRAWL_LIMIT"]; d.update({"limit": int(l)} if l else {}); print(json.dumps(d))'); \
+	echo "Starting $$ARN with $$INPUT"; \
+	EXEC=$$(AWS_PROFILE=$(AWS_PROFILE) aws stepfunctions start-execution --region $(AWS_REGION) \
+		--state-machine-arn $$ARN --input "$$INPUT" --query executionArn --output text) || exit 1; \
+	echo "Execution: $$EXEC"; \
+	echo "Console:   https://$(AWS_REGION).console.aws.amazon.com/states/home?region=$(AWS_REGION)#/v2/executions/details/$$EXEC"
+
 run-quality-checker-local:
 	$(LOAD_AWS_SECRET_ENV); \
 	APP_ENV=$(APP_ENV) \

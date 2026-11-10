@@ -70,6 +70,10 @@ Notes:
 
 ## Where a run's data and record go
 
+The run ID is the crawl's start time (`2026-11-10T02-00-00-000`), or the
+`CRAWL_RUN_ID` environment variable when the crawl flow sets it, so the flow
+can find this run's markers (`infra/terraform/orchestration.tf`).
+
 1. **Start:** `bronze/<env>/crawl-started/<site>/<dt>/<run_id>.json`
    (table `crawl_started_raw`), only when uploads are on (`APP_ENV=prod` or
    `S3_UPLOAD_ENABLED=true`).

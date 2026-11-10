@@ -23,9 +23,9 @@ resource "aws_lambda_function" "bronze_manifest_verifier" {
 
   environment {
     variables = {
-      APP_ENV          = var.app_env
-      ATHENA_TABLE     = var.athena_table
-      BRONZE_DATABASE  = var.bronze_database_name
+      APP_ENV         = var.app_env
+      ATHENA_TABLE    = var.athena_table
+      BRONZE_DATABASE = var.bronze_database_name
     }
   }
 }
@@ -65,14 +65,12 @@ resource "aws_s3_bucket_notification" "bronze_notifications" {
     filter_suffix = "_SUCCESS"
   }
 
-  lambda_function {
-    lambda_function_arn = aws_lambda_function.image_pipeline_trigger.arn
-    events              = ["s3:ObjectCreated:*"]
-
-    # Trigger quality checker when image pipeline writes _SUCCESS marker.
-    filter_prefix = "bronze/${var.app_env}/images/download_log/meta/"
-    filter_suffix = "_SUCCESS"
-  }
+  # No trigger on the image pipeline's _SUCCESS marker any more (removed
+  # 2026-11-10): the crawl flow (orchestration.tf) runs the quality checker
+  # itself and waits for it, so the trigger would run it twice. The
+  # image_pipeline_trigger Lambda below is now unused; for a one-off check use
+  # `make ecs-run-quality-checker DT= RUN_ID=`, or start the flow with
+  # {"start_at": "images"}.
 
   depends_on = [
     aws_lambda_permission.allow_s3_invoke_verifier,

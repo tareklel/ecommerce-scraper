@@ -18,30 +18,32 @@ VS Code's preview needs a Mermaid extension.
 
 Step Functions decides the order; ECS and Lambda do the work. A failed crawl
 doesn't stop the other sites. Frequency: daily for 7 days, then about weekly.
-Design agreed 2026-11-10 (step 3; details and decisions in
-`tickets/cicd_pipeline.md`). Not built yet.
+Design agreed and built 2026-11-10 (step 3; details and decisions in
+`tickets/cicd_pipeline.md`; code in `infra/terraform/orchestration.tf` and
+`lambda/crawl_flow_helper/`). First flow run pending. Start it with
+`make crawl-flow` (optional `CRAWL_LIMIT=`, `START_AT=images`).
 
 ```mermaid
 flowchart TD
   sched["EventBridge Scheduler<br/>daily for 7 days, then weekly"]:::planned
-  manual["make crawl-flow<br/>start by hand, any time"]:::planned
+  manual["make crawl-flow<br/>start by hand, any time"]
   sched -->|"start_at: crawl"| s1
   manual -->|"start_at: crawl or images"| s1
 
-  subgraph sfn["Step Functions state machine (planned)"]
-    s1["1. Start check<br/>refuse if another run is running<br/>make run IDs"]:::planned
-    s2["2. Seed the registry<br/>dbt seed --select crawl_plp_registry + its tests"]:::planned
-    s3["3. List crawls from the registry<br/>active rows per site"]:::planned
-    s4["4. Crawl in parallel, each with CRAWL_RUN_ID<br/>a failed crawl is caught; others go on"]:::planned
-    s5["5. Wait for verification per crawl<br/>no marker 15 min after the task ends = killed"]:::planned
-    s6{"6. Any crawl published?<br/>success or degraded"}:::planned
-    s7["7. dbt run (full)<br/>cache refresh 1: new prices"]:::planned
-    s8["8. Image pipeline<br/>--run-id from step 1"]:::planned
-    s9{"9. Its marker?"}:::planned
-    s10["10. Quality checker<br/>run by the flow, which waits"]:::planned
-    s11["11. dbt run --select<br/>silver_product_image_download_status+<br/>cache refresh 2: new images"]:::planned
-    s12["12. dbt test (full)"]:::planned
-    s13["13. Summary<br/>crawl statuses, images, dbt"]:::planned
+  subgraph sfn["Step Functions: ecommerce-scraper-crawl-flow-dev"]
+    s1["1. Start check<br/>refuse if another run is running<br/>make run IDs"]
+    s2["2. Seed the registry<br/>dbt seed --select crawl_plp_registry + its tests"]
+    s3["3. List crawls from the registry<br/>active rows per site"]
+    s4["4. Crawl in parallel, each with CRAWL_RUN_ID<br/>a failed crawl is caught; others go on"]
+    s5["5. Wait for verification per crawl<br/>no marker 15 min after the task ends = killed"]
+    s6{"6. Any crawl published?<br/>success or degraded"}
+    s7["7. dbt run (full)<br/>cache refresh 1: new prices"]
+    s8["8. Image pipeline<br/>--run-id from step 1"]
+    s9{"9. Its marker?"}
+    s10["10. Quality checker<br/>run by the flow, which waits"]
+    s11["11. dbt run --select<br/>silver_product_image_download_status+<br/>cache refresh 2: new images"]
+    s12["12. dbt test (full)"]
+    s13["13. Summary<br/>crawl statuses, images, dbt"]
     s1 -->|"start_at: crawl"| s2 --> s3 --> s4 --> s5 --> s6
     s1 -.->|"start_at: images"| s8
     s6 -->|yes| s7 --> s8 --> s9
@@ -56,8 +58,8 @@ flowchart TD
   reg[("Athena table<br/>crawl_plp_registry")]
   s2 -->|runs| dbt1 -->|writes| reg
 
-  helper["Lambda: crawl_flow_helper"]:::planned
-  urls[("S3: crawl-inputs/run/site.csv<br/>Level Shoes, Bloomingdale's")]:::planned
+  helper["Lambda: crawl_flow_helper"]
+  urls[("S3: crawl-inputs/run/site.csv<br/>Level Shoes, Bloomingdale's")]
   s1 -->|calls| helper
   s3 -->|calls| helper
   helper -->|"reads (Athena)"| reg
@@ -143,10 +145,10 @@ happened.
 | The laptop holds the dbt lock | When you run dbt during a flow | The dbt task waits up to 2 hours | Then fails visibly (exit 75) if still held |
 | A crawl or the flow runs too long | Rare | Time limits: 10 hours per crawl, 24 hours per flow | That crawl counts as failed; the flow **fails** |
 
-**Still to remember when building:**
-- Remove the S3 notification that starts the quality checker
-  (`infra/terraform/lambda.tf`), or it runs twice; add
-  `make ecs-run-quality-checker DT= RUN_ID=` for emergencies.
+**Notes:**
+- The S3 notification that started the quality checker is removed (2026-11-10;
+  the flow runs it). `make ecs-run-quality-checker DT= RUN_ID=` is for
+  emergencies; the `image_pipeline_trigger` Lambda is now unused.
 - Every dbt run (laptop or cloud) goes through one wrapper with the shared
   lock; the cloud dbt task waits up to 2 hours for it.
 - Never `--full-refresh` the Ounass silver models
@@ -263,9 +265,9 @@ flowchart LR
 | Service | Job | Status |
 |---|---|---|
 | EventBridge Scheduler | Starts the flow on a cron | Planned |
-| Step Functions | Runs the steps in order, with waits and branches | Planned |
+| Step Functions | Runs the steps in order, with waits and branches | Exists (`ecommerce-scraper-crawl-flow-dev`, 2026-11-10; first run pending) |
 | ECS on Fargate | Runs scraper, image and quality tasks, plus a dbt task | Exists (dbt task tested 2026-11-09) |
-| Lambda | Verifier, export and API cache; `crawl_flow_helper` (start check, registry reader, verification and marker checks, summary) | Exists; helper planned |
+| Lambda | Verifier, export and API cache; `crawl_flow_helper` (start check, registry reader, verification and marker checks, summary) | Exists (helper 2026-11-10); `image_pipeline_trigger` unused |
 | ECR | Stores container images | Exists, including `price-comparison-dbt` |
 | S3 | Crawl data, images, URL lists, Terraform state | Exists |
 | Athena + Glue | dbt builds and queries the tables here | Exists |
@@ -308,3 +310,4 @@ lives in AWS alone, so pausing doesn't need a commit.
 | 2026-11-09 | Step 2 done: cloud dbt task tested (seed, full run with cache refresh, full test, lock both ways) | — |
 | 2026-11-10 | Step 3 design agreed: run IDs passed to crawls, registry read for every site, checker in the flow, second dbt run only the image models, images-only start | — |
 | 2026-11-10 | Edge cases table added (step 3) | — |
+| 2026-11-10 | Step 3 built and applied: state machine, helper Lambda, checker S3 trigger removed; first run pending | — |

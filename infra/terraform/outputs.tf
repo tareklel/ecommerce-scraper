@@ -43,3 +43,8 @@ output "ecs_image_pipeline_task_definition_arn" {
 output "github_actions_crawler_image_role_arn" {
   value = aws_iam_role.github_actions_crawler_image.arn
 }
+
+output "crawl_flow_state_machine_arn" {
+  value       = aws_sfn_state_machine.crawl_flow.arn
+  description = "Crawl flow state machine (dev); started by make crawl-flow."
+}

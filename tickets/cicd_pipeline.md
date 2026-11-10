@@ -70,8 +70,24 @@ price-comparison-web have no `.github/workflows`.
     `../price-comparison-web/tickets/hide_products_without_images.md`. Build it
     before step 3, so the refresh after the flow's first gold build doesn't show
     new products without pictures.
-- [ ] **3. Build the state machine (dev, Terraform). Design agreed
-  2026-11-10, not built.** Diagram: `docs/cicd_architecture.md`, "What happens
+- [ ] **3. Build the state machine (dev, Terraform). Built and applied
+  2026-11-10; first flow run pending.**
+  - **Built:** `CRAWL_RUN_ID` in `ecommercecrawl/spiders/mastercrawl.py` (+ tests);
+    `lambda/crawl_flow_helper/` (+ `tests/test_crawl_flow_helper.py`, 21 tests);
+    `infra/terraform/orchestration.tf` (state machine
+    `ecommerce-scraper-crawl-flow-dev`, helper Lambda, two IAM roles,
+    user-approved; applied with `-target` in two stages, the definition passed
+    AWS's validator); the checker's S3 notification removed from `lambda.tf`;
+    `make crawl-flow` and `make ecs-run-quality-checker`. The registry seed and
+    its tests run as one task (`dbt build --select crawl_plp_registry`).
+  - **Smoke-tested by invoking the helper directly:** start check, registry
+    read (3 crawls, 4 URLs each; test CSVs deleted), verification check (a real
+    Nov 2 Ounass run read as success) and image marker lookup. One fix on the
+    way: `s3:GetBucketLocation` had to leave the prefix-conditioned statement
+    (Athena's bucket check has no prefix), user-approved.
+  - **Before the first run:** push this repo's `main` so the crawler image has
+    `CRAWL_RUN_ID`; otherwise every crawl is reported `killed`. Then
+    `make crawl-flow CRAWL_LIMIT=20`, then a full run. Diagram: `docs/cicd_architecture.md`, "What happens
   on each run". Includes the registry reader for every site (formerly part of
   step 4).
   - **Steps:**

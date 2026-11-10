@@ -1,5 +1,10 @@
 # Memory
 
+## 2026-11-10 - CI/CD step 3 built and applied (first run pending)
+- Crawler reads `CRAWL_RUN_ID` (mastercrawl.py; malformed stops the crawl). Helper Lambda `ecommerce-scraper-crawl-flow-helper` (start check, registry reader writing Level Shoes/Bloomingdale's `--urls-source` CSVs, verification check, gate, image marker, summary). State machine `ecommerce-scraper-crawl-flow-dev` in `infra/terraform/orchestration.tf`; checker S3 trigger removed; `make crawl-flow`, `make ecs-run-quality-checker`.
+- Applied with `-target` in two stages (IAM user-approved); definition validated by AWS. Smoke tests passed after one fix: `s3:GetBucketLocation` moved out of the prefix-conditioned statement (user-approved). Full suite 509 + 21 helper tests pass.
+- Next: push `main` (crawler image needs `CRAWL_RUN_ID`), then `make crawl-flow CRAWL_LIMIT=20`.
+
 ## 2026-11-10 - Step 3 edge cases documented; registry CSV checked
 - `docs/cicd_architecture.md` gains an "Edge cases" table (15 cases: frequency, handling, result).
 - The user's new `crawl_plp_registry.csv` (12 rows: Ounass, Level Shoes, Bloomingdale's; SA tote and shoulder bags, ar+en) passes every rule of the two registry dbt tests offline, and the Level Shoes and Bloomingdale's spiders' rules parse every URL as a PLP with the right country and language. Not yet committed in scraper-pipeline or seeded; told the scraper-pipeline and website sessions how to proceed.
