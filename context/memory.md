@@ -1,5 +1,9 @@
 # Memory
 
+## 2026-11-10 - Step 3 edge cases documented; registry CSV checked
+- `docs/cicd_architecture.md` gains an "Edge cases" table (15 cases: frequency, handling, result).
+- The user's new `crawl_plp_registry.csv` (12 rows: Ounass, Level Shoes, Bloomingdale's; SA tote and shoulder bags, ar+en) passes every rule of the two registry dbt tests offline, and the Level Shoes and Bloomingdale's spiders' rules parse every URL as a PLP with the right country and language. Not yet committed in scraper-pipeline or seeded; told the scraper-pipeline and website sessions how to proceed.
+
 ## 2026-11-10 - CI/CD step 3 design agreed (not built)
 - Checked with the scraper-pipeline and website sessions first: image filter live in dev; website's export change (releases/ + manifest, legacy keys kept) pending the user's OK, and it makes the cache refresh depend on `gold_site_nav`; prod dbt will run a pinned image (ECR rule for `prod-` needed then).
 - Flow: start check → registry seed + tests → crawl list from the registry (Ounass PLP-efficient; Level Shoes and Bloomingdale's via `--urls-source` CSVs the helper Lambda writes from Athena) → parallel crawls with `CRAWL_RUN_ID` → wait for verification → full dbt run → image pipeline → quality checker (flow-run, also on `_FAILED`; S3 trigger removed) → `dbt run --select silver_product_image_download_status+` → dbt test → summary. Images-only start too.

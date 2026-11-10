@@ -119,6 +119,30 @@ website API's filter, live in dev since 2026-11-09). The second run rebuilds
 only the 4 image-dependent models, so new images arrive about a minute after
 the quality checker.
 
+### Edge cases (agreed 2026-11-10)
+
+Rule: handle what would otherwise hang or break the flow, plus cheap guards.
+Everything else stops and reports; the summary (step 13) always says what
+happened.
+
+| Case | How often | What the flow does | Result |
+|---|---|---|---|
+| A crawl dies without a manifest (killed, out of memory) | Rare | Step 5 stops waiting 15 minutes after the task ends | That crawl is `killed`; the others go on |
+| One crawl fails (blocked, bad input) | Now and then | Caught in its own branch | Others go on; gold gets the good crawls |
+| Every crawl failed or was killed | Rare | Step 6 skips dbt and images | Summary; flow **failed** |
+| A crawl is `degraded` | Common | Counts as published | Listed in the summary |
+| Another flow run is still running | Possible once scheduled daily | Step 1 refuses to start | New run **failed** at once; the running one is untouched |
+| Registry seed or its tests fail | Only after a bad registry edit | Step 2 stops before any crawl | No Zyte spend; flow **failed** |
+| A site has no active registry rows | By choice | Step 3 leaves it out | Not crawled |
+| Nothing to download (no new image URLs) | Common on repeat crawls | Step 9 finds no marker, skips the checker | Step 11 still runs |
+| Some image downloads failed (`_FAILED`) | Rare (never yet in dev) | Checker runs anyway | Downloaded images still reach gold |
+| Image pipeline or checker task crashes | Rare | Stop and report, no second dbt run | Prices already live from step 7; the next run or an images-only start retries the images; flow **failed** |
+| `dbt run` fails | Rare | Stop and report | The previous gold and cache stay; flow **failed** |
+| Cache refresh fails (dbt task exit 77) | Rare; also if `gold_site_nav` is missing once the website's export change ships | That dbt step fails | The cache stays at the previous version; flow **failed** |
+| `dbt test` fails | Rare | Report | The data is already live; flow **failed** so it gets looked at |
+| The laptop holds the dbt lock | When you run dbt during a flow | The dbt task waits up to 2 hours | Then fails visibly (exit 75) if still held |
+| A crawl or the flow runs too long | Rare | Time limits: 10 hours per crawl, 24 hours per flow | That crawl counts as failed; the flow **fails** |
+
 **Still to remember when building:**
 - Remove the S3 notification that starts the quality checker
   (`infra/terraform/lambda.tf`), or it runs twice; add
@@ -283,3 +307,4 @@ lives in AWS alone, so pausing doesn't need a commit.
 | 2026-11-09 | Cloud dbt task built (dev): ECR repo, task, IAM, image workflow; first image build and run pending | — |
 | 2026-11-09 | Step 2 done: cloud dbt task tested (seed, full run with cache refresh, full test, lock both ways) | — |
 | 2026-11-10 | Step 3 design agreed: run IDs passed to crawls, registry read for every site, checker in the flow, second dbt run only the image models, images-only start | — |
+| 2026-11-10 | Edge cases table added (step 3) | — |

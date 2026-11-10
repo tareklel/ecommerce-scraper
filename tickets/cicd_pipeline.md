@@ -118,7 +118,8 @@ price-comparison-web have no `.github/workflows`.
     `make ecs-run-quality-checker DT= RUN_ID=` kept for emergencies; time
     limits 10 hours per crawl, 24 hours per flow; the second dbt run builds only
     `silver_product_image_download_status+`.
-  - **Edge cases handled:** killed crawl (verification timeout), nothing to
+  - **Edge cases:** full table (case, frequency, handling, result) in
+    `docs/cicd_architecture.md`, "Edge cases". Summary: handled: killed crawl (verification timeout), nothing to
     download, a failed crawl (caught per branch), every crawl failed, an
     overlapping flow run. Not handled on purpose: image pipeline or checker
     crash (stop and report), `dbt test` failure (report), laptop holding the
