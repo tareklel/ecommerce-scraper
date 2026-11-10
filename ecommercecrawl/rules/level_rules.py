@@ -70,10 +70,23 @@ def get_url_from_item(x):
         return x['action']['url']
     return None
 
-def get_id_from_item(x):
-    if isinstance(x, dict) and x.get('analytics'):
-        return x['analytics']['item_id']
+def _analytics(x, key):
+    # Some new products come with a cut-down analytics block (only
+    # constructor.variationId), so a missing key is None, not a crash.
+    # parse_pdp fills what the listing can't give.
+    if isinstance(x, dict) and isinstance(x.get('analytics'), dict):
+        return x['analytics'].get(key)
     return None
+
+def _lower(value):
+    return value.lower() if isinstance(value, str) else None
+
+def get_id_from_item(x):
+    # vpn equals analytics.item_id wherever both are present.
+    item_id = _analytics(x, 'item_id')
+    if item_id is None and isinstance(x, dict):
+        item_id = x.get('vpn') or None
+    return item_id
 
 def get_name_from_item(x):
     if isinstance(x, dict) and x.get('name'):
@@ -81,19 +94,16 @@ def get_name_from_item(x):
     return None
 
 def get_brand_from_item(x):
-    if isinstance(x, dict) and x.get('analytics'):
-        return x['analytics']['brand']
-    return None
+    brand = _analytics(x, 'brand')
+    if brand is None and isinstance(x, dict):
+        brand = x.get('brandName') or None
+    return brand
 
 def get_category_from_item(x):
-    if isinstance(x, dict) and x.get('analytics'):
-        return x['analytics']['category1'].lower()
-    return None
+    return _lower(_analytics(x, 'category1'))
 
 def get_gender_from_item(x):
-    if isinstance(x, dict) and x.get('analytics'):
-        return x['analytics']['gender']
-    return None
+    return _analytics(x, 'gender')
 
 def get_color_from_item(item):
     if isinstance(item, dict) and item.get('color'):
@@ -101,14 +111,10 @@ def get_color_from_item(item):
     return None
 
 def get_subcategory_from_item(x):
-    if isinstance(x, dict) and x.get('analytics'):
-        return x['analytics']['category2'].lower()
-    return None
+    return _lower(_analytics(x, 'category2'))
 
 def get_price_from_item(x):
-    if isinstance(x, dict) and x.get('analytics'):
-        return x['analytics']['price']
-    return None
+    return _analytics(x, 'price')
 
 def get_currency_from_item(x):
     if isinstance(x, dict) and x.get('originalPrice'):

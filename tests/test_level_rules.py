@@ -130,6 +130,32 @@ def test_get_category_and_price_from_item():
     assert rules.get_price_from_item(item) == 1234
 
 
+# New products can come with a cut-down analytics block (seen 2026-11-10).
+CUT_DOWN_ITEM = {
+    "vpn": "J000188796-062233",
+    "brandName": "Jimmy Choo",
+    "analytics": {"constructor": {"variationId": "016528090924"}},
+}
+
+
+def test_cut_down_analytics_falls_back_to_vpn_and_brand_name():
+    assert rules.get_id_from_item(CUT_DOWN_ITEM) == "J000188796-062233"
+    assert rules.get_brand_from_item(CUT_DOWN_ITEM) == "Jimmy Choo"
+
+
+def test_cut_down_analytics_leaves_the_rest_to_the_pdp():
+    assert rules.get_category_from_item(CUT_DOWN_ITEM) is None
+    assert rules.get_subcategory_from_item(CUT_DOWN_ITEM) is None
+    assert rules.get_gender_from_item(CUT_DOWN_ITEM) is None
+    assert rules.get_price_from_item(CUT_DOWN_ITEM) is None
+
+
+def test_analytics_item_id_wins_over_vpn():
+    item = {"vpn": "other", "analytics": {"item_id": "SKU123", "brand": "BrandX"}, "brandName": "Other"}
+    assert rules.get_id_from_item(item) == "SKU123"
+    assert rules.get_brand_from_item(item) == "BrandX"
+
+
 def test_get_currency_from_item_splits_amount_and_currency():
     item = {"originalPrice": "1234 AED"}
     assert rules.get_currency_from_item(item) == "AED"

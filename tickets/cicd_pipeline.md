@@ -71,7 +71,7 @@ price-comparison-web have no `.github/workflows`.
     before step 3, so the refresh after the flow's first gold build doesn't show
     new products without pictures.
 - [ ] **3. Build the state machine (dev, Terraform). Built and applied
-  2026-11-10; first flow run pending.**
+  2026-11-10; first test run passed end to end; full run pending.**
   - **Built:** `CRAWL_RUN_ID` in `ecommercecrawl/spiders/mastercrawl.py` (+ tests);
     `lambda/crawl_flow_helper/` (+ `tests/test_crawl_flow_helper.py`, 21 tests);
     `infra/terraform/orchestration.tf` (state machine
@@ -85,9 +85,27 @@ price-comparison-web have no `.github/workflows`.
     Nov 2 Ounass run read as success) and image marker lookup. One fix on the
     way: `s3:GetBucketLocation` had to leave the prefix-conditioned statement
     (Athena's bucket check has no prefix), user-approved.
-  - **Before the first run:** push this repo's `main` so the crawler image has
-    `CRAWL_RUN_ID`; otherwise every crawl is reported `killed`. Then
-    `make crawl-flow CRAWL_LIMIT=20`, then a full run. Diagram: `docs/cicd_architecture.md`, "What happens
+  - **First test run 2026-11-10** (`make crawl-flow CRAWL_LIMIT=20`, execution
+    `dee7644b-…`, 30 min): every step ran and the flow succeeded with 1 of 3
+    crawls published. Ounass success (6,454 rows); seed 3/3, dbt run 24/24,
+    images `_SUCCESS`, quality checker, images+ run 4/4, dbt test 46/46; the API
+    cache refreshed after both dbt runs. Level Shoes and Bloomingdale's failed
+    on site changes, and the flow handled both as designed:
+    - Level Shoes: new products have a cut-down `analytics` block (only
+      `constructor.variationId`), so `x['analytics']['item_id']` raised
+      KeyError and stopped the crawl before any request. Fixed: the listing
+      getters return None for missing keys (the PDP parser fills them), with
+      `vpn`/`brandName` as fallbacks for the id and brand.
+    - Bloomingdale's: breadcrumbs moved from microdata to JSON-LD, so gender,
+      category and subcategory were blank on every row (quality gate). Fixed:
+      JSON-LD first, microdata fallback. The labels it gives (curly
+      `Women’s Bags`, Arabic) are already in `dim_map_site_category_subcategory`.
+    - Gap seen: when a crawl writes no rows the crawler reports `quality` and
+      points at a `quality_report.json` that doesn't exist; the real cause was
+      only in the log.
+  - **Next:** push the fixes (redeploys the crawler image), rerun
+    `make crawl-flow CRAWL_LIMIT=20` to see all three sites publish, then a full
+    run. Diagram: `docs/cicd_architecture.md`, "What happens
   on each run". Includes the registry reader for every site (formerly part of
   step 4).
   - **Steps:**

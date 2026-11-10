@@ -1,5 +1,11 @@
 # Memory
 
+## 2026-11-10 - First crawl flow run; Level Shoes and Bloomingdale's fixes
+- First `make crawl-flow CRAWL_LIMIT=20` (after pushing `2bfd26c`, image `sha-2bfd26c`): every step ran, flow succeeded with Ounass published (6,454 rows); dbt 24/24, images, quality checker, images+ 4/4, test 46/46; API cache refreshed twice.
+- Level Shoes failed: new products' `analytics` block has only `constructor.variationId`, so `get_id_from_item` raised KeyError at start. `level_rules.py` listing getters now return None for missing keys (parse_pdp fills them); id falls back to `vpn`, brand to `brandName` (equal to the analytics values where both exist).
+- Bloomingdale's failed the quality gate (gender/category/subcategory 100% blank): breadcrumbs moved from microdata to JSON-LD. `_extract_breadcrumbs` reads JSON-LD first, microdata as fallback. New labels are already in the scraper-pipeline category map.
+- Both checked against live pages; 8 new tests; full suite 517 pass. Ticket step 3 updated.
+
 ## 2026-11-10 - CI/CD step 3 built and applied (first run pending)
 - Crawler reads `CRAWL_RUN_ID` (mastercrawl.py; malformed stops the crawl). Helper Lambda `ecommerce-scraper-crawl-flow-helper` (start check, registry reader writing Level Shoes/Bloomingdale's `--urls-source` CSVs, verification check, gate, image marker, summary). State machine `ecommerce-scraper-crawl-flow-dev` in `infra/terraform/orchestration.tf`; checker S3 trigger removed; `make crawl-flow`, `make ecs-run-quality-checker`.
 - Applied with `-target` in two stages (IAM user-approved); definition validated by AWS. Smoke tests passed after one fix: `s3:GetBucketLocation` moved out of the prefix-conditioned statement (user-approved). Full suite 509 + 21 helper tests pass.

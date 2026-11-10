@@ -132,12 +132,41 @@ def _extract_jsonld_product(html: str) -> dict | None:
     return None
 
 
+def _extract_jsonld_breadcrumbs(html: str) -> list[str]:
+    blocks = re.findall(
+        r'<script[^>]+type=["\']application/ld\+json["\'][^>]*>(.*?)</script>',
+        html, re.DOTALL | re.IGNORECASE,
+    )
+    for b in blocks:
+        try:
+            d = json.loads(b.strip())
+        except Exception:
+            continue
+        if not isinstance(d, dict) or d.get('@type') != 'BreadcrumbList':
+            continue
+        elements = sorted(
+            (e for e in d.get('itemListElement') or [] if isinstance(e, dict)),
+            key=lambda e: e.get('position') or 0,
+        )
+        names = []
+        for e in elements:
+            item = e.get('item')
+            name = (item.get('name') if isinstance(item, dict) else None) or e.get('name')
+            names.append(html_module.unescape(name).strip() if isinstance(name, str) else None)
+        return names
+    return []
+
+
 def _extract_breadcrumbs(html: str) -> list[str]:
     """
-    Parse HTML microdata BreadcrumbList.
+    Parse the BreadcrumbList.
     Returns [brand, gender, category, subcategory, product_name] (by position).
-    Bloomingdales uses microdata, not JSON-LD, for breadcrumbs.
+    Bloomingdales moved from HTML microdata to JSON-LD (seen 2026-11-10);
+    JSON-LD is read first and microdata is kept as a fallback.
     """
+    crumbs = _extract_jsonld_breadcrumbs(html)
+    if crumbs:
+        return crumbs
     bc = re.search(
         r'<ol[^>]+itemtype="http://schema\.org/BreadcrumbList"[^>]*>(.*?)</ol>',
         html, re.DOTALL,

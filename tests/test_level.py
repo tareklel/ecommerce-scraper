@@ -175,6 +175,28 @@ def test_handle_plp_item_builds_request_with_meta():
     ]
 
 
+def test_handle_plp_item_with_cut_down_analytics_still_requests_the_pdp():
+    spider = LevelSpider()
+    item = {
+        "action": {"url": "https://en-saudi.levelshoes.com/jimmy-choo-cinch-bag.html"},
+        "name": "Cinch small bucket bag",
+        "vpn": "J000188796-062233",
+        "brandName": "Jimmy Choo",
+        "analytics": {"constructor": {"variationId": "016528090924"}},
+        "originalPrice": "5,910 SAR",
+    }
+
+    requests_out = list(spider._handle_item(item))
+    assert len(requests_out) == 1
+    meta_item = requests_out[0].meta["data_dict"]
+    assert meta_item["portal_itemid"] == "J000188796-062233"
+    assert meta_item["brand"] == "Jimmy Choo"
+    # Left blank here; parse_pdp fills them from the product page.
+    assert meta_item["category"] is None
+    assert meta_item["gender"] is None
+    assert meta_item["price"] is None
+
+
 def test_parse_direct_pdp_emits_image_gallery_array():
     spider = LevelSpider()
     url = "https://www.levelshoes.com/example-product.html"

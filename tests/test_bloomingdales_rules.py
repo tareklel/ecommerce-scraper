@@ -226,6 +226,52 @@ def test_extract_primary_label_returns_none_when_no_badges():
     assert rules.extract_primary_label("<div>no badges</div>") is None
 
 
+# ── Breadcrumbs ─────────────────────────────────────────────────────────────
+
+JSONLD_BREADCRUMBS = """
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[
+{"@type":"ListItem","position":2,"item":{"@id":"https://en.bloomingdales.sa/women/","name":"Women"}},
+{"@type":"ListItem","position":1,"item":{"@id":"https://en.bloomingdales.sa/marc-jacobs/","name":"Marc Jacobs"}},
+{"@type":"ListItem","position":3,"item":{"@id":"https://en.bloomingdales.sa/bags/","name":"Women&#39;s Bags"}},
+{"@type":"ListItem","position":4,"item":{"@id":"https://en.bloomingdales.sa/shoulder/","name":"Shoulder Bags"}},
+{"@type":"ListItem","position":5,"item":{"@id":"https://en.bloomingdales.sa/x.html","name":"Scene Small Shoulder Bag"}}
+]}</script>
+"""
+
+MICRODATA_BREADCRUMBS = """
+<ol itemscope itemtype="http://schema.org/BreadcrumbList">
+<li><span itemprop="name">Marc Jacobs</span></li><li><span itemprop="name">Women</span></li>
+<li><span itemprop="name">Bags</span></li><li><span itemprop="name">Totes</span></li>
+</ol>
+"""
+
+JSONLD_PRODUCT = """
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"Product","name":"Scene Small Shoulder Bag",
+"brand":{"@type":"Brand","name":"Marc Jacobs"},"image":["https://img.example/a.jpg"],
+"offers":{"@type":"Offer","price":"2500","priceCurrency":"SAR","availability":"https://schema.org/InStock"}}</script>
+"""
+
+
+def test_breadcrumbs_read_from_jsonld_in_position_order():
+    assert rules._extract_breadcrumbs(JSONLD_BREADCRUMBS) == [
+        "Marc Jacobs", "Women", "Women's Bags", "Shoulder Bags", "Scene Small Shoulder Bag",
+    ]
+
+
+def test_breadcrumbs_fall_back_to_microdata():
+    assert rules._extract_breadcrumbs(MICRODATA_BREADCRUMBS) == ["Marc Jacobs", "Women", "Bags", "Totes"]
+
+
+def test_breadcrumbs_empty_when_neither_is_present():
+    assert rules._extract_breadcrumbs("<div>nothing</div>") == []
+
+
+def test_extract_product_takes_gender_and_category_from_jsonld_breadcrumbs():
+    url = "https://en.bloomingdales.sa/marc-jacobs-Scene-Small-Shoulder-Bag-BAG219542221xBLK.html"
+    p = rules.extract_product(make_response(JSONLD_PRODUCT + JSONLD_BREADCRUMBS, url))
+    assert (p["gender"], p["category"], p["subcategory"]) == ("Women", "Women's Bags", "Shoulder Bags")
+
+
 # ── extract_product (integration — AR fixture) ────────────────────────────────
 
 def test_extract_product_from_ar_fixture():
