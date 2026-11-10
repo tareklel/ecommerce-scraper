@@ -138,7 +138,7 @@ happened.
 | Some image downloads failed (`_FAILED`) | Rare (never yet in dev) | Checker runs anyway | Downloaded images still reach gold |
 | Image pipeline or checker task crashes | Rare | Stop and report, no second dbt run | Prices already live from step 7; the next run or an images-only start retries the images; flow **failed** |
 | `dbt run` fails | Rare | Stop and report | The previous gold and cache stay; flow **failed** |
-| Cache refresh fails (dbt task exit 77) | Rare; also if `gold_site_nav` is missing once the website's export change ships | That dbt step fails | The cache stays at the previous version; flow **failed** |
+| Cache refresh fails (dbt task exit 77) | Rare; also if `gold_site_nav` is missing or invalid (the dev export reads it since 2026-11-10, release `20261110T071721Z-472182ed`) | That dbt step fails | The cache stays at the previous version; flow **failed** |
 | `dbt test` fails | Rare | Report | The data is already live; flow **failed** so it gets looked at |
 | The laptop holds the dbt lock | When you run dbt during a flow | The dbt task waits up to 2 hours | Then fails visibly (exit 75) if still held |
 | A crawl or the flow runs too long | Rare | Time limits: 10 hours per crawl, 24 hours per flow | That crawl counts as failed; the flow **fails** |
