@@ -20,8 +20,9 @@ Step Functions decides the order; ECS and Lambda do the work. A failed crawl
 doesn't stop the other sites. Frequency: daily for 7 days, then about weekly.
 Design agreed and built 2026-11-10 (step 3; details and decisions in
 `tickets/cicd_pipeline.md`; code in `infra/terraform/orchestration.tf` and
-`lambda/crawl_flow_helper/`). First flow run pending. Start it with
-`make crawl-flow` (optional `CRAWL_LIMIT=`, `START_AT=images`).
+`lambda/crawl_flow_helper/`). First runs 2026-11-10. Start it with
+`make crawl-flow` (optional `CRAWL_LIMIT=` listing pages per URL for Level
+Shoes and Bloomingdale's, `START_AT=images`).
 
 ```mermaid
 flowchart TD
@@ -37,13 +38,14 @@ flowchart TD
     s4["4. Crawl in parallel, each with CRAWL_RUN_ID<br/>a failed crawl is caught; others go on"]
     s5["5. Wait for verification per crawl<br/>no marker 15 min after the task ends = killed"]
     s6{"6. Any crawl published?<br/>success or degraded"}
-    s7["7. dbt run (full)<br/>cache refresh 1: new prices"]
+    s7["7. dbt run (full)"]
     s8["8. Image pipeline<br/>--run-id from step 1"]
     s9{"9. Its marker?"}
     s10["10. Quality checker<br/>run by the flow, which waits"]
-    s11["11. dbt run --select<br/>silver_product_image_download_status+<br/>cache refresh 2: new images"]
-    s12["12. dbt test (full)"]
-    s13["13. Summary<br/>crawl statuses, images, dbt"]
+    s11["11. dbt run --select<br/>silver_product_image_download_status+"]
+    s12{"12. dbt test (full)<br/>passed?"}
+    s14["13. Refresh the API cache<br/>dbt_job.py refresh-cache, under the lock"]
+    s13["14. Summary<br/>crawl statuses, images, dbt"]
     s1 -->|"start_at: crawl"| s2 --> s3 --> s4 --> s5 --> s6
     s1 -.->|"start_at: images"| s8
     s6 -->|yes| s7 --> s8 --> s9
@@ -51,7 +53,9 @@ flowchart TD
     s9 -->|"_SUCCESS or _FAILED"| s10 --> s11
     s9 -.->|"none: nothing to download"| s11
     s8 -.->|"task crashed: flow failed"| s13
-    s11 --> s12 --> s13
+    s11 --> s12
+    s12 -->|yes| s14 --> s13
+    s12 -.->|"no: cache keeps the last good data; flow failed"| s13
   end
 
   dbt1["ECS: dbt task"]
@@ -96,8 +100,8 @@ flowchart TD
   gold[("Athena + Glue<br/>image status, gold, nav")]
   apicache["Lambda: API cache export"]
   s11 -->|runs| dbt3 -->|builds| gold
-  dbt2 -.->|"gold built"| apicache
-  dbt3 -.->|"gold built"| apicache
+  dbt4["ECS: dbt task<br/>refresh-cache"]
+  s14 -->|runs| dbt4 -->|invokes| apicache
 
   sns["SNS topic<br/>alerts on failed or killed"]:::planned
   inbox["Your inbox"]
@@ -115,11 +119,13 @@ active rows; a site with none isn't crawled.
 | `level-shoes` | `level` | `--urls-source s3://…/crawl-inputs/<run>/level-shoes.csv`, written by step 3 |
 | `bloomingdales` | `bloomingdales` | `--urls-source s3://…/crawl-inputs/<run>/bloomingdales.csv`, written by step 3 |
 
-**Two dbt runs, two cache refreshes:** the full run after the crawls puts new
-prices on the site (new products stay hidden until they have images: the
-website API's filter, live in dev since 2026-11-09). The second run rebuilds
-only the 4 image-dependent models, so new images arrive about a minute after
-the quality checker.
+**Two dbt runs, one cache refresh, after the tests:** the full run after the
+crawls builds new prices; the second run rebuilds only the 4 image-dependent
+models after the quality checker. The flow's dbt steps run with
+`--no-cache-refresh`, and the cache is refreshed once, only after `dbt test`
+passes (decided 2026-11-11, after the second test run served a price-0 gift
+product in dev). New products stay hidden until they have images: the website
+API's filter, live in dev since 2026-11-09.
 
 ### Edge cases (agreed 2026-11-10)
 
@@ -140,8 +146,8 @@ happened.
 | Some image downloads failed (`_FAILED`) | Rare (never yet in dev) | Checker runs anyway | Downloaded images still reach gold |
 | Image pipeline or checker task crashes | Rare | Stop and report, no second dbt run | Prices already live from step 7; the next run or an images-only start retries the images; flow **failed** |
 | `dbt run` fails | Rare | Stop and report | The previous gold and cache stay; flow **failed** |
-| Cache refresh fails (dbt task exit 77) | Rare; also if `gold_site_nav` is missing or invalid (the dev export reads it since 2026-11-10, release `20261110T071721Z-472182ed`) | That dbt step fails | The cache stays at the previous version; flow **failed** |
-| `dbt test` fails | Rare | Report | The data is already live; flow **failed** so it gets looked at |
+| Cache refresh fails (refresh step exit 77) | Rare; also if `gold_site_nav` is missing or invalid (the dev export reads it since 2026-11-10, release `20261110T071721Z-472182ed`) | The refresh step fails | The cache stays at the previous version; flow **failed** |
+| `dbt test` fails | Seen on 2026-11-10 (new categories brought unmapped labels and a price-0 gift) | No cache refresh | Gold has the new data but the API keeps the last tested version; flow **failed** so it gets looked at |
 | The laptop holds the dbt lock | When you run dbt during a flow | The dbt task waits up to 2 hours | Then fails visibly (exit 75) if still held |
 | A crawl or the flow runs too long | Rare | Time limits: 10 hours per crawl, 24 hours per flow | That crawl counts as failed; the flow **fails** |
 
@@ -213,11 +219,11 @@ failing (network) until the lock is about to expire, dbt is stopped. The cache
 refreshes whenever gold built, even if other models failed, so the cache always
 matches gold; the run still reports the failure.
 
-The flow builds gold twice, so the cache refreshes twice. After the first build,
-new products have no images yet; the website API hides products without images
-(`../price-comparison-web/tickets/hide_products_without_images.md`), so the
-first refresh only brings fresher prices and new products appear after the
-second build.
+The crawl flow passes `--no-cache-refresh` to every dbt step and refreshes the
+cache once with `dbt_job.py refresh-cache` after `dbt test` passes; that command
+takes the same lock, so the export never reads gold mid-build. Laptop `make`
+targets still refresh whenever gold builds. The website API hides products
+without images (`../price-comparison-web/tickets/hide_products_without_images.md`).
 
 ---
 
@@ -311,3 +317,4 @@ lives in AWS alone, so pausing doesn't need a commit.
 | 2026-11-10 | Step 3 design agreed: run IDs passed to crawls, registry read for every site, checker in the flow, second dbt run only the image models, images-only start | — |
 | 2026-11-10 | Edge cases table added (step 3) | — |
 | 2026-11-10 | Step 3 built and applied: state machine, helper Lambda, checker S3 trigger removed; first run pending | — |
+| 2026-11-11 | Cache refresh moved after `dbt test` (flow's dbt steps use `--no-cache-refresh`; new refresh step); `CRAWL_LIMIT` works for Level Shoes and Bloomingdale's | — |

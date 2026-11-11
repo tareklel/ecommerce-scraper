@@ -286,3 +286,25 @@ def test_summary_reads_exit_code_of_the_last_task(helper):
         "last_task": {"containers": [{"Name": "dbt", "ExitCode": 77}]},
     }}, None)
     assert "dbt run (full): exit code 77" in result["text"]
+
+
+def test_summary_reads_exit_code_from_an_ecs_task_failure(helper):
+    cause = json.dumps({
+        "StopCode": "EssentialContainerExited",
+        "StoppedReason": "Essential container in task exited",
+        "TaskArn": "arn:aws:ecs:eu-central-1:1:task/ecommerce-scraper/b9b73c57",
+        "Containers": [{"Name": "dbt", "ExitCode": 1}],
+    })
+    result = helper.handler({"action": "summary", "state": {
+        "flow": _start(helper), "failed_step": "dbt_test",
+        "failure": {"Error": "States.TaskFailed", "Cause": cause},
+    }}, None)
+    assert "FAILED at dbt test: exit code 1 (Essential container in task exited) task b9b73c57" in result["text"]
+
+
+def test_summary_keeps_a_plain_error_cause(helper):
+    result = helper.handler({"action": "summary", "state": {
+        "flow": _start(helper), "failed_step": "list_crawls",
+        "failure": {"Error": "RegistryQueryFailed", "Cause": "boom"},
+    }}, None)
+    assert "FAILED at reading the registry: RegistryQueryFailed boom" in result["text"]

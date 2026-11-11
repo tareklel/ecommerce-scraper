@@ -65,6 +65,9 @@ def is_pdp(url):
     return '.html' in url and get_gender(url) is None
 
 # extract from item
+def is_gift_with_product(x):
+    return isinstance(x, dict) and x.get('productType') == 'gift-with-product'
+
 def get_url_from_item(x):
     if isinstance(x, dict) and x.get('action', {}).get('url'):
         return x['action']['url']

@@ -39,9 +39,10 @@ locals {
     }
   }
 
-  # dbt commands run through scripts/dbt_job.py in the image (lock, dbt,
-  # cache refresh when gold builds).
-  dbt_prefix = ["--target", "dev", "exec", "--", "dbt"]
+  # dbt commands run through scripts/dbt_job.py in the image (lock, dbt).
+  # --no-cache-refresh: the API cache is refreshed only by the refresh_cache
+  # step, after dbt test passes, so data failing a test never reaches the API.
+  dbt_prefix = ["--target", "dev", "exec", "--no-cache-refresh", "--", "dbt"]
   dbt_flags  = ["--project-dir", "dbt", "--profiles-dir", "dbt", "--target", "dev"]
 
   lambda_retry = [{
@@ -107,6 +108,13 @@ locals {
       network         = local.dbt_network
       override        = { Name = "dbt", Command = concat(local.dbt_prefix, ["test"], local.dbt_flags) }
       timeout         = 14400
+      next            = "Run_refresh_cache"
+    }
+    refresh_cache = {
+      task_definition = local.dbt_task_definition_arn
+      network         = local.dbt_network
+      override        = { Name = "dbt", Command = ["--target", "dev", "refresh-cache"] }
+      timeout         = 10800 # includes up to 2 hours waiting for the dbt lock
       next            = "Summary"
     }
   }

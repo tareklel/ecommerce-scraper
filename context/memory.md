@@ -1,5 +1,11 @@
 # Memory
 
+## 2026-11-11 - Cache refresh after dbt test; gift skip; --limit; readable failures
+- Second flow run (`300a4856`): all three crawls published; dbt test failed 3 of 46 (Arabic brands, fixed in scraper-pipeline `511e18e`; the price-0 Level Shoes gift, fixed by gold requiring `price > 0` in `31ba452`).
+- Level Shoes skips `productType: gift-with-product` listing items. `--limit` now caps listing pages per seed URL for Level Shoes and Bloomingdale's (Ounass still ignores it).
+- Flow: every dbt step runs `exec --no-cache-refresh`; a new `Run_refresh_cache` step (`dbt_job.py refresh-cache`, scraper-pipeline) runs only after `dbt test` passes, so a failing test keeps the last good cache. Summary shows "exit code N (reason) task <id>" instead of raw ECS JSON.
+- 524 tests pass. Docs (`cicd_architecture.md`), ticket step 3 updated. Next: dbt image with the new wrapper, targeted apply, `CRAWL_LIMIT=1` run, then a full run.
+
 ## 2026-11-10 - First crawl flow run; Level Shoes and Bloomingdale's fixes
 - First `make crawl-flow CRAWL_LIMIT=20` (after pushing `2bfd26c`, image `sha-2bfd26c`): every step ran, flow succeeded with Ounass published (6,454 rows); dbt 24/24, images, quality checker, images+ 4/4, test 46/46; API cache refreshed twice.
 - Level Shoes failed: new products' `analytics` block has only `constructor.variationId`, so `get_id_from_item` raised KeyError at start. `level_rules.py` listing getters now return None for missing keys (parse_pdp fills them); id falls back to `vpn`, brand to `brandName` (equal to the analytics values where both exist).

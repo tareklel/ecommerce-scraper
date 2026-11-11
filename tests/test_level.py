@@ -92,6 +92,38 @@ def test_handle_plp_url_processes_products(monkeypatch):
     assert seen == [{"id": 1}, {"id": 2}, {"id": 3}]
 
 
+def _run_plp(monkeypatch, spider, payloads):
+    seen, fetched = [], []
+
+    def fake_fetch(url, page_number=0):
+        fetched.append(page_number)
+        return payloads[page_number]
+
+    monkeypatch.setattr(spider, "_fetch_plp_via_api", fake_fetch)
+    monkeypatch.setattr(spider, "_handle_item", lambda item: seen.append(item) or [])
+    list(spider.handle_plp_url("https://www.levelshoes.com/women/bags"))
+    return seen, fetched
+
+
+def test_handle_plp_url_skips_gift_with_product(monkeypatch):
+    gift = {"id": 2, "productType": "gift-with-product"}
+    seen, _ = _run_plp(monkeypatch, LevelSpider(), [
+        {"products": [{"id": 1, "productType": "normal-sku"}, gift]},
+        {"products": []},
+    ])
+    assert seen == [{"id": 1, "productType": "normal-sku"}]
+
+
+def test_handle_plp_url_stops_at_limit_pages(monkeypatch):
+    seen, fetched = _run_plp(monkeypatch, LevelSpider(limit="1"), [
+        {"products": [{"id": 1}]},
+        {"products": [{"id": 2}]},
+        {"products": []},
+    ])
+    assert fetched == [0]
+    assert seen == [{"id": 1}]
+
+
 def test_handle_seed_url_routes_plp(monkeypatch):
     spider = LevelSpider()
     called = {"plp": False}

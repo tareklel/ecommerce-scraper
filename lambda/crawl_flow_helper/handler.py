@@ -273,7 +273,31 @@ STEP_NAMES = {
     "quality_checker": "quality checker",
     "dbt_run_images": "dbt run (image models)",
     "dbt_test": "dbt test",
+    "refresh_cache": "API cache refresh",
 }
+
+
+def _describe_error(failure):
+    """Turn a caught Step Functions error into one line.
+
+    A runTask.sync failure carries the whole stopped ECS task as JSON in
+    Cause; show its exit code and stop reason instead of the raw JSON.
+    """
+    cause = failure.get("Cause") or ""
+    try:
+        task = json.loads(cause)
+    except (TypeError, ValueError):
+        task = None
+    if isinstance(task, dict) and isinstance(task.get("Containers"), list):
+        container = task["Containers"][0] if task["Containers"] else {}
+        parts = [f"exit code {container.get('ExitCode', 'unknown')}"]
+        reason = container.get("Reason") or task.get("StoppedReason")
+        if reason:
+            parts.append(f"({reason})")
+        if task.get("TaskArn"):
+            parts.append(f"task {task['TaskArn'].rsplit('/', 1)[-1]}")
+        return " ".join(parts)
+    return f"{failure.get('Error')} {str(cause)[:500]}".strip()
 
 
 def summary(event):
@@ -306,7 +330,7 @@ def summary(event):
         status = "failed"
         detail = STEP_NAMES.get(failed_step, failed_step)
         if isinstance(failure, dict) and failure.get("Error"):
-            detail += f": {failure.get('Error')} {str(failure.get('Cause', ''))[:500]}"
+            detail += f": {_describe_error(failure)}"
         elif isinstance(failure, dict) and failure.get("exit_code") is not None:
             detail += f": exit code {failure['exit_code']}"
         else:

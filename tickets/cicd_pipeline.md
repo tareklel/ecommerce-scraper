@@ -103,9 +103,32 @@ price-comparison-web have no `.github/workflows`.
     - Gap seen: when a crawl writes no rows the crawler reports `quality` and
       points at a `quality_report.json` that doesn't exist; the real cause was
       only in the log.
-  - **Next:** push the fixes (redeploys the crawler image), rerun
-    `make crawl-flow CRAWL_LIMIT=20` to see all three sites publish, then a full
-    run. Diagram: `docs/cicd_architecture.md`, "What happens
+  - **Second test run 2026-11-10** (execution `300a4856-…`, image
+    `sha-eb80d54`): all three crawls **success** (Bloomingdale's 117 rows with
+    categories; Level Shoes a full 4,818-PDP crawl in 72 min because `--limit`
+    was ignored); dbt run, images, quality checker, images+ run passed; flow
+    **failed** at `dbt test` (3 of 46):
+    - Bloomingdale's unisex branch (`Unisex › Bags › Tote Bags`, one Bottega
+      Veneta product) not in the category map, and Arabic brand labels from the
+      site's own spelling because `dim_map_brand` has only English spellings for
+      Level Shoes and Bloomingdale's. Both scraper-pipeline: brand fix (b)
+      approved and built by that session 2026-11-11 (i18n takes brand,
+      category and subcategory from the product dim); unisex → women in
+      `../scraper-pipeline/ticket/bloomingdales-unisex-mapping.md`; 16 missing
+      Level Shoes brands (115 products dropped from gold) in
+      `../scraper-pipeline/ticket/brand-map-gaps.md`.
+    - A Level Shoes `gift-with-product` item at price 0: the crawler now skips
+      them.
+    - Found: the cache was refreshed before the tests, so the price-0 gift was
+      served in dev.
+  - **Built 2026-11-11 (user-approved):** cache refresh only after `dbt test`
+    passes (`dbt_job.py exec --no-cache-refresh` for every flow dbt step, new
+    `refresh-cache` command and `Run_refresh_cache` step); `--limit` caps
+    listing pages per URL for Level Shoes and Bloomingdale's (Ounass still
+    ignores it; changing it means touching PLP-efficient); the summary shows an
+    ECS task's exit code and stop reason instead of raw JSON.
+  - **Next:** push both repos (crawler and dbt images), targeted apply of the
+    state machine, a short run (`CRAWL_LIMIT=1`), then a full run. Diagram: `docs/cicd_architecture.md`, "What happens
   on each run". Includes the registry reader for every site (formerly part of
   step 4).
   - **Steps:**

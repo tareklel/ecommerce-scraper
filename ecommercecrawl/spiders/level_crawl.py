@@ -79,11 +79,18 @@ class LevelSpider(MasterCrawl, scrapy.Spider):
     def handle_plp_url(self, url):
         page = 0
         while True:
+            # --limit caps listing pages per seed URL (same meaning as Farfetch).
+            if self.limit and page >= int(self.limit):
+                break
             payload = self._fetch_plp_via_api(url, page)
             items = rules.get_products(payload) or []
             if not items:
                 break
             for item in items:
+                if rules.is_gift_with_product(item):
+                    # Free gift bundled with a purchase, listed at price 0; not for sale.
+                    self.logger.info(f"Skipping gift-with-product item {rules.get_url_from_item(item)}")
+                    continue
                 yield from self._handle_item(item)
             page +=1
         

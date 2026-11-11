@@ -24,6 +24,11 @@ class BloomingdalesSpider(MasterCrawl, scrapy.Spider):
         elif rules.is_pdp(url):
             yield scrapy.Request(url, callback=self.parse_pdp)
 
+    def _may_fetch_page(self, page):
+        # --limit caps listing pages per seed URL (same meaning as Farfetch);
+        # page 1 is the PLP itself, later pages are UpdateGrid batches.
+        return not self.limit or page <= int(self.limit)
+
     def parse_plp(self, response):
         """
         Harvest PDP URLs from a category PLP page.
@@ -32,13 +37,13 @@ class BloomingdalesSpider(MasterCrawl, scrapy.Spider):
         for url in rules.get_pdp_urls(response):
             yield scrapy.Request(url, callback=self.parse_pdp)
 
-        if rules.is_first_plp_page(response.url):
+        if rules.is_first_plp_page(response.url) and self._may_fetch_page(2):
             cgid = rules.get_cgid(response.text)
             if cgid:
                 yield scrapy.Request(
                     rules.get_update_grid_url(response.url, cgid, start=48),
                     callback=self.parse_plp_page,
-                    meta={'cgid': cgid, 'start': 48, 'base_url': response.url},
+                    meta={'cgid': cgid, 'start': 48, 'base_url': response.url, 'page': 2},
                 )
             else:
                 self.logger.warning(f'No cgid found on PLP: {response.url}')
@@ -55,11 +60,14 @@ class BloomingdalesSpider(MasterCrawl, scrapy.Spider):
         for url in pdp_urls:
             yield scrapy.Request(url, callback=self.parse_pdp)
 
+        page = response.meta.get('page', 2) + 1
+        if not self._may_fetch_page(page):
+            return
         start = response.meta['start'] + constants.UPDATE_GRID_PAGE_SIZE
         yield scrapy.Request(
             rules.get_update_grid_url(response.meta['base_url'], response.meta['cgid'], start),
             callback=self.parse_plp_page,
-            meta={**response.meta, 'start': start},
+            meta={**response.meta, 'start': start, 'page': page},
         )
 
     def parse_pdp(self, response):
