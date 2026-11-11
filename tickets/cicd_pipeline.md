@@ -70,8 +70,8 @@ price-comparison-web have no `.github/workflows`.
     `../price-comparison-web/tickets/hide_products_without_images.md`. Build it
     before step 3, so the refresh after the flow's first gold build doesn't show
     new products without pictures.
-- [ ] **3. Build the state machine (dev, Terraform). Built and applied
-  2026-11-10; first test run passed end to end; full run pending.**
+- [x] **3. Build the state machine (dev, Terraform). Done 2026-11-11:** full
+  run green end to end (execution `929c20b5-…`, below).
   - **Built:** `CRAWL_RUN_ID` in `ecommercecrawl/spiders/mastercrawl.py` (+ tests);
     `lambda/crawl_flow_helper/` (+ `tests/test_crawl_flow_helper.py`, 21 tests);
     `infra/terraform/orchestration.tf` (state machine
@@ -127,8 +127,20 @@ price-comparison-web have no `.github/workflows`.
     listing pages per URL for Level Shoes and Bloomingdale's (Ounass still
     ignores it; changing it means touching PLP-efficient); the summary shows an
     ECS task's exit code and stop reason instead of raw JSON.
-  - **Next:** push both repos (crawler and dbt images), targeted apply of the
-    state machine, a short run (`CRAWL_LIMIT=1`), then a full run. Diagram: `docs/cicd_architecture.md`, "What happens
+  - **Deployed 2026-11-11:** ecommerce-scraper `d7ce530`, scraper-pipeline
+    `882fe8f` (wrapper); targeted apply of the helper Lambda and state machine
+    (0 added, 2 changed). Short run (`CRAWL_LIMIT=1`, `c413745c-…`): 3 crawls
+    success in 3-10 min, failed at `dbt test` on the unisex Bottega Veneta bag
+    only, and the cache was not refreshed, as designed. scraper-pipeline then
+    added the unisex → women rows and brand map fixes (`d043b14`; products with
+    no brand 131 → 1).
+  - **Full run 2026-11-11** (`make crawl-flow`, execution `929c20b5-…`, 86
+    min): flow **succeeded**. Bloomingdale's 3 min, Ounass 7 min, Level Shoes
+    73 min (4 `gift-with-product` items skipped), all success; dbt run, images
+    `_SUCCESS`, quality checker, images+ run passed; `dbt test` 48 pass, 1 warn
+    (`test_silver_product_fact_nonpositive_price`: 3 rows gold already leaves
+    out), 0 errors; then `Run_refresh_cache` refreshed the dev API cache.
+  - Diagram: `docs/cicd_architecture.md`, "What happens
   on each run". Includes the registry reader for every site (formerly part of
   step 4).
   - **Steps:**
@@ -150,8 +162,7 @@ price-comparison-web have no `.github/workflows`.
        marker 15 minutes after the task ends = `killed`.
     6. Any crawl published (success or degraded)? If none: summary, flow
        failed.
-    7. `dbt run` (full). Cache refresh 1: new prices; new products stay hidden
-       until they have images (website API filter, live in dev).
+    7. `dbt run` (full), no cache refresh (changed 2026-11-11).
     8. Image pipeline with `--run-id` from step 1. If its task crashes: summary,
        flow failed (step 7 already published prices; the next run or an
        images-only start retries the images).
@@ -160,9 +171,10 @@ price-comparison-web have no `.github/workflows`.
         runs on `_SUCCESS` and `_FAILED` (a partly failed download still has
         images to validate; today's trigger skipped those).
     11. `dbt run --select silver_product_image_download_status+` (4 models:
-        image status, image gold, serving gold, `gold_site_nav`). Cache
-        refresh 2: new images.
-    12. `dbt test` (full). A failure is reported; the data is already live.
+        image status, image gold, serving gold, `gold_site_nav`), no cache
+        refresh.
+    12. `dbt test` (full). A failure is reported and the cache keeps the last
+        good data; a pass goes on to the cache refresh (13, added 2026-11-11).
     13. Summary (helper Lambda): each crawl's status and degradations, images
         downloaded and validated, dbt results. Alerts come in step 5.
   - **Images-only start:** input `{"start_at": "images"}` runs steps 1 and

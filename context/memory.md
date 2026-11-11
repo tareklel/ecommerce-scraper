@@ -1,5 +1,10 @@
 # Memory
 
+## 2026-11-11 - CI/CD step 3 done: first fully green crawl flow
+- Deployed `d7ce530` and scraper-pipeline `882fe8f`; targeted apply of the helper Lambda and state machine (0 added, 2 changed, no IAM).
+- Short run `c413745c` (`CRAWL_LIMIT=1`) failed `dbt test` only on the unisex Bloomingdale's bag and correctly skipped the cache refresh; scraper-pipeline fixed it (`d043b14`, unisex → women, brand map fixes).
+- Full run `929c20b5` succeeded in 86 min: 3 crawls success (Level Shoes 73 min, 4 gifts skipped), dbt test 48 pass / 1 warn / 0 errors, cache refreshed after the tests. Ticket step 3 ticked; next is step 4.
+
 ## 2026-11-11 - Cache refresh after dbt test; gift skip; --limit; readable failures
 - Second flow run (`300a4856`): all three crawls published; dbt test failed 3 of 46 (Arabic brands, fixed in scraper-pipeline `511e18e`; the price-0 Level Shoes gift, fixed by gold requiring `price > 0` in `31ba452`).
 - Level Shoes skips `productType: gift-with-product` listing items. `--limit` now caps listing pages per seed URL for Level Shoes and Bloomingdale's (Ounass still ignores it).
