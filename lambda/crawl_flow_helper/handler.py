@@ -97,6 +97,12 @@ def start(event):
     start_at = flow_input.get("start_at", "crawl")
     if start_at not in ("crawl", "images"):
         raise ValueError(f'start_at must be "crawl" or "images", got {start_at!r}')
+    # Always a string, so the state machine's Choice can read it.
+    stop_after = flow_input.get("stop_after") or "none"
+    if stop_after not in ("none", "crawls"):
+        raise ValueError(f'stop_after must be "crawls" or unset, got {stop_after!r}')
+    if stop_after == "crawls" and start_at != "crawl":
+        raise ValueError('stop_after "crawls" needs start_at "crawl"')
     limit = flow_input.get("limit")
     if limit is not None and (not isinstance(limit, int) or limit < 1):
         raise ValueError(f"limit must be a positive whole number, got {limit!r}")
@@ -106,6 +112,7 @@ def start(event):
         "flow_id": execution_arn.rsplit(":", 1)[-1],
         "execution_arn": execution_arn,
         "start_at": start_at,
+        "stop_after": stop_after,
         "limit": limit,
         "started_at": now.isoformat(),
         "image_run_id": _run_id(now),
@@ -378,6 +385,10 @@ def summary(event):
         lines.append("FAILED: no crawl published, so dbt and images were skipped")
         lines.append("API cache not refreshed: the API keeps the last tested data")
         subject = "FAILED: no crawl published"
+    elif flow.get("stop_after") == "crawls":
+        status = "succeeded"
+        lines.append("Stopped after the crawls (stop_after=crawls): no dbt, images or cache refresh")
+        subject = f"SUCCEEDED (crawls only): {gate_result.get('published', 0)}/{len(crawls)} crawls published"
     else:
         status = "succeeded"
         lines.append("API cache refreshed")

@@ -1,5 +1,10 @@
 # Memory
 
+## 2026-11-13 - Crawls-only test runs; step 5 done
+- `make crawl-flow CRAWL_LIMIT=1 STOP_AFTER=crawls` (flow input `stop_after: "crawls"`, always a string from the helper's start so the Choice can read it): the `AnyPublished` Choice goes straight to `Summary`; subject "SUCCEEDED (crawls only): n/m crawls published". A short run without it takes about 20 min, mostly dbt and ECS start-ups. Targeted apply (helper + state machine, 0 added, 2 changed). 5 new tests (553 pass).
+- `CRAWL_LIMIT=1` run `34994259` on the 5b crawler image succeeded (3/3, cache refreshed, email sent): step 5 done.
+- Ticket step 11 now points at `../price-comparison-web/tickets/cicd.md` (website CI/CD planned by that session with the user).
+
 ## 2026-11-13 - CI/CD step 5b: crawler crashes reported as `crash`
 - `PostCrawlPipeline` attaches `FirstErrorRecorder` (root log handler, ERROR with exc_info) from spider_opened to spider_closed; the first error goes into manifest `first_error` (`error`, `location`, `logged_as`). Checked against a real Scrapy 2.13 crawl failing in `start_requests`.
 - New failure reason `crash` (crawler `crawler_run_status` and verifier `FAILURE_REASONS`, identical texts): no rows, no blocking, error recorded; order aborted, startup_check, access, crash, quality. Verifier writes `_FAIL_CRASH` with `first_error`; flow helper shows `crash: <error> (<file:line>)` in the summary/email. Runs with rows are unchanged.

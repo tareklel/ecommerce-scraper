@@ -238,7 +238,8 @@ price-comparison-web have no `.github/workflows`.
   queries filter on `site = 'ounass'` and `is_active = true`. As a backstop, the
   crawler's G1 skips any row for another site, though more than 25% bad rows
   would stop the run.
-- [ ] **5. Add run alerts.** See "Crawl run alerting" below: one summary per
+- [x] **5. Add run alerts. Done 2026-11-13** (5a email, 5b `crash`; checked
+  by `CRAWL_LIMIT=1` run `34994259-…`). See "Crawl run alerting" below: one summary per
   run, and an alert on `failed` / `killed`. Report access problems apart from
   content problems.
   - **5a built and applied 2026-11-13 (user-approved, incl. IAM):** a `Notify`
@@ -265,6 +266,11 @@ price-comparison-web have no `.github/workflows`.
     flow summary shows e.g. `failed (crash: KeyError: 'item_id'
     (level_rules.py:31))`. A run with rows and errors is unchanged (the gate
     decides). `docs/crawl_run_status.md` updated. 9 new tests (548 pass).
+  - **Crawls-only test runs (user, 2026-11-13):** `make crawl-flow
+    CRAWL_LIMIT=1 STOP_AFTER=crawls` (flow input `stop_after: "crawls"`) stops
+    after the crawls and their checks, then sends the summary. For testing
+    crawler changes in about 5–10 minutes; a full short run takes about 20,
+    mostly dbt and task start-ups.
 - [ ] **6. Add the schedule: daily for 7 days, then weekly.**
   - Config lives in this repo's Terraform: a new
     `infra/terraform/orchestration.tf` (schedule and state machine), with
@@ -292,11 +298,14 @@ price-comparison-web have no `.github/workflows`.
 - [ ] **9. Nightly Terraform drift check.**
 - [ ] **10. Replace `tests/fixtures/bloomingdales_pdp.html`** with a small
   synthetic fixture, so CI covers Bloomingdale's `extract_product`.
-- [ ] **11. Discuss CI/CD for the website (web UI), after everything above is
-  done.** Not planned yet, and it needs its own discussion first: expect it to
-  raise its own problems. Don't start it from the "Rough target" row below
-  without that discussion. Its `infra/` also has a local `terraform.tfstate`
-  (seen 2026-11-03), the same risk as step 1.
+- [ ] **11. CI/CD for the website (web UI).** Planned 2026-11-13 with the
+  user in the website repo: `../price-comparison-web/tickets/cicd.md` (not
+  built). Same rules as here (`main` deploys dev, prod is an approved
+  promotion of the same `sha-` artifacts, OIDC roles, targeted Terraform with
+  S3 state and lock files, protected `prod-` tags); differences: a manual
+  approval and a screenshot review of dev before promoting, and API and site
+  promoted together. Its step 1 moves `infra/`'s local `terraform.tfstate`
+  (seen 2026-11-03) to S3, as step 1 did here.
 
 ---
 

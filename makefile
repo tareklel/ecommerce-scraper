@@ -373,17 +373,19 @@ ecs-run-quality-checker:
 # make crawl-flow
 # make crawl-flow CRAWL_LIMIT=20
 # make crawl-flow START_AT=images     (images and dbt only, no crawl)
+# make crawl-flow CRAWL_LIMIT=1 STOP_AFTER=crawls   (crawls only: test crawler changes)
 # A crawl start first checks that the dbt image has the latest pushed registry
 # (scripts/check_crawl_registry.py); SKIP_REGISTRY_CHECK=1 skips that.
 CRAWL_LIMIT ?=
 START_AT ?= crawl
+STOP_AFTER ?=
 SKIP_REGISTRY_CHECK ?=
 crawl-flow:
 	@if [ "$(START_AT)" = "crawl" ] && [ -z "$(SKIP_REGISTRY_CHECK)" ]; then \
 		AWS_PROFILE=$(AWS_PROFILE) AWS_REGION=$(AWS_REGION) python3 scripts/check_crawl_registry.py || exit 1; \
 	fi
 	@ARN=$$(cd $(TF_DIR) && AWS_PROFILE=$(AWS_PROFILE) terraform output -raw crawl_flow_state_machine_arn); \
-	INPUT=$$(START_AT="$(START_AT)" CRAWL_LIMIT="$(CRAWL_LIMIT)" python3 -c 'import json,os; d={"start_at": os.environ["START_AT"]}; l=os.environ["CRAWL_LIMIT"]; d.update({"limit": int(l)} if l else {}); print(json.dumps(d))'); \
+	INPUT=$$(START_AT="$(START_AT)" CRAWL_LIMIT="$(CRAWL_LIMIT)" STOP_AFTER="$(STOP_AFTER)" python3 -c 'import json,os; d={"start_at": os.environ["START_AT"]}; l=os.environ["CRAWL_LIMIT"]; d.update({"limit": int(l)} if l else {}); d.update({"stop_after": os.environ["STOP_AFTER"]} if os.environ["STOP_AFTER"] else {}); print(json.dumps(d))'); \
 	echo "Starting $$ARN with $$INPUT"; \
 	EXEC=$$(AWS_PROFILE=$(AWS_PROFILE) aws stepfunctions start-execution --region $(AWS_REGION) \
 		--state-machine-arn $$ARN --input "$$INPUT" --query executionArn --output text) || exit 1; \

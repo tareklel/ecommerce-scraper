@@ -390,3 +390,35 @@ def test_check_crawl_crash_marker_carries_the_error_into_the_summary(helper):
         "gate": {"published": 0},
     }}, None)["text"]
     assert "- level-shoes r: failed (crash: KeyError: 'item_id' (level_rules.py:31))" in text
+
+
+# -- stop_after = crawls ----------------------------------------------------
+
+def test_start_defaults_stop_after_to_none_so_the_choice_can_read_it(helper):
+    assert _start(helper)["stop_after"] == "none"
+    assert _start(helper, {"stop_after": "crawls"})["stop_after"] == "crawls"
+
+
+@pytest.mark.parametrize("flow_input", [{"stop_after": "dbt"}, {"start_at": "images", "stop_after": "crawls"}])
+def test_start_rejects_bad_stop_after(helper, flow_input):
+    with pytest.raises(ValueError):
+        _start(helper, flow_input)
+
+
+def test_summary_for_a_crawls_only_run_says_nothing_else_ran(helper):
+    result = helper.handler({"action": "summary", "state": {
+        "flow": _start(helper, {"stop_after": "crawls"}), "crawls": [_crawl("success"), _crawl("failed")],
+        "gate": {"published": 1},
+    }}, None)
+    assert result["status"] == "succeeded"
+    assert result["subject"] == "Crawl flow dev SUCCEEDED (crawls only): 1/2 crawls published"
+    assert "no dbt, images or cache refresh" in result["text"]
+    assert "API cache refreshed" not in result["text"]
+
+
+def test_crawls_only_run_with_nothing_published_still_fails(helper):
+    result = helper.handler({"action": "summary", "state": {
+        "flow": _start(helper, {"stop_after": "crawls"}), "crawls": [_crawl("failed")],
+        "gate": {"published": 0},
+    }}, None)
+    assert result["status"] == "failed"

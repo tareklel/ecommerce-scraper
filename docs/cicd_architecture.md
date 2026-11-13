@@ -22,7 +22,11 @@ Design agreed and built 2026-11-10 (step 3; details and decisions in
 `tickets/cicd_pipeline.md`; code in `infra/terraform/orchestration.tf` and
 `lambda/crawl_flow_helper/`). First runs 2026-11-10. Start it with
 `make crawl-flow` (optional `CRAWL_LIMIT=` listing pages per URL for Level
-Shoes and Bloomingdale's, `START_AT=images`).
+Shoes and Bloomingdale's, `START_AT=images`, `STOP_AFTER=crawls`). To test a
+crawler change, `make crawl-flow CRAWL_LIMIT=1 STOP_AFTER=crawls` runs only
+the crawls and their checks, then the summary email: about 5–10 minutes, no
+dbt, images or cache refresh. A short run without `STOP_AFTER` takes about 20
+minutes, mostly dbt and ECS task start-ups (Ounass ignores the limit).
 
 **Before a crawl start** (2026-11-13), `make crawl-flow` runs
 `scripts/check_crawl_registry.py`: it refuses to start when the dbt image
@@ -331,3 +335,4 @@ lives in AWS alone, so pausing doesn't need a commit.
 | 2026-11-13 | Step 4: `make crawl-flow` checks the dbt image has the latest pushed registry and prints the active sites | — |
 | 2026-11-13 | Step 5a: summary emailed after every run (SNS topic, `Notify` state; subject, cache line, blocked-by-site section, console link). The address lives only in the gitignored `infra/terraform/local.auto.tfvars` | — |
 | 2026-11-13 | Step 5b: a crawl that raised and wrote nothing is `crash` (marker `_FAIL_CRASH`, manifest `first_error`), shown with its error in the summary email | — |
+| 2026-11-13 | `STOP_AFTER=crawls`: a crawls-only test run (flow input `stop_after`) | — |

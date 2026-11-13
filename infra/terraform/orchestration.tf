@@ -5,7 +5,8 @@
 # crawls in parallel (each waits for verification) → dbt run (full) → image
 # pipeline → quality checker → dbt run (image models) → dbt test → cache
 # refresh → summary → email (SNS).
-# {"start_at": "images"} skips straight to the image pipeline.
+# {"start_at": "images"} skips straight to the image pipeline;
+# {"stop_after": "crawls"} stops after the crawls and their checks.
 #
 # Design, decisions and edge cases: tickets/cicd_pipeline.md (step 3) and
 # docs/cicd_architecture.md ("What happens on each run", "Edge cases").
@@ -295,9 +296,14 @@ locals {
         ResultPath     = "$.gate"
         Next           = "AnyPublished"
       })
+      # stop_after = "crawls" (test runs of crawler changes) ends here: no dbt,
+      # images or cache refresh.
       AnyPublished = {
-        Type    = "Choice"
-        Choices = [{ Variable = "$.gate.published", NumericGreaterThan = 0, Next = "Run_dbt_run" }]
+        Type = "Choice"
+        Choices = [
+          { Variable = "$.flow.stop_after", StringEquals = "crawls", Next = "Summary" },
+          { Variable = "$.gate.published", NumericGreaterThan = 0, Next = "Run_dbt_run" }
+        ]
         Default = "Summary"
       }
       FindImageMarker = merge(local.helper_invoke, {
