@@ -330,3 +330,4 @@ lives in AWS alone, so pausing doesn't need a commit.
 | 2026-11-11 | Cache refresh moved after `dbt test` (flow's dbt steps use `--no-cache-refresh`; new refresh step); `CRAWL_LIMIT` works for Level Shoes and Bloomingdale's | — |
 | 2026-11-13 | Step 4: `make crawl-flow` checks the dbt image has the latest pushed registry and prints the active sites | — |
 | 2026-11-13 | Step 5a: summary emailed after every run (SNS topic, `Notify` state; subject, cache line, blocked-by-site section, console link). The address lives only in the gitignored `infra/terraform/local.auto.tfvars` | — |
+| 2026-11-13 | Step 5b: a crawl that raised and wrote nothing is `crash` (marker `_FAIL_CRASH`, manifest `first_error`), shown with its error in the summary email | — |

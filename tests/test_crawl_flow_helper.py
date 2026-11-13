@@ -377,3 +377,16 @@ def test_summary_subject_is_one_line_of_at_most_100_characters(helper):
         "flow": _start(helper), "failed_step": "x" * 200, "failure": {"exit_code": 1},
     }}, None)
     assert len(result["subject"]) == 100 and "\n" not in result["subject"]
+
+
+def test_check_crawl_crash_marker_carries_the_error_into_the_summary(helper):
+    helper.s3.objects[MARKERS + "_FAIL_CRASH"] = json.dumps({
+        "failure_reason": "crash", "first_error": "KeyError: 'item_id' (level_rules.py:31)",
+    }).encode()
+    result = _check(helper)
+    assert result["failure_reasons"] == ["crash: KeyError: 'item_id' (level_rules.py:31)"]
+    text = helper.handler({"action": "summary", "state": {
+        "flow": _start(helper), "crawls": [{"site": "level-shoes", "run_id": "r", "result": result}],
+        "gate": {"published": 0},
+    }}, None)["text"]
+    assert "- level-shoes r: failed (crash: KeyError: 'item_id' (level_rules.py:31))" in text

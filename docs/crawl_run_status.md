@@ -35,7 +35,8 @@ applies. The first in this order is the run's `failure_reason`.
 | `_FAIL_ABORTED` | `aborted` | The crawl closed for any reason other than finishing (`exit_reason` ≠ `finished`) | Ctrl+C, ECS task stopped | Re-run. If it recurs, check why the task was stopped |
 | `_FAIL_STARTUP_CHECK` | `startup_check` | A PLP-efficient run stopped before any request | broken registry, export Lambda failed | `make preflight-ounass-plp-efficient` lists every failed check |
 | `_FAIL_ACCESS` | `access` | **No rows written**, and requests were given up on blocking after every retry round | 2026-10-20 Acler run: Saudi Zyte ban | Manifest `access` block shows which hostnames and errors; check Zyte routing (`CRAWLER_API_ZYTE_GEOLOCATION_BY_HOST`); re-run later |
-| `_FAIL_QUALITY` | `quality` | The quality gate failed, or nothing was written for a reason **other than** blocking | 2026-10-20 Burberry run: URL 404, zero rows | `metadata/quality_report.json`; check the seed URL still exists and the page format |
+| `_FAIL_CRASH` | `crash` | **No rows written**, no blocking, and the crawler logged an error with an exception (a failing callback or `start()`). The first one is in the manifest's `first_error` (`error`, `location`, `logged_as`) and in the marker's `first_error` (added 2026-11-13) | 2026-11-10 Level Shoes run: `KeyError: 'item_id'` in `level_rules.py` | Read the error: usually a site change the rules don't handle. Fix the rules, add a test, re-run |
+| `_FAIL_QUALITY` | `quality` | The quality gate failed, or nothing was written for a reason **other than** blocking or an error | 2026-10-20 Burberry run: URL 404, zero rows | `metadata/quality_report.json`; check the seed URL still exists and the page format |
 | `_FAILED` | `verification` | The **file check** failed: data file missing, hash or row-count mismatch, unreadable manifest, or the copy into `crawls/` failed | upload cut off halfway | Verifier Lambda logs; re-run |
 
 **Failures explain themselves** (2026-10-22). Every failure marker's JSON,
@@ -60,13 +61,17 @@ Notes:
 - `_FAILED` is the oldest marker and only means "the file didn't verify". It
   would read better as `_FAIL_VERIFICATION`; it keeps its name because older
   runs carry it.
-- A startup-stopped or fully blocked run has no data file by design, so it
-  gets only its own marker, not `_FAIL_QUALITY` / `_FAILED` as well.
+- A startup-stopped, fully blocked or crashed run has no data file by
+  design, so it gets only its own marker, not `_FAIL_QUALITY` / `_FAILED` as
+  well.
+- A run that wrote rows and also logged errors is not a crash: the quality
+  gate decides as usual. Its manifest still records `first_error`.
 - Causes can stack: an aborted run whose file is also broken gets
   `_FAIL_ABORTED` + `_FAILED`, `failure_reason aborted`.
-- Nothing reads the failure markers automatically. Only `_SUCCESS` triggers
-  anything (it registers the data partition). Alerting is planned in
-  `tickets/cicd_pipeline.md`.
+- Only `_SUCCESS` triggers anything (it registers the data partition). The
+  crawl flow (`tickets/cicd_pipeline.md`, step 3) reads every marker after a
+  crawl and its emailed summary shows each `failure_reason`, with the error
+  for `crash`.
 
 ## Where a run's data and record go
 

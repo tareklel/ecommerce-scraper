@@ -221,7 +221,10 @@ def check_crawl(event):
         result["run_status"] = "failed"
         for name in failures:
             body = _read_json(markers[name])
-            result["failure_reasons"].append(body.get("failure_reason") or name)
+            reason = body.get("failure_reason") or name
+            if reason == "crash" and body.get("first_error"):
+                reason = f"crash: {body['first_error']}"
+            result["failure_reasons"].append(reason)
         return result
     if "_SUCCESS" in markers:
         manifest = _read_json(f"{MANIFESTS_PREFIX}{site}/{dt}/{run_id}/data.json")

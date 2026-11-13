@@ -358,3 +358,34 @@ def test_failure_marker_and_manifest_explain_themselves():
 def test_successful_run_has_no_failure_explanation():
     _, _, _, inner, _ = _run(_new_layout_fixture())
     assert inner["failure_explanation"] is None
+
+
+CRASH_ERROR = {"error": "KeyError: 'item_id'", "location": "level_rules.py:31",
+               "logged_as": "Error while processing requests from start()"}
+
+
+def test_run_that_raised_and_wrote_nothing_fails_as_crash_with_the_error():
+    # 2026-11-10 Level Shoes run: KeyError in start(), 0 rows, no file.
+    bucket = "test-bucket"
+    manifest_key = "bronze/dev/crawls/metadata/ounass/2026-03-03/run123/manifest.json"
+    manifest = {"exit_reason": "finished", "artifacts": {"rows": 0}, "quality_gate": None,
+                "access": {"hosts": {}}, "first_error": CRASH_ERROR}
+    _, fake_s3, _, inner, _ = _run(
+        (bucket, manifest_key, {(bucket, manifest_key): json.dumps(manifest).encode("utf-8")}))
+    markers = [k for k in _put_keys(fake_s3) if "/markers/" in k]
+    assert [m.rsplit("/", 1)[-1] for m in markers] == ["_FAIL_CRASH"]
+    marker = json.loads(fake_s3.objects[(bucket, markers[0])])
+    assert marker["failure_reason"] == "crash"
+    assert marker["first_error"] == "KeyError: 'item_id' (level_rules.py:31)"
+    assert inner["verification"]["failure_reason"] == "no rows; KeyError: 'item_id' (level_rules.py:31)"
+
+
+def test_blocking_wins_over_a_crash():
+    bucket = "test-bucket"
+    manifest_key = "bronze/dev/crawls/metadata/ounass/2026-03-03/run123/manifest.json"
+    manifest = {"exit_reason": "finished", "artifacts": {"rows": 0}, "quality_gate": None,
+                "access": {"hosts": {"en-saudi.ounass.com": {"requests": 1, "gave_up": 1}}},
+                "first_error": CRASH_ERROR}
+    _, _, _, inner, _ = _run(
+        (bucket, manifest_key, {(bucket, manifest_key): json.dumps(manifest).encode("utf-8")}))
+    assert inner["failure_reason"] == "access"

@@ -102,7 +102,7 @@ price-comparison-web have no `.github/workflows`.
       `Women’s Bags`, Arabic) are already in `dim_map_site_category_subcategory`.
     - Gap seen: when a crawl writes no rows the crawler reports `quality` and
       points at a `quality_report.json` that doesn't exist; the real cause was
-      only in the log.
+      only in the log. Fixed in step 5b (`crash`).
   - **Second test run 2026-11-10** (execution `300a4856-…`, image
     `sha-eb80d54`): all three crawls **success** (Bloomingdale's 117 rows with
     categories; Level Shoes a full 4,818-PDP crawl in 72 min because `--limit`
@@ -254,10 +254,17 @@ price-comparison-web have no `.github/workflows`.
     becomes a GitHub secret). Targeted apply: 2 added, 3 changed.
     Tested 2026-11-13: subscription confirmed; images-only run `a4e4812c-…`
     succeeded and the email "Crawl flow dev SUCCEEDED (images only)" arrived.
-  - **5b (next):** a crawl that raises an exception and writes no rows reports
-    `quality` and points at a `quality_report.json` that doesn't exist. Add a
-    `crash` failure reason carrying the first error, in the crawler, the
-    verifier's copy of the reasons and `docs/crawl_run_status.md`.
+  - **5b built 2026-11-13 (user-approved):** a crawl that raised and wrote no
+    rows reported `quality` and pointed at a `quality_report.json` that didn't
+    exist. Now `PostCrawlPipeline` attaches a `FirstErrorRecorder` log handler
+    for the crawl and records the first error that carries an exception
+    (failing callback or `start()`; checked against a real Scrapy 2.13 crawl)
+    as manifest `first_error` (`error`, `location`, `logged_as`). New failure
+    reason `crash` (after `access`, before `quality`): no rows, no blocking, an
+    error recorded. The verifier writes `_FAIL_CRASH` with `first_error`; the
+    flow summary shows e.g. `failed (crash: KeyError: 'item_id'
+    (level_rules.py:31))`. A run with rows and errors is unchanged (the gate
+    decides). `docs/crawl_run_status.md` updated. 9 new tests (548 pass).
 - [ ] **6. Add the schedule: daily for 7 days, then weekly.**
   - Config lives in this repo's Terraform: a new
     `infra/terraform/orchestration.tf` (schedule and state machine), with

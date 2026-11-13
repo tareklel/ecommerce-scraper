@@ -6,7 +6,9 @@
 
 # useful for handling different item types with a single interface
 from itemadapter import ItemAdapter
+import logging
 import os
+import traceback
 import json
 import hashlib
 from datetime import datetime, timezone
@@ -100,8 +102,32 @@ def access_gave_up(access):
     return sum(int(h.get("gave_up") or 0) for h in hosts.values())
 
 
+class FirstErrorRecorder(logging.Handler):
+    """
+    Keeps the first logged error that carries an exception: Scrapy logs both
+    a failing callback and a failing start() that way. A crawl that wrote
+    nothing because of it is a `crash`, and this error says why.
+    """
+
+    def __init__(self):
+        super().__init__(level=logging.ERROR)
+        self.first_error = None
+
+    def emit(self, record):
+        if self.first_error is not None or not record.exc_info or record.exc_info[0] is None:
+            return
+        exc_type, exc, tb = record.exc_info
+        frames = traceback.extract_tb(tb) if tb else []
+        self.first_error = {
+            "error": f"{exc_type.__name__}: {exc}"[:300],
+            "location": f"{os.path.basename(frames[-1].filename)}:{frames[-1].lineno}" if frames else None,
+            # Scrapy may append the traceback to the message: first line only.
+            "logged_as": record.getMessage().split("\n", 1)[0][:200],
+        }
+
+
 def crawler_run_status(exit_reason, quality_gate_status, plp_efficient=None, extra_degradations=(),
-                       rows=None, access=None):
+                       rows=None, access=None, first_error=None):
     """
     The crawler's own view of the run status (docs/ounass_plp_efficient_crawl.md,
     "Run status"; applies to all crawls). The verifier Lambda makes the final
@@ -119,6 +145,10 @@ def crawler_run_status(exit_reason, quality_gate_status, plp_efficient=None, ext
         # Nothing written and blocking lost requests: an access failure, not
         # a content one (access errors are never content errors).
         return "failed", "access", degradations
+    if not rows and first_error:
+        # Nothing written and the crawler raised: say so, rather than point
+        # at a quality report that was never written.
+        return "failed", "crash", degradations
     if quality_gate_status != "pass":
         return "failed", "quality", degradations
     return ("degraded" if degradations else "success"), None, degradations
@@ -135,6 +165,8 @@ class PostCrawlPipeline:
         self.stats = None
         self.crawler = None
         self.quality_gate_report = None
+        self.error_recorder = None
+        self.first_error = None
 
     @classmethod
     def from_crawler(cls, crawler):
@@ -145,6 +177,8 @@ class PostCrawlPipeline:
         return pipeline
 
     def spider_opened(self, spider):
+        self.error_recorder = FirstErrorRecorder()
+        logging.getLogger().addHandler(self.error_recorder)
         # A run killed hard (second Ctrl+C, out-of-memory, forced container
         # stop) never reaches spider_closed, so it leaves no manifest. This
         # record makes it visible: a start with no manifest = killed.
@@ -174,6 +208,11 @@ class PostCrawlPipeline:
             spider.logger.error(f"Could not write the run-started record: {e}")
 
     def spider_closed(self, spider, reason):
+        # Stop recording first: errors from closing aren't the crawl's.
+        recorder = self.error_recorder
+        if recorder is not None:
+            logging.getLogger().removeHandler(recorder)
+            self.first_error = recorder.first_error
         # The spider's attributes might have been updated during the crawl.
         # Especially output_filepath after gzipping.
 
@@ -476,6 +515,9 @@ class PostCrawlPipeline:
             manifest["access"] = access_retry.summary()
             access_degradations = access_retry.degradations()
 
+        first_error = self.first_error
+        if first_error:
+            manifest["first_error"] = first_error
         run_status, failure_reason, degradations = crawler_run_status(
             reason,
             (self.quality_gate_report or {}).get("status"),
@@ -483,6 +525,7 @@ class PostCrawlPipeline:
             access_degradations,
             rows=self.items_written,
             access=manifest.get("access"),
+            first_error=first_error,
         )
         manifest["run_status"] = run_status
         manifest["failure_reason"] = failure_reason
@@ -527,9 +570,11 @@ class PostCrawlPipeline:
         if manifest.get("run_status") == "failed":
             reason = manifest.get("failure_reason")
             explanation = FAILURE_EXPLANATIONS.get(reason, {})
+            first_error = manifest.get("first_error") if reason == "crash" else None
+            error = f" Error: {first_error['error']} ({first_error.get('location')})." if first_error else ""
             spider.logger.error(
                 f"RUN FAILED run_id={self.run_id} site={self.crawler_name}: {reason}: "
-                f"{explanation.get('meaning', '')} What to do: {explanation.get('what_to_do', '')} "
+                f"{explanation.get('meaning', '')}{error} What to do: {explanation.get('what_to_do', '')} "
                 f"({RUN_STATUS_DOC})")
         for host, stats in ((manifest.get("access") or {}).get("hosts") or {}).items():
             if not stats.get("access_failures"):

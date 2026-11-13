@@ -23,8 +23,12 @@ FAILURE_EXPLANATIONS = {
         "meaning": "Nothing was written because the site blocked our requests through every retry round.",
         "what_to_do": "See the manifest's access block for which hostnames and errors; check Zyte routing (CRAWLER_API_ZYTE_GEOLOCATION_BY_HOST); re-run later.",
     },
+    "crash": {
+        "meaning": "The crawler raised an error and wrote nothing; the first error is in the manifest's first_error and the _FAIL_CRASH marker.",
+        "what_to_do": "Read the error: usually a site change the rules don't handle. Fix the rules, add a test, re-run.",
+    },
     "quality": {
-        "meaning": "The rows failed the quality gate, or nothing was written for a reason other than blocking.",
+        "meaning": "The rows failed the quality gate, or nothing was written for a reason other than blocking or an error.",
         "what_to_do": "Read metadata/quality_report.json; check the seed URLs still exist and the page format hasn't changed.",
     },
     "verification": {

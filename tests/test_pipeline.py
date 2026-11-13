@@ -483,3 +483,69 @@ def test_run_failed_log_line_explains_itself(pipeline_setup):
     [line] = [str(c.args[0]) for c in spider.logger.error.call_args_list]
     assert line.startswith("RUN FAILED run_id=run-1 site=ounass: access: Nothing was written")
     assert "What to do:" in line and "docs/crawl_run_status.md#failure-markers" in line
+
+
+FIRST_ERROR = {"error": "KeyError: 'item_id'", "location": "level_rules.py:31", "logged_as": "x"}
+
+
+@pytest.mark.parametrize("rows, access, first_error, expected", [
+    (0, {"hosts": {}}, FIRST_ERROR, ("failed", "crash")),      # nothing written, the crawler raised
+    (0, BLOCKED_ACCESS, FIRST_ERROR, ("failed", "access")),    # blocking still comes first
+    (5, {"hosts": {}}, FIRST_ERROR, ("success", None)),        # rows written: gate decides as usual
+    (0, {"hosts": {}}, None, ("failed", "quality")),           # nothing written, no error logged
+])
+def test_crawler_run_status_tells_a_crash_apart(rows, access, first_error, expected):
+    from ecommercecrawl.pipelines import crawler_run_status
+    gate = "pass" if rows else None
+    assert crawler_run_status("finished", gate, None, (), rows=rows, access=access,
+                              first_error=first_error)[:2] == expected
+
+
+def _raise_and_log(logger, message):
+    try:
+        {}["item_id"]
+    except KeyError:
+        logger.error(message, exc_info=True)
+
+
+def test_first_error_recorder_keeps_the_first_error_with_an_exception():
+    import logging
+    from ecommercecrawl.pipelines import FirstErrorRecorder
+
+    logger = logging.getLogger("test_first_error_recorder")
+    recorder = FirstErrorRecorder()
+    logger.addHandler(recorder)
+    try:
+        logger.error("plain error, no exception")
+        _raise_and_log(logger, "Error while processing requests from start()")
+        try:
+            raise ValueError("second")
+        except ValueError:
+            logger.error("later", exc_info=True)
+    finally:
+        logger.removeHandler(recorder)
+    assert recorder.first_error["error"] == "KeyError: 'item_id'"
+    assert recorder.first_error["location"].startswith("test_pipeline.py:")
+    assert recorder.first_error["logged_as"] == "Error while processing requests from start()"
+
+
+def test_crashed_run_writes_crash_and_first_error_into_the_manifest(pipeline_setup, tmp_path):
+    import logging
+    pipeline, spider, mock_crawler = pipeline_setup
+    spider.entry_points = {}
+    spider.items_written = 0
+    spider.output_filepath = None
+    mock_crawler.stats.get_stats.return_value = {"start_time": datetime.now(timezone.utc)}
+
+    pipeline.spider_opened(spider)
+    _raise_and_log(logging.getLogger("scrapy.core.engine"), "Error while processing requests from start()")
+    pipeline.spider_closed(spider=spider, reason="finished")
+    # The recorder is detached when the crawl closes.
+    assert pipeline.error_recorder not in logging.getLogger().handlers
+
+    with open(tmp_path / "metadata" / "manifest.json") as f:
+        manifest = json.load(f)
+    assert manifest["run_status"] == "failed" and manifest["failure_reason"] == "crash"
+    assert manifest["first_error"]["error"] == "KeyError: 'item_id'"
+    [line] = [str(c.args[0]) for c in spider.logger.error.call_args_list if "RUN FAILED" in str(c.args[0])]
+    assert "crash: The crawler raised an error" in line and "Error: KeyError: 'item_id' (test_pipeline.py:" in line

@@ -1,5 +1,10 @@
 # Memory
 
+## 2026-11-13 - CI/CD step 5b: crawler crashes reported as `crash`
+- `PostCrawlPipeline` attaches `FirstErrorRecorder` (root log handler, ERROR with exc_info) from spider_opened to spider_closed; the first error goes into manifest `first_error` (`error`, `location`, `logged_as`). Checked against a real Scrapy 2.13 crawl failing in `start_requests`.
+- New failure reason `crash` (crawler `crawler_run_status` and verifier `FAILURE_REASONS`, identical texts): no rows, no blocking, error recorded; order aborted, startup_check, access, crash, quality. Verifier writes `_FAIL_CRASH` with `first_error`; flow helper shows `crash: <error> (<file:line>)` in the summary/email. Runs with rows are unchanged.
+- `docs/crawl_run_status.md` updated; 9 new tests (548 pass). scraper-pipeline reads `failure_reason` as free text, so no change there.
+
 ## 2026-11-13 - CI/CD step 5a: run summary emailed after every run
 - `Notify` state after `Summary` publishes to SNS topic `ecommerce-scraper-crawl-flow-runs` (email subscription; a failed email doesn't change the run's result). Helper summary gains a subject ("Crawl flow dev SUCCEEDED: 3/3 crawls published" / "... FAILED at dbt test"), one line per degradation, a "Blocked by the site:" section, an API-cache line and a console link. 7 new tests (539 pass).
 - IAM (user-approved): `sns:Publish` on that topic only, on the state machine role. Targeted apply 2 added, 3 changed; re-plan clean.

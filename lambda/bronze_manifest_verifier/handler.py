@@ -35,6 +35,7 @@ MARKER_FAIL_QUALITY = "_FAIL_QUALITY"
 MARKER_FAIL_ABORTED = "_FAIL_ABORTED"
 MARKER_FAIL_STARTUP_CHECK = "_FAIL_STARTUP_CHECK"
 MARKER_FAIL_ACCESS = "_FAIL_ACCESS"
+MARKER_FAIL_CRASH = "_FAIL_CRASH"
 
 # Run status (docs/ounass_plp_efficient_crawl.md, "Run status"; applies to all
 # crawls). One question decides it: did the crawler reach its own end, and did
@@ -72,10 +73,18 @@ FAILURE_REASONS = {
         "meaning": "Nothing was written because the site blocked our requests through every retry round.",
         "what_to_do": "See the manifest's access block for which hostnames and errors; check Zyte routing (CRAWLER_API_ZYTE_GEOLOCATION_BY_HOST); re-run later.",
     },
+    # Nothing written and the crawler raised: the manifest's first_error says
+    # why. Same rule as the crawler's crawler_run_status.
+    "crash": {
+        "marker": MARKER_FAIL_CRASH,
+        "outcome": "FAIL_CRASH",
+        "meaning": "The crawler raised an error and wrote nothing; the first error is in the manifest's first_error and the _FAIL_CRASH marker.",
+        "what_to_do": "Read the error: usually a site change the rules don't handle. Fix the rules, add a test, re-run.",
+    },
     "quality": {
         "marker": MARKER_FAIL_QUALITY,
         "outcome": "FAIL_QUALITY",
-        "meaning": "The rows failed the quality gate, or nothing was written for a reason other than blocking.",
+        "meaning": "The rows failed the quality gate, or nothing was written for a reason other than blocking or an error.",
         "what_to_do": "Read metadata/quality_report.json; check the seed URLs still exist and the page format hasn't changed.",
     },
     "verification": {
@@ -216,7 +225,17 @@ def _crawler_failure_reason(manifest):
     rows = (manifest.get("artifacts") or {}).get("rows")
     if not rows and _access_gave_up(manifest):
         return "access"
+    if not rows and isinstance(manifest.get("first_error"), dict):
+        return "crash"
     return None
+
+
+def _first_error_text(manifest):
+    first_error = manifest.get("first_error") if isinstance(manifest, dict) else None
+    if not isinstance(first_error, dict) or not first_error.get("error"):
+        return None
+    location = first_error.get("location")
+    return f"{first_error['error']} ({location})" if location else first_error["error"]
 
 
 def _access_gave_up(manifest):
@@ -307,12 +326,13 @@ def _verify_manifest_and_write_success(bucket, key):
     crawler_reason = _crawler_failure_reason(manifest) if manifest_ok else None
 
     # Every reason that applies gets its marker; the first is the run's
-    # failure_reason. A startup-stopped or fully blocked run has no data file
-    # by design, so the missing file isn't also reported as quality/verification.
+    # failure_reason. A startup-stopped, fully blocked or crashed run has no
+    # data file by design, so the missing file isn't also reported as
+    # quality/verification.
     reasons = []
     if crawler_reason:
         reasons.append(crawler_reason)
-    if crawler_reason not in ("startup_check", "access"):
+    if crawler_reason not in ("startup_check", "access", "crash"):
         if manifest_ok and not quality_gate_ok:
             reasons.append("quality")
         if not verification_ok:
@@ -343,6 +363,7 @@ def _verify_manifest_and_write_success(bucket, key):
             "startup_check": (manifest.get("plp_efficient") or {}).get("startup_error")
             or "stopped by startup checks",
             "access": f"no rows; requests lost to blocking on {', '.join(_blocked_hosts(manifest))}",
+            "crash": f"no rows; {_first_error_text(manifest)}",
             "quality": quality_gate_reason,
             "verification": verification_error,
         }[failure_reason]
@@ -412,6 +433,7 @@ def _verify_manifest_and_write_success(bucket, key):
                         "quality_gate_reason": quality_gate_reason,
                         "exit_reason": manifest.get("exit_reason"),
                         "verification_error": verification_error,
+                        "first_error": _first_error_text(manifest) if manifest_ok else None,
                         "manifest_key": manifest_key,
                     }
                 ).encode("utf-8"),
