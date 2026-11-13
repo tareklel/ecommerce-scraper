@@ -202,25 +202,31 @@ price-comparison-web have no `.github/workflows`.
   - **First test run:** Ounass PLP-efficient plus Level Shoes and Bloomingdale's
     from the registry, with a small `limit`. Waiting on the user's new registry
     URLs.
-- [ ] **4. Drive runs from the registry, with one start command.** The registry
-  reader itself is in step 3. A run is:
+- [x] **4. Drive runs from the registry, with one start command. Done
+  2026-11-13.** The registry reader itself is in step 3. A run is:
   1. Edit `crawl_plp_registry.csv` (scraper-pipeline `canonical_seeds/`) if
      needed, commit and push. CI rebuilds the dbt image, which carries the
      seeds.
-  2. `make crawl-flow`, which prints the active sites and starts the state
-     machine. It must fail if the dbt image isn't built from the latest
-     registry commit, or the run seeds the old list.
-  3. Check the result. After a long break, check whether Phase 2 hit
-     `OUNASS_PLP_EFFICIENT_MAX_PHASE2_PDPS` (10,000), because that skips
-     product pages for the whole run.
+  2. `make crawl-flow`. Built: `scripts/check_crawl_registry.py` (+ tests)
+     refuses to start when `price-comparison-dbt:latest` doesn't contain the
+     newest `main` commit that changed the registry (GitHub compare API), and
+     prints the active sites and URL counts from the CSV at the image's commit.
+     Only crawl starts are checked (`START_AT=images` doesn't seed);
+     `SKIP_REGISTRY_CHECK=1` skips it. What's pushed is the source of truth;
+     local edits are never read.
+  3. Check the result. A run that hits `OUNASS_PLP_EFFICIENT_MAX_PHASE2_PDPS`
+     (10,000) is already `degraded` with "Phase 2 skipped: …" in its
+     degradations, which the flow summary prints; nothing to add.
 
-  Still to build here:
-  - **The image-freshness check** in `make crawl-flow` (above).
-  - **Fast CSV check in CI:** the seed's dbt tests need Athena, so also check
-    the CSV's columns and values in the PR. A host check for Level Shoes and
-    Bloomingdale's rows (URL host matches the site) belongs here too.
-  - **Whole-site off** means flipping every row of that site to `is_active`
-    false. Fine for now; revisit if it becomes annoying.
+  Decided 2026-11-13 (user): **no separate CSV check in CI.** The flow's first
+  step already seeds the registry and runs its dbt tests before any crawl or
+  Zyte spend, so a second set of rules would only catch the same mistakes a
+  few minutes earlier. The one gap, a Level Shoes or Bloomingdale's URL on the
+  wrong host, goes into the registry's dbt tests (asked of the scraper-pipeline
+  session 2026-11-13).
+
+  **Whole-site off** means flipping every row of that site to `is_active`
+  false. Fine for now; revisit if it becomes annoying.
 
   The registry's columns already fit every site; new rows need canonical
   `site`, `gender`, `category`, `subcategory` and `brand` values

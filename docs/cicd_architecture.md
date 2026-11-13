@@ -24,6 +24,15 @@ Design agreed and built 2026-11-10 (step 3; details and decisions in
 `make crawl-flow` (optional `CRAWL_LIMIT=` listing pages per URL for Level
 Shoes and Bloomingdale's, `START_AT=images`).
 
+**Before a crawl start** (2026-11-13), `make crawl-flow` runs
+`scripts/check_crawl_registry.py`: it refuses to start when the dbt image
+(`price-comparison-dbt:latest`, which carries the seeds) doesn't contain the
+newest scraper-pipeline `main` commit that changed `crawl_plp_registry.csv`,
+and prints the active sites and URL counts from the CSV at the image's commit.
+What's pushed is the source of truth; local edits are never read.
+`SKIP_REGISTRY_CHECK=1` skips the check. A registry change is: edit, commit,
+push, wait for the dbt image build, `make crawl-flow`.
+
 ```mermaid
 flowchart TD
   sched["EventBridge Scheduler<br/>daily for 7 days, then weekly"]:::planned
@@ -140,6 +149,7 @@ happened.
 | Every crawl failed or was killed | Rare | Step 6 skips dbt and images | Summary; flow **failed** |
 | A crawl is `degraded` | Common | Counts as published | Listed in the summary |
 | Another flow run is still running | Possible once scheduled daily | Step 1 refuses to start | New run **failed** at once; the running one is untouched |
+| The dbt image is older than the latest registry commit | After a registry push, until the image build passes | `make crawl-flow` refuses to start | Nothing runs; wait for (or fix) the dbt image build |
 | Registry seed or its tests fail | Only after a bad registry edit | Step 2 stops before any crawl | No Zyte spend; flow **failed** |
 | A site has no active registry rows | By choice | Step 3 leaves it out | Not crawled |
 | Nothing to download (no new image URLs) | Common on repeat crawls | Step 9 finds no marker, skips the checker | Step 11 still runs |
@@ -318,3 +328,4 @@ lives in AWS alone, so pausing doesn't need a commit.
 | 2026-11-10 | Edge cases table added (step 3) | — |
 | 2026-11-10 | Step 3 built and applied: state machine, helper Lambda, checker S3 trigger removed; first run pending | — |
 | 2026-11-11 | Cache refresh moved after `dbt test` (flow's dbt steps use `--no-cache-refresh`; new refresh step); `CRAWL_LIMIT` works for Level Shoes and Bloomingdale's | — |
+| 2026-11-13 | Step 4: `make crawl-flow` checks the dbt image has the latest pushed registry and prints the active sites | — |

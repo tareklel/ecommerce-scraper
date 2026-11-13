@@ -1,5 +1,9 @@
 # Memory
 
+## 2026-11-13 - CI/CD step 4 done: registry check before a crawl start
+- `scripts/check_crawl_registry.py` (+ 8 tests), run by `make crawl-flow` for crawl starts: refuses when `price-comparison-dbt:latest` doesn't contain the newest scraper-pipeline `main` commit that changed `crawl_plp_registry.csv` (GitHub compare API), and prints active sites from the CSV at the image's commit. `SKIP_REGISTRY_CHECK=1` skips it. Checked live (image `sha-d043b14`, 3 sites x 4 URLs).
+- User decided no separate CSV check in CI (the flow's seed tests already run before any crawl); the Level Shoes/Bloomingdale's URL host rule was asked of the scraper-pipeline session as a dbt test. Phase 2 cap already shows as a degradation in the summary. Ticket step 4 ticked; architecture doc updated.
+
 ## 2026-11-11 - CI/CD step 3 done: first fully green crawl flow
 - Deployed `d7ce530` and scraper-pipeline `882fe8f`; targeted apply of the helper Lambda and state machine (0 added, 2 changed, no IAM).
 - Short run `c413745c` (`CRAWL_LIMIT=1`) failed `dbt test` only on the unisex Bloomingdale's bag and correctly skipped the cache refresh; scraper-pipeline fixed it (`d043b14`, unisex → women, brand map fixes).

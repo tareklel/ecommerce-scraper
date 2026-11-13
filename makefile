@@ -373,9 +373,15 @@ ecs-run-quality-checker:
 # make crawl-flow
 # make crawl-flow CRAWL_LIMIT=20
 # make crawl-flow START_AT=images     (images and dbt only, no crawl)
+# A crawl start first checks that the dbt image has the latest pushed registry
+# (scripts/check_crawl_registry.py); SKIP_REGISTRY_CHECK=1 skips that.
 CRAWL_LIMIT ?=
 START_AT ?= crawl
+SKIP_REGISTRY_CHECK ?=
 crawl-flow:
+	@if [ "$(START_AT)" = "crawl" ] && [ -z "$(SKIP_REGISTRY_CHECK)" ]; then \
+		AWS_PROFILE=$(AWS_PROFILE) AWS_REGION=$(AWS_REGION) python3 scripts/check_crawl_registry.py || exit 1; \
+	fi
 	@ARN=$$(cd $(TF_DIR) && AWS_PROFILE=$(AWS_PROFILE) terraform output -raw crawl_flow_state_machine_arn); \
 	INPUT=$$(START_AT="$(START_AT)" CRAWL_LIMIT="$(CRAWL_LIMIT)" python3 -c 'import json,os; d={"start_at": os.environ["START_AT"]}; l=os.environ["CRAWL_LIMIT"]; d.update({"limit": int(l)} if l else {}); print(json.dumps(d))'); \
 	echo "Starting $$ARN with $$INPUT"; \
