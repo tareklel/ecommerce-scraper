@@ -3,7 +3,8 @@
 #
 # Order: start check → registry seed + tests → crawl list from the registry →
 # crawls in parallel (each waits for verification) → dbt run (full) → image
-# pipeline → quality checker → dbt run (image models) → dbt test → summary.
+# pipeline → quality checker → dbt run (image models) → dbt test → cache
+# refresh → summary → email (SNS).
 # {"start_at": "images"} skips straight to the image pipeline.
 #
 # Design, decisions and edge cases: tickets/cicd_pipeline.md (step 3) and
@@ -326,10 +327,24 @@ locals {
           FunctionName = aws_lambda_function.crawl_flow_helper.arn
           Payload      = { action = "summary", "state.$" = "$" }
         }
-        ResultSelector = { "status.$" = "$.Payload.status", "text.$" = "$.Payload.text" }
+        ResultSelector = { "status.$" = "$.Payload.status", "subject.$" = "$.Payload.subject", "text.$" = "$.Payload.text" }
         ResultPath     = "$.summary"
-        Next           = "Outcome"
+        Next           = "Notify"
       })
+      # Email the summary after every run. A failed email doesn't change the
+      # run's result.
+      Notify = {
+        Type     = "Task"
+        Resource = "arn:aws:states:::sns:publish"
+        Parameters = {
+          TopicArn    = aws_sns_topic.crawl_flow_runs.arn
+          "Subject.$" = "$.summary.subject"
+          "Message.$" = "$.summary.text"
+        }
+        ResultPath = null
+        Catch      = [{ ErrorEquals = ["States.ALL"], ResultPath = "$.notify_error", Next = "Outcome" }]
+        Next       = "Outcome"
+      }
       Outcome = {
         Type    = "Choice"
         Choices = [{ Variable = "$.summary.status", StringEquals = "succeeded", Next = "Succeeded" }]
@@ -488,6 +503,23 @@ resource "aws_lambda_function" "crawl_flow_helper" {
 }
 
 # -------------------------------------------------------
+# Run summary email (step 5)
+# -------------------------------------------------------
+
+resource "aws_sns_topic" "crawl_flow_runs" {
+  name = "${var.ecs_name}-crawl-flow-runs"
+}
+
+# The address lives in the gitignored local.auto.tfvars. AWS emails a
+# confirmation link; nothing arrives until it's clicked.
+resource "aws_sns_topic_subscription" "crawl_flow_runs_email" {
+  count     = nonsensitive(var.crawl_alert_email != "") ? 1 : 0
+  topic_arn = aws_sns_topic.crawl_flow_runs.arn
+  protocol  = "email"
+  endpoint  = var.crawl_alert_email
+}
+
+# -------------------------------------------------------
 # State machine
 # -------------------------------------------------------
 
@@ -509,7 +541,8 @@ resource "aws_iam_role_policy" "crawl_flow" {
   role = aws_iam_role.crawl_flow.id
 
   # Start and watch the four tasks (crawler, image pipeline, quality checker,
-  # dbt), pass only their roles to ECS, and call the helper Lambda.
+  # dbt), pass only their roles to ECS, call the helper Lambda and email the
+  # summary.
   policy = jsonencode({
     Version = "2012-10-17",
     Statement = [
@@ -560,6 +593,12 @@ resource "aws_iam_role_policy" "crawl_flow" {
         Effect   = "Allow"
         Action   = ["lambda:InvokeFunction"]
         Resource = [aws_lambda_function.crawl_flow_helper.arn, "${aws_lambda_function.crawl_flow_helper.arn}:*"]
+      },
+      {
+        Sid      = "NotifyRunResult"
+        Effect   = "Allow"
+        Action   = ["sns:Publish"]
+        Resource = aws_sns_topic.crawl_flow_runs.arn
       }
     ]
   })

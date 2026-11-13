@@ -112,9 +112,9 @@ flowchart TD
   dbt4["ECS: dbt task<br/>refresh-cache"]
   s14 -->|runs| dbt4 -->|invokes| apicache
 
-  sns["SNS topic<br/>alerts on failed or killed"]:::planned
+  sns["SNS topic<br/>ecommerce-scraper-crawl-flow-runs"]
   inbox["Your inbox"]
-  s13 -.->|"step 5"| sns -->|emails| inbox
+  s13 -->|"Notify step: subject + summary, every run"| sns -->|emails| inbox
 
   classDef planned fill:#ddf0f5,stroke:#0b6f8a,color:#16232d
 ```
@@ -329,3 +329,4 @@ lives in AWS alone, so pausing doesn't need a commit.
 | 2026-11-10 | Step 3 built and applied: state machine, helper Lambda, checker S3 trigger removed; first run pending | — |
 | 2026-11-11 | Cache refresh moved after `dbt test` (flow's dbt steps use `--no-cache-refresh`; new refresh step); `CRAWL_LIMIT` works for Level Shoes and Bloomingdale's | — |
 | 2026-11-13 | Step 4: `make crawl-flow` checks the dbt image has the latest pushed registry and prints the active sites | — |
+| 2026-11-13 | Step 5a: summary emailed after every run (SNS topic, `Notify` state; subject, cache line, blocked-by-site section, console link). The address lives only in the gitignored `infra/terraform/local.auto.tfvars` | — |

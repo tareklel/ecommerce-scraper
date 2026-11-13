@@ -1,5 +1,11 @@
 # Memory
 
+## 2026-11-13 - CI/CD step 5a: run summary emailed after every run
+- `Notify` state after `Summary` publishes to SNS topic `ecommerce-scraper-crawl-flow-runs` (email subscription; a failed email doesn't change the run's result). Helper summary gains a subject ("Crawl flow dev SUCCEEDED: 3/3 crawls published" / "... FAILED at dbt test"), one line per degradation, a "Blocked by the site:" section, an API-cache line and a console link. 7 new tests (539 pass).
+- IAM (user-approved): `sns:Publish` on that topic only, on the state machine role. Targeted apply 2 added, 3 changed; re-plan clean.
+- The alert address is never in a tracked file: variable `crawl_alert_email` (sensitive, default empty) set in gitignored `infra/terraform/local.auto.tfvars` (`*.auto.tfvars` added to `.gitignore`).
+- Tested: images-only run `a4e4812c` succeeded, the email arrived. Next: 5b, a `crash` failure reason for crawls that raise and write nothing.
+
 ## 2026-11-13 - CI/CD step 4 done: registry check before a crawl start
 - `scripts/check_crawl_registry.py` (+ 8 tests), run by `make crawl-flow` for crawl starts: refuses when `price-comparison-dbt:latest` doesn't contain the newest scraper-pipeline `main` commit that changed `crawl_plp_registry.csv` (GitHub compare API), and prints active sites from the CSV at the image's commit. `SKIP_REGISTRY_CHECK=1` skips it. Checked live (image `sha-d043b14`, 3 sites x 4 URLs).
 - User decided no separate CSV check in CI (the flow's seed tests already run before any crawl); the Level Shoes/Bloomingdale's URL host rule was asked of the scraper-pipeline session as a dbt test. Phase 2 cap already shows as a degradation in the summary. Ticket step 4 ticked; architecture doc updated.

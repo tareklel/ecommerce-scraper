@@ -176,7 +176,8 @@ price-comparison-web have no `.github/workflows`.
     12. `dbt test` (full). A failure is reported and the cache keeps the last
         good data; a pass goes on to the cache refresh (13, added 2026-11-11).
     13. Summary (helper Lambda): each crawl's status and degradations, images
-        downloaded and validated, dbt results. Alerts come in step 5.
+        downloaded and validated, dbt results. Emailed after every run
+        (step 5).
   - **Images-only start:** input `{"start_at": "images"}` runs steps 1 and
     8–13. Use it instead of `make ecs-run-image-pipeline`, which will no longer
     start the checker.
@@ -240,6 +241,23 @@ price-comparison-web have no `.github/workflows`.
 - [ ] **5. Add run alerts.** See "Crawl run alerting" below: one summary per
   run, and an alert on `failed` / `killed`. Report access problems apart from
   content problems.
+  - **5a built and applied 2026-11-13 (user-approved, incl. IAM):** a `Notify`
+    state after `Summary` publishes to SNS topic
+    `ecommerce-scraper-crawl-flow-runs` (email, after every run; a failed
+    email doesn't change the run's result). Subject like "Crawl flow dev
+    SUCCEEDED: 3/3 crawls published" / "… FAILED at dbt test". The text adds
+    one line per degradation, a "Blocked by the site:" section (access
+    failures and access degradations), whether the API cache refreshed, and a
+    console link. State machine role gained `sns:Publish` on that topic only.
+    The address is variable `crawl_alert_email`, set only in the gitignored
+    `infra/terraform/local.auto.tfvars` (never in a tracked file; at step 7 it
+    becomes a GitHub secret). Targeted apply: 2 added, 3 changed.
+    Tested 2026-11-13: subscription confirmed; images-only run `a4e4812c-…`
+    succeeded and the email "Crawl flow dev SUCCEEDED (images only)" arrived.
+  - **5b (next):** a crawl that raises an exception and writes no rows reports
+    `quality` and points at a `quality_report.json` that doesn't exist. Add a
+    `crash` failure reason carrying the first error, in the crawler, the
+    verifier's copy of the reasons and `docs/crawl_run_status.md`.
 - [ ] **6. Add the schedule: daily for 7 days, then weekly.**
   - Config lives in this repo's Terraform: a new
     `infra/terraform/orchestration.tf` (schedule and state machine), with

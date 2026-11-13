@@ -147,3 +147,10 @@ variable "dbt_database_name" {
   type        = string
   default     = "price_comparison_dev"
 }
+
+variable "crawl_alert_email" {
+  description = "Address that gets the crawl flow's summary email after every run. Set it in the gitignored infra/terraform/local.auto.tfvars, never in a tracked file; empty = no subscription."
+  type        = string
+  default     = ""
+  sensitive   = true
+}

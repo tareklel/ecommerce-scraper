@@ -104,6 +104,7 @@ def start(event):
     now = _now()
     return {
         "flow_id": execution_arn.rsplit(":", 1)[-1],
+        "execution_arn": execution_arn,
         "start_at": start_at,
         "limit": limit,
         "started_at": now.isoformat(),
@@ -300,6 +301,22 @@ def _describe_error(failure):
     return f"{failure.get('Error')} {str(cause)[:500]}".strip()
 
 
+def _degradation_line(degradation):
+    if isinstance(degradation, dict) and degradation.get("message"):
+        return f"{degradation.get('kind', '?')} {degradation.get('scope', '?')}: {degradation['message']}"
+    return json.dumps(degradation)
+
+
+def _is_access(degradation):
+    return isinstance(degradation, dict) and degradation.get("kind") == "access"
+
+
+def _console_url(execution_arn):
+    region = execution_arn.split(":")[3]
+    return (f"https://{region}.console.aws.amazon.com/states/home?region={region}"
+            f"#/v2/executions/details/{execution_arn}")
+
+
 def summary(event):
     state = event.get("state") or {}
     flow = state.get("flow") or {}
@@ -310,16 +327,26 @@ def summary(event):
     image_marker = state.get("image_marker")
 
     lines = [f"Crawl flow {flow.get('flow_id', '?')} (start_at={flow.get('start_at', '?')})"]
+    # Blocking needs a different response from bad data, so it gets its own
+    # section (access failures and access degradations).
+    blocked = []
     for crawl in crawls:
         result = crawl.get("result") or {}
         line = f"- {crawl.get('site')} {crawl.get('run_id')}: {result.get('run_status') or 'unknown'}"
         if result.get("failure_reasons"):
             line += f" ({', '.join(result['failure_reasons'])})"
-        if result.get("degradations"):
-            line += f" degradations={json.dumps(result['degradations'])}"
+            if "access" in result["failure_reasons"]:
+                blocked.append(f"- {crawl.get('site')}: crawl failed, nothing written")
         if crawl.get("task_error"):
             line += f" task error: {crawl['task_error'].get('Error')}"
         lines.append(line)
+        for degradation in result.get("degradations") or []:
+            lines.append(f"    {_degradation_line(degradation)}")
+            if _is_access(degradation):
+                blocked.append(f"- {crawl.get('site')} {_degradation_line(degradation)}")
+    if blocked:
+        lines.append("Blocked by the site:")
+        lines.extend(blocked)
     if image_marker is not None:
         if image_marker.get("found"):
             lines.append(f"- images: {image_marker['marker']} dt={image_marker['dt']} run={image_marker['run_id']}")
@@ -338,19 +365,35 @@ def summary(event):
             containers = (state.get("last_task") or {}).get("containers") or [{}]
             detail += f": exit code {containers[0].get('ExitCode', 'unknown')}"
         lines.append(f"FAILED at {detail}")
+        if failed_step == "refresh_cache":
+            lines.append("API cache refresh failed: the API keeps the previous data")
+        else:
+            lines.append("API cache not refreshed: the API keeps the last tested data")
+        subject = f"FAILED at {STEP_NAMES.get(failed_step, failed_step)}"
     elif flow.get("start_at") == "crawl" and gate_result.get("published", 0) == 0:
         status = "failed"
         lines.append("FAILED: no crawl published, so dbt and images were skipped")
+        lines.append("API cache not refreshed: the API keeps the last tested data")
+        subject = "FAILED: no crawl published"
     else:
         status = "succeeded"
+        lines.append("API cache refreshed")
         bad = [c for c in crawls if (c.get("result") or {}).get("run_status") not in PUBLISHED]
         if bad:
             lines.append(f"Succeeded with {len(bad)} crawl(s) not published")
         else:
             lines.append("Succeeded")
+        if flow.get("start_at") == "crawl":
+            subject = f"SUCCEEDED: {len(crawls) - len(bad)}/{len(crawls)} crawls published"
+        else:
+            subject = "SUCCEEDED (images only)"
+    if flow.get("execution_arn"):
+        lines.append(f"Console: {_console_url(flow['execution_arn'])}")
     text = "\n".join(lines)
     logger.info(text)
-    return {"status": status, "text": text}
+    # SNS subjects: one line, at most 100 characters.
+    subject = f"Crawl flow {APP_ENV} {subject}"[:100]
+    return {"status": status, "subject": subject, "text": text}
 
 
 ACTIONS = {

@@ -308,3 +308,72 @@ def test_summary_keeps_a_plain_error_cause(helper):
         "failure": {"Error": "RegistryQueryFailed", "Cause": "boom"},
     }}, None)
     assert "FAILED at reading the registry: RegistryQueryFailed boom" in result["text"]
+
+
+# -- summary email (step 5) -------------------------------------------------
+
+def test_summary_subject_counts_published_crawls_and_says_the_cache_refreshed(helper):
+    result = helper.handler({"action": "summary", "state": {
+        "flow": _start(helper), "crawls": [_crawl("success"), _crawl("degraded"), _crawl("failed")],
+        "gate": {"published": 2}, "image_marker": {"found": False},
+    }}, None)
+    assert result["subject"] == "Crawl flow dev SUCCEEDED: 2/3 crawls published"
+    assert "API cache refreshed" in result["text"]
+    assert result["text"].endswith(f"Console: https://eu-central-1.console.aws.amazon.com/states/home"
+                                   f"?region=eu-central-1#/v2/executions/details/{EXECUTION}")
+
+
+def test_summary_subject_for_an_images_only_run(helper):
+    result = helper.handler({"action": "summary", "state": {
+        "flow": _start(helper, {"start_at": "images"}), "image_marker": {"found": False},
+    }}, None)
+    assert result["subject"] == "Crawl flow dev SUCCEEDED (images only)"
+
+
+def test_summary_failure_says_the_cache_kept_the_last_tested_data(helper):
+    result = helper.handler({"action": "summary", "state": {
+        "flow": _start(helper), "failed_step": "dbt_test", "failure": {"exit_code": 1},
+    }}, None)
+    assert result["subject"] == "Crawl flow dev FAILED at dbt test"
+    assert "API cache not refreshed: the API keeps the last tested data" in result["text"]
+
+
+def test_summary_failed_cache_refresh_keeps_the_previous_data(helper):
+    result = helper.handler({"action": "summary", "state": {
+        "flow": _start(helper), "failed_step": "refresh_cache", "failure": {"exit_code": 77},
+    }}, None)
+    assert result["subject"] == "Crawl flow dev FAILED at API cache refresh"
+    assert "API cache refresh failed: the API keeps the previous data" in result["text"]
+
+
+def test_summary_no_crawl_published_subject(helper):
+    result = helper.handler({"action": "summary", "state": {
+        "flow": _start(helper), "crawls": [_crawl("killed")], "gate": {"published": 0},
+    }}, None)
+    assert result["subject"] == "Crawl flow dev FAILED: no crawl published"
+
+
+def test_summary_lists_degradations_and_puts_blocking_in_its_own_section(helper):
+    blocked = {"site": "level-shoes", "run_id": "r2",
+               "result": {"run_status": "failed", "failure_reasons": ["access"]}}
+    degraded = {"site": "ounass", "run_id": "r1", "result": {"run_status": "degraded", "degradations": [
+        {"kind": "access", "scope": "en-saudi.ounass.com", "message": "12 listing rows lost to blocking"},
+        {"kind": "content", "scope": "phase2", "message": "Phase 2 skipped"},
+    ]}}
+    text = helper.handler({"action": "summary", "state": {
+        "flow": _start(helper), "crawls": [degraded, blocked], "gate": {"published": 1},
+    }}, None)["text"]
+    assert "    access en-saudi.ounass.com: 12 listing rows lost to blocking" in text
+    assert "    content phase2: Phase 2 skipped" in text
+    section = text.split("Blocked by the site:\n", 1)[1].splitlines()
+    assert section[:2] == [
+        "- ounass access en-saudi.ounass.com: 12 listing rows lost to blocking",
+        "- level-shoes: crawl failed, nothing written",
+    ]
+
+
+def test_summary_subject_is_one_line_of_at_most_100_characters(helper):
+    result = helper.handler({"action": "summary", "state": {
+        "flow": _start(helper), "failed_step": "x" * 200, "failure": {"exit_code": 1},
+    }}, None)
+    assert len(result["subject"]) == 100 and "\n" not in result["subject"]

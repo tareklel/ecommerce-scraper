@@ -23,6 +23,9 @@ env.*
 *.tfstate
 *.tfstate.backup
 
+# Local Terraform values kept out of git (e.g. the crawl alert email)
+*.auto.tfvars
+
 # Terraform working directory
 .terraform/
 
