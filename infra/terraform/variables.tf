@@ -154,3 +154,21 @@ variable "crawl_alert_email" {
   default     = ""
   sensitive   = true
 }
+
+variable "crawl_schedule_expression" {
+  description = "When the crawl flow runs (EventBridge Scheduler). Daily for the first 7 days, then about weekly (tickets/cicd_pipeline.md step 6)."
+  type        = string
+  default     = "cron(0 2 * * ? *)"
+}
+
+variable "crawl_schedule_timezone" {
+  description = "Time zone of crawl_schedule_expression."
+  type        = string
+  default     = "Asia/Dubai"
+}
+
+variable "crawl_schedule_end_date" {
+  description = "UTC time after which the schedule stops starting runs (RFC 3339), so a daily schedule can't run on unwatched. Empty = no end."
+  type        = string
+  default     = "2026-11-20T20:00:00Z" # midnight Dubai after the 7th daily run (2026-11-14 to 2026-11-20)
+}

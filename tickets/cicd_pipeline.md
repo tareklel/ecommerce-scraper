@@ -266,12 +266,38 @@ price-comparison-web have no `.github/workflows`.
     flow summary shows e.g. `failed (crash: KeyError: 'item_id'
     (level_rules.py:31))`. A run with rows and errors is unchanged (the gate
     decides). `docs/crawl_run_status.md` updated. 9 new tests (548 pass).
+  - **Mapping-gaps line (user, 2026-11-13; suggested by the scraper-pipeline
+    session):** when the full dbt run happened, the summary/email adds
+    "Mapping gaps: N brand spelling(s) to review (scraper-pipeline: make
+    seed-suggestions); M product drop(s) from gold" from
+    `silver_mapping_gaps` (Athena, from the helper). A product missing two
+    mappings counts twice. A failed query becomes the line itself, never a
+    failed summary. Helper role gains Glue read on that one table (data
+    already readable under `dbt/dev/`).
   - **Crawls-only test runs (user, 2026-11-13):** `make crawl-flow
     CRAWL_LIMIT=1 STOP_AFTER=crawls` (flow input `stop_after: "crawls"`) stops
     after the crawls and their checks, then sends the summary. For testing
     crawler changes in about 5–10 minutes; a full short run takes about 20,
     mostly dbt and task start-ups.
 - [ ] **6. Add the schedule: daily for 7 days, then weekly.**
+  - **Built 2026-11-13 (user-approved, incl. IAM):** `aws_scheduler_schedule.crawl_flow`
+    (`ecommerce-scraper-crawl-flow-dev`) starts the flow with
+    `{"start_at": "crawl"}` at 02:00 `Asia/Dubai` daily; `end_date`
+    2026-11-20T20:00Z, so 7 runs (2026-11-14 to 2026-11-20). No retries (the
+    next run is the retry; the flow refuses overlaps). Role
+    `ecommerce-scraper-crawl-flow-scheduler`: `states:StartExecution` on the
+    flow only, assumable by EventBridge Scheduler from this account.
+    `scripts/crawl_schedule.py` + `make schedule-status|on|off` (reads the
+    schedule, changes only `State`, sends the rest back). Known gap: scheduled
+    runs skip the `make crawl-flow` registry check (it needs GitHub), so a
+    failed dbt image build means the run seeds the previous registry.
+    Applied 2026-11-13 (targeted, with the helper's mapping-gaps change: 3
+    added, 2 changed; re-plan clean); `make schedule-status`: ENABLED, ends
+    2026-11-21 00:00 Dubai. First run 2026-11-14 02:00 Dubai.
+    **Next:** review the 7 runs, then switch to weekly (check the sold-out
+    cutoff first) and clear `crawl_schedule_end_date`.
+  - Crawls-only test run measured 2026-11-13 (`b3453a08-…`): about 9 minutes
+    from start to email.
   - Config lives in this repo's Terraform: a new
     `infra/terraform/orchestration.tf` (schedule and state machine), with
     `crawl_schedule_expression` and `crawl_schedule_end_date` in

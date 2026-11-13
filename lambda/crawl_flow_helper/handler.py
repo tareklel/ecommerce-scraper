@@ -30,6 +30,7 @@ BUCKET = os.environ.get("BUCKET", "price-comparison-bucket-eu-central-1")
 ATHENA_WORKGROUP = os.environ.get("ATHENA_WORKGROUP", "price-comparison")
 ATHENA_OUTPUT = os.environ.get("ATHENA_OUTPUT", f"s3://{BUCKET}/athena-results/crawl-flow/")
 REGISTRY_TABLE = os.environ.get("REGISTRY_TABLE", f'"price_comparison_{APP_ENV}"."crawl_plp_registry"')
+MAPPING_GAPS_TABLE = os.environ.get("MAPPING_GAPS_TABLE", f'"price_comparison_{APP_ENV}"."silver_mapping_gaps"')
 # Polls of the crawl's markers after its task ended (one a minute in the
 # state machine): no marker by then means the crawl died without a manifest.
 MAX_VERIFY_POLLS = int(os.environ.get("MAX_VERIFY_POLLS", "15"))
@@ -123,11 +124,8 @@ def start(event):
 # list_crawls
 # ---------------------------------------------------------------------------
 
-def _query_active_registry():
-    query = (
-        f"SELECT site, url FROM {REGISTRY_TABLE} "
-        "WHERE is_active ORDER BY site, url"
-    )
+def _athena_rows(query):
+    """Run one Athena query; return its rows without the header."""
     execution_id = athena.start_query_execution(
         QueryString=query,
         WorkGroup=ATHENA_WORKGROUP,
@@ -141,7 +139,7 @@ def _query_active_registry():
         if status["State"] in ("FAILED", "CANCELLED"):
             raise RegistryQueryFailed(status.get("StateChangeReason", status["State"]))
         if time.monotonic() > deadline:
-            raise RegistryQueryFailed(f"Registry query still {status['State']} after {ATHENA_TIMEOUT_SECONDS}s")
+            raise RegistryQueryFailed(f"Query still {status['State']} after {ATHENA_TIMEOUT_SECONDS}s")
         time.sleep(1)
 
     rows = []
@@ -149,7 +147,12 @@ def _query_active_registry():
         for row in page["ResultSet"]["Rows"]:
             rows.append([column.get("VarCharValue") for column in row["Data"]])
     # The first row of the first page is the header.
-    return [(site, url) for site, url in rows[1:] if site and url]
+    return rows[1:]
+
+
+def _query_active_registry():
+    rows = _athena_rows(f"SELECT site, url FROM {REGISTRY_TABLE} WHERE is_active ORDER BY site, url")
+    return [(site, url) for site, url in rows if site and url]
 
 
 def list_crawls(event):
@@ -327,6 +330,29 @@ def _console_url(execution_arn):
             f"#/v2/executions/details/{execution_arn}")
 
 
+# Steps after the full dbt run, which builds silver_mapping_gaps.
+AFTER_DBT_RUN = ("image_pipeline", "image_marker", "quality_checker", "dbt_run_images", "dbt_test", "refresh_cache")
+
+
+def _mapping_gaps_line():
+    """
+    Seed work left for scraper-pipeline, from its silver_mapping_gaps table.
+    Never fails the summary: a query problem becomes the line itself.
+    """
+    try:
+        rows = _athena_rows(
+            "SELECT count_if(gap_type = 'brand' AND suggested_value IS NOT NULL), "
+            f"coalesce(sum(products_dropped_from_gold), 0) FROM {MAPPING_GAPS_TABLE}"
+        )
+        to_review, dropped = (rows[0] if rows else [None, None])
+        return (f"Mapping gaps: {to_review or 0} brand spelling(s) to review (scraper-pipeline: "
+                f"make seed-suggestions); {dropped or 0} product drop(s) from gold "
+                "(a product missing two mappings counts twice)")
+    except Exception as e:
+        logger.warning("Mapping gaps query failed: %s", e)
+        return f"Mapping gaps: not available ({str(e)[:200]})"
+
+
 def summary(event):
     state = event.get("state") or {}
     flow = state.get("flow") or {}
@@ -401,6 +427,11 @@ def summary(event):
             subject = f"SUCCEEDED: {len(crawls) - len(bad)}/{len(crawls)} crawls published"
         else:
             subject = "SUCCEEDED (images only)"
+    dbt_ran = (flow.get("stop_after") != "crawls"
+               and (failed_step in AFTER_DBT_RUN
+                    or (not failed_step and (flow.get("start_at") != "crawl" or gate_result.get("published", 0) > 0))))
+    if dbt_ran:
+        lines.append(_mapping_gaps_line())
     if flow.get("execution_arn"):
         lines.append(f"Console: {_console_url(flow['execution_arn'])}")
     text = "\n".join(lines)

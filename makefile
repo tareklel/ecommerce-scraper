@@ -392,6 +392,11 @@ crawl-flow:
 	echo "Execution: $$EXEC"; \
 	echo "Console:   https://$(AWS_REGION).console.aws.amazon.com/states/home?region=$(AWS_REGION)#/v2/executions/details/$$EXEC"
 
+# The crawl flow's schedule (step 6): daily at 02:00 Dubai for 7 days, then
+# about weekly. On/off only; timing lives in infra/terraform/variables.tf.
+schedule-status schedule-on schedule-off:
+	@AWS_PROFILE=$(AWS_PROFILE) AWS_REGION=$(AWS_REGION) python3 scripts/crawl_schedule.py $(subst schedule-,,$@)
+
 run-quality-checker-local:
 	$(LOAD_AWS_SECRET_ENV); \
 	APP_ENV=$(APP_ENV) \

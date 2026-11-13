@@ -1,5 +1,10 @@
 # Memory
 
+## 2026-11-13 - CI/CD step 6 applied: daily schedule; mapping-gaps line in the email
+- `aws_scheduler_schedule.crawl_flow` starts a full flow run at 02:00 Asia/Dubai daily, end_date 2026-11-20T20:00Z (7 runs, 2026-11-14 to 20), no retries; role `ecommerce-scraper-crawl-flow-scheduler` can only `states:StartExecution` the flow (user-approved). Terraform ignores `state`; `scripts/crawl_schedule.py` + `make schedule-status|on|off` (+ 3 tests). Scheduled runs skip the `make crawl-flow` registry check.
+- Summary email adds "Mapping gaps: N brand spelling(s) to review; M product drop(s) from gold" from scraper-pipeline's `silver_mapping_gaps` when the full dbt run happened; a failed query never fails the summary. Helper role gained Glue read on that table (user-approved). Checked by invoking the helper: 0 to review, 2 drops.
+- Targeted apply 3 added, 2 changed; re-plan clean. `tickets/crawl_scheduler.md` marked superseded. 562 tests pass. Next: review the 7 daily runs, then weekly.
+
 ## 2026-11-13 - Crawls-only test runs; step 5 done
 - `make crawl-flow CRAWL_LIMIT=1 STOP_AFTER=crawls` (flow input `stop_after: "crawls"`, always a string from the helper's start so the Choice can read it): the `AnyPublished` Choice goes straight to `Summary`; subject "SUCCEEDED (crawls only): n/m crawls published". A short run without it takes about 20 min, mostly dbt and ECS start-ups. Targeted apply (helper + state machine, 0 added, 2 changed). 5 new tests (553 pass).
 - `CRAWL_LIMIT=1` run `34994259` on the 5b crawler image succeeded (3/3, cache refreshed, email sent): step 5 done.

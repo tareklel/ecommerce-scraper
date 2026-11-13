@@ -1,6 +1,10 @@
 # Ticket: Crawl Scheduler — EventBridge Daily Trigger per Site
 
-**Status: draft — not reviewed**
+**Status: superseded 2026-11-13.** Crawls are no longer scheduled per site.
+One EventBridge Scheduler schedule starts the crawl flow (Step Functions),
+which runs every site from the registry, then dbt, images, tests and the
+cache refresh: `tickets/cicd_pipeline.md` step 6 and
+`docs/cicd_architecture.md`. The design below is kept as history.
 
 ## Goal
 

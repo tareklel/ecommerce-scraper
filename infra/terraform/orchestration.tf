@@ -10,7 +10,8 @@
 #
 # Design, decisions and edge cases: tickets/cicd_pipeline.md (step 3) and
 # docs/cicd_architecture.md ("What happens on each run", "Edge cases").
-# No schedule yet (step 6). Dev only: the dbt task and every command use dev.
+# Schedule: EventBridge Scheduler at the end of this file (step 6). Dev only:
+# the dbt task and every command use dev.
 # -------------------------------------------------------
 
 data "aws_caller_identity" "current" {}
@@ -403,8 +404,9 @@ resource "aws_iam_role_policy" "crawl_flow_helper" {
   name = "${var.ecs_name}-crawl-flow-helper-policy"
   role = aws_iam_role.crawl_flow_helper.id
 
-  # Dev only. Reads the seeded registry (Athena), writes per-site URL lists,
-  # reads crawl markers and manifests and image markers, lists flow runs.
+  # Dev only. Reads the seeded registry and the mapping-gaps table (Athena),
+  # writes per-site URL lists, reads crawl markers and manifests and image
+  # markers, lists flow runs.
   policy = jsonencode({
     Version = "2012-10-17",
     Statement = [
@@ -433,7 +435,8 @@ resource "aws_iam_role_policy" "crawl_flow_helper" {
         Resource = [
           "arn:aws:glue:${var.region}:${data.aws_caller_identity.current.account_id}:catalog",
           "arn:aws:glue:${var.region}:${data.aws_caller_identity.current.account_id}:database/${var.dbt_database_name}",
-          "arn:aws:glue:${var.region}:${data.aws_caller_identity.current.account_id}:table/${var.dbt_database_name}/crawl_plp_registry"
+          "arn:aws:glue:${var.region}:${data.aws_caller_identity.current.account_id}:table/${var.dbt_database_name}/crawl_plp_registry",
+          "arn:aws:glue:${var.region}:${data.aws_caller_identity.current.account_id}:table/${var.dbt_database_name}/silver_mapping_gaps"
         ]
       },
       {
@@ -503,7 +506,9 @@ resource "aws_lambda_function" "crawl_flow_helper" {
       ATHENA_WORKGROUP = var.athena_workgroup_name
       ATHENA_OUTPUT    = "s3://${var.price_comparison_bucket}/${var.athena_results_prefix}crawl-flow/"
       REGISTRY_TABLE   = "\"${var.dbt_database_name}\".\"crawl_plp_registry\""
-      MAX_VERIFY_POLLS = "15"
+      # Read by the summary's mapping-gaps line (scraper-pipeline's seed to-do list).
+      MAPPING_GAPS_TABLE = "\"${var.dbt_database_name}\".\"silver_mapping_gaps\""
+      MAX_VERIFY_POLLS   = "15"
     }
   }
 }
@@ -617,4 +622,70 @@ resource "aws_sfn_state_machine" "crawl_flow" {
   definition = jsonencode(local.crawl_flow_definition)
 
   depends_on = [aws_iam_role_policy.crawl_flow]
+}
+
+# -------------------------------------------------------
+# Schedule (step 6): daily for 7 days, then about weekly
+# -------------------------------------------------------
+
+resource "aws_iam_role" "crawl_flow_scheduler" {
+  name = "${var.ecs_name}-crawl-flow-scheduler"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [{
+      Effect    = "Allow",
+      Principal = { Service = "scheduler.amazonaws.com" },
+      Action    = "sts:AssumeRole",
+      Condition = { StringEquals = { "aws:SourceAccount" = data.aws_caller_identity.current.account_id } }
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "crawl_flow_scheduler" {
+  name = "${var.ecs_name}-crawl-flow-scheduler-policy"
+  role = aws_iam_role.crawl_flow_scheduler.id
+
+  # Start the crawl flow, nothing else.
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [{
+      Sid      = "StartCrawlFlow"
+      Effect   = "Allow"
+      Action   = ["states:StartExecution"]
+      Resource = local.crawl_flow_arn
+    }]
+  })
+}
+
+resource "aws_scheduler_schedule" "crawl_flow" {
+  name                         = local.crawl_flow_name
+  description                  = "Full crawl flow run (dev). On/off: make schedule-on / schedule-off."
+  schedule_expression          = var.crawl_schedule_expression
+  schedule_expression_timezone = var.crawl_schedule_timezone
+  end_date                     = var.crawl_schedule_end_date != "" ? var.crawl_schedule_end_date : null
+  state                        = "ENABLED"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  target {
+    arn      = aws_sfn_state_machine.crawl_flow.arn
+    role_arn = aws_iam_role.crawl_flow_scheduler.arn
+    input    = jsonencode({ start_at = "crawl" })
+
+    # A missed start isn't retried: the next scheduled run is the retry, and
+    # the flow refuses to overlap a running one anyway.
+    retry_policy {
+      maximum_retry_attempts = 0
+    }
+  }
+
+  # On/off is switched with make schedule-on / schedule-off; don't undo it.
+  lifecycle {
+    ignore_changes = [state]
+  }
+
+  depends_on = [aws_iam_role_policy.crawl_flow_scheduler]
 }

@@ -39,7 +39,7 @@ push, wait for the dbt image build, `make crawl-flow`.
 
 ```mermaid
 flowchart TD
-  sched["EventBridge Scheduler<br/>daily for 7 days, then weekly"]:::planned
+  sched["EventBridge Scheduler<br/>02:00 Dubai daily for 7 days, then weekly"]
   manual["make crawl-flow<br/>start by hand, any time"]
   sched -->|"start_at: crawl"| s1
   manual -->|"start_at: crawl or images"| s1
@@ -310,7 +310,8 @@ lives in AWS alone, so pausing doesn't need a commit.
 | Run frequency | `crawl_schedule_expression` | `infra/terraform/variables.tf` | Terraform |
 | Automatic stop after 7 days | `crawl_schedule_end_date` | `infra/terraform/variables.tf` | Terraform |
 | On or off | schedule `state` | AWS; Terraform ignores it | `make schedule-on` / `make schedule-off` |
-| Timezone and target | the schedule resource | `infra/terraform/orchestration.tf` | Terraform |
+| Timezone | `crawl_schedule_timezone` (`Asia/Dubai`) | `infra/terraform/variables.tf` | Terraform |
+| Target and its role | the schedule resource | `infra/terraform/orchestration.tf` | Terraform |
 | Steps in the flow | the state machine definition | `infra/terraform/orchestration.tf` | Terraform |
 | What gets crawled | `crawl_plp_registry.csv` | `../scraper-pipeline/canonical_seeds/` | commit, push; the flow seeds it first |
 | Warning thresholds | `OUNASS_PLP_EFFICIENT_*` | `ecommercecrawl/settings.py` | commit, push |
@@ -336,3 +337,5 @@ lives in AWS alone, so pausing doesn't need a commit.
 | 2026-11-13 | Step 5a: summary emailed after every run (SNS topic, `Notify` state; subject, cache line, blocked-by-site section, console link). The address lives only in the gitignored `infra/terraform/local.auto.tfvars` | — |
 | 2026-11-13 | Step 5b: a crawl that raised and wrote nothing is `crash` (marker `_FAIL_CRASH`, manifest `first_error`), shown with its error in the summary email | — |
 | 2026-11-13 | `STOP_AFTER=crawls`: a crawls-only test run (flow input `stop_after`) | — |
+| 2026-11-13 | Summary email adds a mapping-gaps line (brand spellings to review, products dropped from gold) from scraper-pipeline's `silver_mapping_gaps` | — |
+| 2026-11-13 | Step 6 built: schedule 02:00 Dubai daily, 2026-11-14 to 2026-11-20 (end date), scheduler role (`states:StartExecution` on the flow only), `make schedule-on/off/status`. Scheduled runs skip the `make crawl-flow` registry check | — |

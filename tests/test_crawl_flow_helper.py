@@ -422,3 +422,45 @@ def test_crawls_only_run_with_nothing_published_still_fails(helper):
         "gate": {"published": 0},
     }}, None)
     assert result["status"] == "failed"
+
+
+# -- mapping gaps line --------------------------------------------------------
+
+def _summary_text(helper, **state):
+    return helper.handler({"action": "summary", "state": {"flow": _start(helper), **state}}, None)["text"]
+
+
+def test_summary_reports_mapping_gaps_after_dbt_ran(helper):
+    helper.athena = _FakeAthena([["3", "2"]])
+    text = _summary_text(helper, crawls=[_crawl("success")], gate={"published": 1})
+    assert ("Mapping gaps: 3 brand spelling(s) to review (scraper-pipeline: make seed-suggestions); "
+            "2 product drop(s) from gold (a product missing two mappings counts twice)") in text
+    assert "silver_mapping_gaps" in helper.athena.queries[0]
+
+
+def test_summary_mapping_gaps_also_on_a_failed_dbt_test(helper):
+    helper.athena = _FakeAthena([["0", "5"]])
+    text = _summary_text(helper, failed_step="dbt_test", failure={"exit_code": 1})
+    assert "5 product drop(s) from gold" in text
+
+
+def test_summary_mapping_gaps_query_failure_never_fails_the_summary(helper):
+    helper.athena = _FakeAthena([], state="FAILED")
+    text = _summary_text(helper, crawls=[_crawl("success")], gate={"published": 1})
+    assert "Mapping gaps: not available (boom)" in text
+
+
+@pytest.mark.parametrize("state", [
+    {"failed_step": "dbt_run", "failure": {"exit_code": 1}},          # gold not rebuilt
+    {"crawls": [_crawl("failed")], "gate": {"published": 0}},         # dbt skipped
+])
+def test_summary_skips_mapping_gaps_when_dbt_did_not_run(helper, state):
+    text = _summary_text(helper, **state)
+    assert "Mapping gaps" not in text and helper.athena.queries == []
+
+
+def test_crawls_only_summary_skips_mapping_gaps(helper):
+    helper.handler({"action": "summary", "state": {
+        "flow": _start(helper, {"stop_after": "crawls"}), "crawls": [_crawl("success")], "gate": {"published": 1},
+    }}, None)
+    assert helper.athena.queries == []
