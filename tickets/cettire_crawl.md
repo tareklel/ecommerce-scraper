@@ -1,6 +1,6 @@
 # Ticket: Cettire Crawler (Saudi handbags, AR + EN)
 
-**Status: open; probed 2026-11-14; listing source found; how to read listings still to decide**
+**Status: open; probed 2026-11-14; search service works directly without Zyte; paging still to solve**
 
 **Site**: https://www.cettire.com/sa/ (country is a URL path)  
 **Languages**: EN in the page data; AR is applied in the browser (see probe results)  
@@ -24,6 +24,8 @@
    crawler task. Whether Cettire can be fetched without Zyte has **not been
    tested**. Test it as soon as a session can reach the site directly (laptop,
    and from AWS). If direct requests work, the crawler runs without Zyte.
+   **Tested 2026-11-14 from AWS:** pages are blocked without Zyte; the search
+   service is not (see the fourth probe).
 
 ---
 
@@ -152,14 +154,45 @@ the listing grid (source unknown), or the sitemap filtered by slug (imprecise).
   Recommended shape: listings via option 1, product pages via the plain fetch
   only when the full gallery or description is wanted.
 
+### Fourth probe: direct requests without Zyte (2026-11-14, user-approved)
+
+Sent from the dev crawler ECS task (AWS `eu-central-1`), no Zyte, with a
+normal browser user agent. 8 direct calls to the search service and 2 to
+pages, plus 2 browser-mode Zyte requests to study paging.
+
+| Check | Result |
+|---|---|
+| Product page, direct | **403**, DataDome challenge (`x-datadome: protected`) |
+| Listing page, direct | **403**, DataDome challenge |
+| Search service, direct | **200** on all 8 calls. `search.cettire.com` is not behind DataDome. Needs the `x-api-key` from the page config (`runtimeConfig.searchAIAPIKey`) |
+| Arabic from the search service | `langCode: "ar"` returns both `title` and `title_ar`; `langCode: "en"` returns `title` only |
+| Paging by `currentPage` | **Unreliable.** Without `requestId` / `deviceInfo`, page 1 returned the same 96 products as page 0. With them, page 1 returned 60 new products and page 2 repeated page 1. The response always echoes `currentPage: 0`. The site itself uses a "Load more" button, not page URLs; its follow-up request was not captured |
+| Large page size | `pageSize: 1000` returned 1,000 products in one call (2.5 MB), 849 of them not in the 96-per-page results |
+| Whole category in one call | Not tested: a `pageSize: 10000` call was blocked by the agent session's safety check |
+
+### Where this leaves the crawl
+
+- **Zyte is not needed for the search service**, which holds the full listing
+  data in both languages. It is needed for Cettire's pages (direct requests
+  are blocked by DataDome).
+- **A listing-only crawl needs no Zyte and no browser**: read the API key from
+  one page (one Zyte fetch per run, or reuse until it stops working), then
+  call the search service directly.
+- **Paging is the open technical question.** Candidates: large `pageSize`
+  (1,000 works), or splitting the category by brand or colour facet so each
+  query fits in one response. Either needs a completeness check against
+  `totalNumber`.
+- **Compliance note.** The agent session's safety check twice classified
+  direct calls to the search service as unauthorized access (the first run
+  went ahead only after the user's explicit permission). This route uses the
+  site's internal search service and its key rather than its public pages.
+  Check for an affiliate product feed before building on it.
+
 ### Still to probe
 
-1. Paging: does `?page=N` on a browser-rendered listing return page N of the
-   search response, up to the last page (about 99 for shoulder bags)?
-2. Zyte success rate and cost per run for ~185 browser listing requests.
-3. **Direct requests without Zyte**, from a laptop and from AWS, at crawl
-   pace. If they work, drop Zyte for this site (Decision 3).
-4. Whether sold-out products stay in the search results or disappear.
+1. Paging or slicing on the search service, with a completeness check.
+2. Whether sold-out products stay in the search results or disappear.
+3. Whether Cettire offers an affiliate product feed.
 
 ---
 

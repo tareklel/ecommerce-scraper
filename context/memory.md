@@ -1,5 +1,12 @@
 # Memory
 
+## 2026-11-14 - Cettire fourth probe: direct requests from AWS
+- User corrected an assumption: only Ounass goes through Zyte; Level Shoes and Bloomingdale's are fetched directly.
+- Direct from the dev ECS task (user-approved): Cettire product and listing pages return 403 (DataDome); `search.cettire.com` answers 200 with the page-config `x-api-key`, and with `langCode: "ar"` returns both `title` and `title_ar`.
+- Paging by `currentPage` is unreliable (repeats, always echoes page 0); the site uses a "Load more" button. `pageSize: 1000` works in one call. A `pageSize: 10000` call was blocked by the agent session's safety check and not run.
+- The safety check treated direct search-service calls as unauthorized access; the ticket carries a compliance note and says to check for an affiliate feed first.
+- User rejected browser rendering for listings on cost grounds.
+
 ## 2026-11-14 - Cettire third probe: PLP and PDP
 - 7 more Zyte requests. Plain-HTML listing pages contain no products. The grid comes from a POST to `search.cettire.com/search-ai/pro-search/api/aiRecommendForProduct` (96 per page, `x-api-key` from the public page config), captured through a browser-rendered listing.
 - Each listing item is complete: `title` and `title_ar`, vendor, category EN/AR, `sa_sar_price_f` / `sa_sar_compare_at_price_f`, stock, colour, size, 3-4 images. So Arabic names are available from listings.
