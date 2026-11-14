@@ -1,13 +1,14 @@
 # Ticket: Cettire Crawler (Saudi handbags, AR + EN)
 
-**Status: open, not started** (written 2026-11-14)
+**Status: open; first probe done 2026-11-14, listing source and Arabic still to resolve**
 
-**Site**: https://www.cettire.com (Saudi storefront URL to confirm in the probe)  
-**Languages**: AR and EN (user-confirmed 2026-11-14)
-**Country**: SA
-**Currency**: SAR (to confirm)
-**Scope**: women's handbags only, Arabic and English
-**Probe date**: not probed yet
+**Site**: https://www.cettire.com/sa/ (country is a URL path)  
+**Languages**: EN in the page data; AR is applied in the browser (see probe results)  
+**Country**: SA  
+**Currency**: SAR (confirmed)  
+**Scope**: women's handbags only, Arabic and English  
+**Platform**: Next.js front end on a Reaction Commerce GraphQL back end, CloudFront, DataDome bot protection  
+**Probe date**: 2026-11-14 (through Zyte from the dev crawler ECS task; pages kept under `s3://price-comparison-bucket-eu-central-1/probes/dev/cettire/`)
 
 ---
 
@@ -31,15 +32,60 @@ decision once Cettire is live.
 
 ---
 
-## Nothing below is verified yet
+## Probe results (2026-11-14)
 
-No request has been made to Cettire. The cloud agent session that wrote this
-ticket could not reach `www.cettire.com` (blocked by that session's network
-policy, not by Cettire), so every site fact here is a question for Phase 0.
+16 requests through Zyte in four short runs of the dev crawler task. No
+direct (non-Zyte) request has been made yet.
+
+| Check | Result |
+|---|---|
+| Bot protection | DataDome (`datadome` cookie), behind CloudFront |
+| Zyte HTTP mode (`httpResponseBody`) | Unreliable: `robots.txt` and the sitemap index 2 of 2, but pages and gzipped sitemaps only 4 of 12; the rest returned Zyte `520 Website Ban`. Failures happened with and without Saudi geolocation |
+| Zyte browser mode (`browserHtml`) | 2 of 2 on a listing page |
+| Direct request (no Zyte) | Not tested. With DataDome in front and Zyte's own HTTP mode being banned, it is unlikely to work from AWS |
+| Saudi storefront | URL path: `/sa/collections/...`, `/sa/products/...`. The response sets `spc-code=SA`, `spc-cur=SAR` |
+| Saudi price needs a Saudi IP? | No. Every product page carries prices for all regions; the `regionCode: "sa"` entry is the SAR price |
+| Product page data | Complete in the plain HTML, as JSON in `__NEXT_DATA__` (`props.apolloState.data`): title, brand (`vendor`), `productType`, tags (Women / Bags / Crossbody Bags / season), sold-out flag, stock count, size, colour, composition, 6 images, price and was-price. No JSON-LD |
+| Sale price | Present: one product showed `price: 2871`, `compareAtPrice: 4242` (SAR), matching the listing card |
+| Listing page data | **Not in the plain HTML.** The product grid is loaded by the browser. A browser-rendered listing showed only 6 products (lazy loading) |
+| Arabic | The `/sa/` page shell is Arabic (`lang="ar"`, RTL), but product data in the HTML is English. Arabic product names appeared only on the browser-rendered listing, and the site calls `translate.cettire.com`, so they are probably translated in the browser |
+| Product ID | Numeric suffix of the URL slug (`...-967213750`); same URL for both languages |
+| Language selection | Cookie `spc-lng` (`en` / `ar`), not the URL. Sending `spc-lng=en` did not change the product data, which was English either way |
+| Images | 6 per product on `d3vfig6e0r0snz.cloudfront.net`, in several sizes including `original` |
+| Bag listings | From the sitemap: `/collections/womens-bags/shoulder-bags`, `/collections/womens-bags/tote-bags` (not yet fetched with the `/sa/` prefix: that request was banned) |
+| robots.txt | Allows `/sa/products`, `/sa/collections`, `/sa/pages`; disallows `/graphql` and `/productgrid`; no crawl-delay |
+
+### What this means
+
+- **Zyte is necessary**, as far as tested. Product pages work in Zyte's
+  cheap HTTP mode but need retries (about one success in three so far, on a
+  very small sample).
+- **Product pages are easy**: one HTTP fetch gives every field including the
+  SAR price and was-price.
+- **Listings are the open problem.** Reading products from listing pages, as
+  on Ounass, needs either the site's GraphQL API (`api.cettire.com/graphql`;
+  `robots.txt` disallows `/graphql` on the main host) or browser rendering
+  with scrolling, which is the expensive Zyte mode. An alternative for
+  discovery is the product sitemaps (48 files).
+- **Arabic is not native in the data.** Getting Arabic names means browser
+  rendering or finding the translation call. The product data has a
+  per-language field (`lang({"lang":"en_US"})`), which suggests the API can
+  be asked for another language; untested.
+
+### Still to probe
+
+1. How the listing grid gets its products (network calls on a listing page),
+   page size, and total women's handbags for Saudi.
+2. Whether Arabic titles can be fetched without a browser.
+3. Zyte HTTP success rate over ~100 requests, and the cost per 1,000
+   successful pages with retries.
+4. A direct request from AWS, to close the "is Zyte necessary" question
+   formally.
+5. Whether SAR prices are duty-inclusive.
 
 ---
 
-## Phase 0: feasibility probe (do this first, no spider code before it)
+## Phase 0 checklist (original; see probe results above for what is answered)
 
 Follow `context/crawling_methodology.md`. Write `scripts/probe_cettire.py`
 in the style of `scripts/probe_bloomingdales.py` and record results in a

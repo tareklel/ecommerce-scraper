@@ -1,5 +1,12 @@
 # Memory
 
+## 2026-11-14 - Cettire first probe (through Zyte, from the dev crawler task)
+- 16 Zyte requests in four runs of the `ecommerce-scraper` ECS task with a command override (user-approved); pages kept under `probes/dev/cettire/` in the bucket. Results are in `tickets/cettire_crawl.md`.
+- Site: Next.js on Reaction Commerce GraphQL, CloudFront, DataDome. Saudi is the `/sa/` path; language is the `spc-lng` cookie.
+- Zyte HTTP mode is unreliable (pages/sitemaps 4 of 12, rest `520 Website Ban`); browser mode 2 of 2. Direct requests not tested.
+- Product pages carry everything in `__NEXT_DATA__` (English), including the SAR price and was-price under `regionCode: "sa"`. Listing grids are loaded by the browser, and Arabic product names appear only after browser rendering.
+- Open: listing source (GraphQL API vs browser), Arabic without a browser, Zyte success rate and cost.
+
 ## 2026-11-14 - Cettire ticket: AR/EN/SA confirmed by the user
 - `tickets/cettire_crawl.md`: the user confirmed Cettire has Arabic, English and a Saudi storefront, so the "no Arabic" decision section is removed; the probe still has to find how language is selected and whether AR and EN share a product ID.
 - Probe still not run: the user declined a cloud environment allowing `cettire.com`, so it must run from the laptop or another session.
