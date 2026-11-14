@@ -1,6 +1,6 @@
 # Ticket: Cettire Crawler (Saudi handbags, AR + EN)
 
-**Status: open; first probe done 2026-11-14, listing source and Arabic still to resolve**
+**Status: open; probed 2026-11-14; listing source and crawl option (A/B/C) still to decide**
 
 **Site**: https://www.cettire.com/sa/ (country is a URL path)  
 **Languages**: EN in the page data; AR is applied in the browser (see probe results)  
@@ -67,21 +67,40 @@ direct (non-Zyte) request has been made yet.
   `robots.txt` disallows `/graphql` on the main host) or browser rendering
   with scrolling, which is the expensive Zyte mode. An alternative for
   discovery is the product sitemaps (48 files).
-- **Arabic is not native in the data.** Getting Arabic names means browser
-  rendering or finding the translation call. The product data has a
-  per-language field (`lang({"lang":"en_US"})`), which suggests the API can
-  be asked for another language; untested.
+- **Arabic is not in the plain HTML**, but Cettire does store Arabic titles
+  and descriptions (see the second probe).
+
+### Second probe (2026-11-14, 4 more Zyte requests, with retries and network capture)
+
+| Check | Result |
+|---|---|
+| Arabic product text | **Stored by Cettire, served by its API.** In the browser the product page calls `api.cettire.com/graphql` (`catalogItemProduct`) and the response has a `lang` object: `lang: "ar_SA"`, Arabic `title` and `description`. The server-rendered HTML always asks for `en_US`, even with `spc-lng=ar` and `next-i18next=ar` cookies, so plain HTML never contains Arabic product text |
+| Arabic UI labels | Category and navigation names come from `translate.cettire.com` (`/category`, `/navigation`, `/translate`), a string translation service |
+| One fetch for both languages | A browser-rendered product page gives both: English `title` / `description` and the Arabic `lang` object, in the captured API response |
+| Duties and taxes | Included: the API says `priceIncludeTax: true` for Saudi, and the page shows "شامل الرسوم الجمركية والضرائب" |
+| Product sitemap | 48 files of 10,000 URLs (about 480,000 products, all genders and categories), no country prefix, one shared `lastmod`, plus image URL and title. No category or gender field; 708 of the first 10,000 slugs contain "bag" |
+| Listing grid source | **Still unknown.** The capture limit (10 calls) filled with translation and page-section calls before the product query. Scrolling a browser-rendered listing gave 9 products |
+| Zyte with retries | All 4 requests succeeded, one on the second attempt |
+
+### Crawl options
+
+| Option | How | Arabic | Cost and risk |
+|---|---|---|---|
+| A. Browser mode per product | Zyte `browserHtml` with network capture on each product page | Yes, Cettire's own | Most expensive Zyte mode, one request per product |
+| B. HTML per product, translate downstream | Zyte HTTP mode, read `__NEXT_DATA__` | No (EN only from Cettire) | Cheapest per page; needs retries; translation becomes scraper-pipeline work |
+| C. Call the GraphQL API | Request `api.cettire.com/graphql` for listings and both languages | Yes | Likely cheapest overall and listing-first, but `robots.txt` disallows `/graphql` on the main host; needs the user's decision before any direct call |
+
+Every option still needs a way to **discover** the Saudi women's handbags:
+the listing grid (source unknown), or the sitemap filtered by slug (imprecise).
 
 ### Still to probe
 
-1. How the listing grid gets its products (network calls on a listing page),
+1. How the listing grid gets its products (capture only the product query),
    page size, and total women's handbags for Saudi.
-2. Whether Arabic titles can be fetched without a browser.
-3. Zyte HTTP success rate over ~100 requests, and the cost per 1,000
-   successful pages with retries.
-4. A direct request from AWS, to close the "is Zyte necessary" question
+2. Zyte success rate over ~100 requests, and cost per 1,000 successful pages
+   for HTTP mode against browser mode.
+3. A direct request from AWS, to close the "is Zyte necessary" question
    formally.
-5. Whether SAR prices are duty-inclusive.
 
 ---
 

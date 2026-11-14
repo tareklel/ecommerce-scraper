@@ -1,5 +1,10 @@
 # Memory
 
+## 2026-11-14 - Cettire second probe: Arabic comes from the site's API
+- 4 more Zyte requests (retries on 520, network capture). Browser-rendered product pages call `api.cettire.com/graphql` and get a `lang: ar_SA` object with Arabic title and description; server-rendered HTML always requests `en_US`, cookies make no difference.
+- Saudi prices include duties and taxes (`priceIncludeTax: true`). Product sitemap is ~480,000 URLs with no category or gender. Listing grid source still unknown (capture limit hit).
+- Ticket now lists crawl options A (browser per product), B (HTML + translate downstream), C (GraphQL API; `robots.txt` disallows `/graphql` on the main host, user decision needed).
+
 ## 2026-11-14 - Cettire first probe (through Zyte, from the dev crawler task)
 - 16 Zyte requests in four runs of the `ecommerce-scraper` ECS task with a command override (user-approved); pages kept under `probes/dev/cettire/` in the bucket. Results are in `tickets/cettire_crawl.md`.
 - Site: Next.js on Reaction Commerce GraphQL, CloudFront, DataDome. Saudi is the `/sa/` path; language is the `spc-lng` cookie.
