@@ -1,5 +1,11 @@
 # Memory
 
+## 2026-11-14 - Ticket: Cettire crawler (Saudi handbags, AR + EN)
+- Added `tickets/cettire_crawl.md` (open, not started). Reason: Bloomingdale's returns 59 products for the two bag listings against ~3,100 (Ounass) and 2,140 (Level Shoes) in flow run `d66af788`.
+- Phase 0 probe comes first and must answer whether Zyte is necessary (direct requests from laptop, from AWS, and at crawl volume), how the Saudi storefront/SAR/language are selected, and whether an Arabic storefront exists (user decision if not).
+- No site fact is verified: the cloud session could not reach `www.cettire.com` (its own network policy).
+- Found while checking run `d66af788`, not yet fixed: 65 Level Shoes products with blank category never reach gold; 186 stale Arabic-only Bloomingdale's rows (July/August) remain in gold.
+
 ## 2026-11-13 - CI/CD step 6 applied: daily schedule; mapping-gaps line in the email
 - `aws_scheduler_schedule.crawl_flow` starts a full flow run at 02:00 Asia/Dubai daily, end_date 2026-11-20T20:00Z (7 runs, 2026-11-14 to 20), no retries; role `ecommerce-scraper-crawl-flow-scheduler` can only `states:StartExecution` the flow (user-approved). Terraform ignores `state`; `scripts/crawl_schedule.py` + `make schedule-status|on|off` (+ 3 tests). Scheduled runs skip the `make crawl-flow` registry check.
 - Summary email adds "Mapping gaps: N brand spelling(s) to review; M product drop(s) from gold" from scraper-pipeline's `silver_mapping_gaps` when the full dbt run happened; a failed query never fails the summary. Helper role gained Glue read on that table (user-approved). Checked by invoking the helper: 0 to review, 2 drops.
