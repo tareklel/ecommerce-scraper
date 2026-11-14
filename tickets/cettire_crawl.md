@@ -2,7 +2,8 @@
 
 **Status: open, not started** (written 2026-11-14)
 
-**Site**: https://www.cettire.com (Saudi storefront URL to confirm in the probe)
+**Site**: https://www.cettire.com (Saudi storefront URL to confirm in the probe)  
+**Languages**: AR and EN (user-confirmed 2026-11-14)
 **Country**: SA
 **Currency**: SAR (to confirm)
 **Scope**: women's handbags only, Arabic and English
@@ -70,9 +71,9 @@ the site does not block us.
 - How is the Saudi storefront selected: URL path, subdomain, cookie, or IP?
 - Are prices shown in SAR, and are they final prices (duties and taxes
   included) or does checkout add to them?
-- **Does Cettire have an Arabic storefront at all?** If yes, how is language
-  selected (path, subdomain, cookie) and do AR and EN share a product ID?
-- If there is no Arabic, see "Decision needed" below before going further.
+- Cettire has Arabic, English and a Saudi storefront (confirmed by the user,
+  2026-11-14; not yet checked by a request). How is language selected (path,
+  subdomain, cookie) and do AR and EN share a product ID?
 
 ### 0.3 Where the data lives
 
@@ -93,18 +94,6 @@ the site does not block us.
 
 - Record what `robots.txt` says about listing and product paths, and any
   crawl-delay.
-
----
-
-## Decision needed (user)
-
-**If Cettire has no Arabic storefront**, the product brief's Arabic-first
-promise is at stake. Options, to be decided by the user before build:
-
-1. Crawl EN only and show Cettire products in English on the Arabic site.
-2. Crawl EN only and translate names and descriptions downstream
-   (scraper-pipeline work, not this repo).
-3. Do not onboard Cettire; pick another retailer with native Arabic.
 
 ---
 
@@ -147,14 +136,12 @@ Follow the existing spider → quality gate → image pipeline pattern.
 - A full crawl of Saudi women's handbags publishes with `run_status: success`.
 - Crawled products appear in `gold_product_serving_latest` with images, and
   the count is reported next to Ounass and Level Shoes.
-- AR and EN rows share a product ID, or the "Decision needed" outcome is
-  recorded here.
+- AR and EN rows share a product ID.
 
 ---
 
 ## Open questions
 
-- Arabic storefront: exists or not (0.2).
 - Are Cettire's Saudi prices duty-inclusive? If not, they are not comparable
   with Ounass and Level Shoes prices and the site must say so.
 - Catalogue churn: how fast do products appear and sell out, and is a daily

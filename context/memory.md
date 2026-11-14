@@ -1,5 +1,9 @@
 # Memory
 
+## 2026-11-14 - Cettire ticket: AR/EN/SA confirmed by the user
+- `tickets/cettire_crawl.md`: the user confirmed Cettire has Arabic, English and a Saudi storefront, so the "no Arabic" decision section is removed; the probe still has to find how language is selected and whether AR and EN share a product ID.
+- Probe still not run: the user declined a cloud environment allowing `cettire.com`, so it must run from the laptop or another session.
+
 ## 2026-11-14 - Ticket: Cettire crawler (Saudi handbags, AR + EN)
 - Added `tickets/cettire_crawl.md` (open, not started). Reason: Bloomingdale's returns 59 products for the two bag listings against ~3,100 (Ounass) and 2,140 (Level Shoes) in flow run `d66af788`.
 - Phase 0 probe comes first and must answer whether Zyte is necessary (direct requests from laptop, from AWS, and at crawl volume), how the Saudi storefront/SAR/language are selected, and whether an Arabic storefront exists (user decision if not).
