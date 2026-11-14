@@ -1,5 +1,9 @@
 # Memory
 
+## 2026-11-14 - Cettire research note
+- Added `notes/2026-11-14-cettire-research.md`: the full research record (architecture, access matrix, PDP and PLP findings, search-service request and 51 response fields, paging and brand-group tests, catalogue statistics, brand overlap tables with Level Shoes and Ounass, all 319 shoulder-bag brands, affiliate check, cost estimate, compliance notes, decisions, open questions). The ticket links to it.
+- Correction after adding two brand aliases: 223 Cettire shoulder-bag brands (3,605 products) are on neither Level Shoes nor Ounass (earlier figure 225 / 3,698). Cost is $1-3 a month with a daily run, not per day.
+
 ## 2026-11-14 - Cettire cost estimate
 - User accepted the 64-brand Level Shoes allowlist as is. Estimate for about 7,800 products: daily listing refresh has no Zyte cost; product pages via Zyte plain HTTP are $1-10 one-off for the first run and about $0.15-1.30 a month after (about 1,000 new products a month); overall about $2-11 one-off and $1-3 a month. Zyte tier for Cettire and tote-bag counts are assumptions. Details in `tickets/cettire_crawl.md`.
 

@@ -12,6 +12,12 @@
 
 ---
 
+**Research record:** all findings, evidence, field lists and brand tables are
+in `notes/2026-11-14-cettire-research.md`. Keep new research there; keep this
+ticket for decisions and the work to do.
+
+---
+
 ## Decisions (user, 2026-11-14)
 
 1. **English first.** Build the crawl for English product data only. Arabic
@@ -247,7 +253,7 @@ site's full brand counts for the category) and the gold table for our sites.
   products or fewer; median stock per product is 2.
 - **Colours are separate products**: 2,268 sampled products are 1,649 models.
 - **Mostly not luxury**: the largest brands include Coccinelle, Pinko, Furla,
-  Michael Kors, Love Moschino, Zanellato; 225 brands (3,698 shoulder bags)
+  Michael Kors, Love Moschino, Zanellato; 223 brands (3,605 shoulder bags)
   are on neither Level Shoes nor Ounass.
 
 **Decision (user): allowlist Cettire to brands that Level Shoes carries.**
@@ -351,7 +357,7 @@ about 13% of sampled products were created in the last 30 days, so roughly
 | Fargate for the first product-page run | roughly 9 to 17 hours at about $0.025 an hour | under $0.50, one-off |
 | Image storage | about 39,000 images; size per image not measured | well under $1 a month at about 6 GB |
 
-Totals: about **$2 to $11 one-off**, then **about $1 to $3 a month**. Skipping
+Totals: about **$2 to $11 one-off**, then **about $1 to $3 a month** (per month, with a daily run). Skipping
 product pages (listing data and its 4 images only) makes Zyte cost zero.
 
 Not included: whether Cettire's image CDN can be downloaded directly
