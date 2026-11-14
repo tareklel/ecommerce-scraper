@@ -122,7 +122,7 @@ def test_rejected_key_is_refreshed_from_the_site_and_retried_once(spider, monkey
 
     urls = [c["url"] for c in fake.calls]
     assert urls == [constants.SEARCH_URL, constants.ZYTE_EXTRACT_URL, constants.SEARCH_URL]
-    assert fake.calls[1]["json"]["url"] == constants.API_KEY_PAGE_URL
+    assert fake.calls[1]["json"]["url"] == constants.API_KEY_PAGE_URLS[0]
     assert fake.calls[2]["headers"]["x-api-key"] == "fresh-key"
 
 
@@ -208,3 +208,23 @@ def test_product_url_seed_gives_one_english_row(spider):
     response = HtmlResponse(url=url, request=Request(url=url, meta={"rows": []}), body=pdp_html(), encoding="utf-8")
     (row,) = list(spider.parse_pdp(response))
     assert row["language"] == "EN" and row["portal_itemid"] == "900000001" and row["site"] == "cettire"
+
+
+def test_key_page_fetch_retries_zyte_bans_across_pages(spider, monkeypatch):
+    monkeypatch.setenv("ZYTE_API_KEY", "zyte-key")
+    import base64
+    page = base64.b64encode(pdp_html(api_key="site-key").encode()).decode()
+    answers = iter([FakeResponse(status=520), FakeResponse(status=520), FakeResponse(payload={"httpResponseBody": page})])
+    fake = FakeSearch(lambda url, body, headers: next(answers))
+    monkeypatch.setattr(cettire_crawl.requests, "post", fake)
+
+    assert spider._refresh_api_key() == "site-key"
+    assert [c["json"]["url"] for c in fake.calls] == list(constants.API_KEY_PAGE_URLS[:3])
+
+
+def test_key_page_fetch_gives_up_with_a_clear_error(spider, monkeypatch):
+    monkeypatch.setenv("ZYTE_API_KEY", "zyte-key")
+    monkeypatch.setattr(constants, "API_KEY_FETCH_ATTEMPTS", 3)
+    monkeypatch.setattr(cettire_crawl.requests, "post", FakeSearch(lambda url, body, headers: FakeResponse(status=520)))
+    with pytest.raises(RuntimeError, match="3 attempts, last status 520"):
+        spider._refresh_api_key()

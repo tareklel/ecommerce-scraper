@@ -40,7 +40,16 @@ SEARCH_DELAY_SECONDS = 1.0
 # The search key is published in every page's __NEXT_DATA__ config. Pages are
 # behind bot protection, so this page is fetched through the crawler API only
 # when the stored key is missing or rejected.
-API_KEY_PAGE_URL = MAIN_SITE + '/sa/collections/womens-bags'
+# Any page carries the key, so attempts rotate over a few of them. Zyte's
+# plain mode is refused often on this site ("520 Website Ban"): 4 attempts in
+# a row all failed in the first live run (2026-11-14), hence the generous
+# count and the pause.
+API_KEY_PAGE_URLS = (
+    MAIN_SITE + '/sa/collections/womens-bags',
+    MAIN_SITE + '/sa/collections/womens-bags/shoulder-bags',
+    MAIN_SITE + '/sa/collections/womens-bags/tote-bags',
+)
 API_KEY_CONFIG_FIELD = 'searchAIAPIKey'
-API_KEY_FETCH_ATTEMPTS = 4
+API_KEY_FETCH_ATTEMPTS = 12
+API_KEY_FETCH_PAUSE_SECONDS = 5.0
 ZYTE_EXTRACT_URL = 'https://api.zyte.com/v1/extract'

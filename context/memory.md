@@ -1,5 +1,10 @@
 # Memory
 
+## 2026-11-14 - Cettire first live run failed at the key fetch; fetch made more patient
+- Live test (`--limit 1`, dev crawler task running this branch's code unpacked over the image, bronze uploads off, output under `probes/dev/cettire/live1/`): the spider had no stored key, Zyte refused all 4 plain fetches of the key page (520), run ended `failed` / `crash` with the error named. Nothing crawled.
+- Key fetch now rotates over three Cettire pages (`API_KEY_PAGE_URLS`), 12 attempts with a 5 s pause; 2 new tests (42 Cettire tests pass). Second live run started; result not yet known.
+- scraper-pipeline: ticket `ticket/onboard-cettire.md` pushed on branch `claude/cettire-onboarding-ticket` of `tareklel/scraper-pipeline-pc` (not merged).
+
 ## 2026-11-14 - Cettire spider, step 1 (full crawl), not yet run live
 - New `cettire` spider (`spiders/cettire_crawl.py`, `rules/cettire_rules.py`, `constants/cettire_constants.py`), registered in `run_crawler.py`; seeds `resources/cettire_urls.csv`, allowlist `resources/cettire_brand_allowlist.csv` (64 brands); settings `CETTIRE_URLS_PATH`, `CETTIRE_BRAND_ALLOWLIST_PATH`, `CETTIRE_SEARCH_API_KEY`; quality-gate exceptions for `cettire` (`was_price`, `primary_label`, `text`, `designer_color`).
 - Flow: listing URL -> search-service query; one facet call, then one call (up to 1,000) per group of allowlisted brands, direct via `requests`; each product page through Zyte plain HTML; two rows per product (EN, AR). Field mapping table is in the ticket's "Build status".

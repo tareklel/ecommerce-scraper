@@ -78,30 +78,39 @@ class CettireSpider(MasterCrawl, scrapy.Spider):
     def _stored_api_key(self):
         return self._setting('CETTIRE_SEARCH_API_KEY') or os.environ.get('CETTIRE_SEARCH_API_KEY')
 
-    def _fetch_page_html_via_zyte(self, url):
-        """One plain-HTML fetch through Zyte, retried on its 520 "Website Ban"."""
+    def _fetch_key_page_html_via_zyte(self):
+        """
+        Plain-HTML fetch of a Cettire page through Zyte, for the search key.
+        Retried on Zyte's 520 "Website Ban", rotating over a few pages.
+        """
         zyte_key = self._setting('ZYTE_API_KEY') or os.environ.get('ZYTE_API_KEY')
         if not zyte_key:
             raise RuntimeError('ZYTE_API_KEY is not set; cannot read the Cettire search key from a page.')
+        urls = constants.API_KEY_PAGE_URLS
         last = None
-        for _ in range(constants.API_KEY_FETCH_ATTEMPTS):
+        for attempt in range(constants.API_KEY_FETCH_ATTEMPTS):
+            if attempt:
+                time.sleep(constants.API_KEY_FETCH_PAUSE_SECONDS)
             response = requests.post(
                 constants.ZYTE_EXTRACT_URL,
                 auth=(zyte_key, ''),
-                json={'url': url, 'httpResponseBody': True},
+                json={'url': urls[attempt % len(urls)], 'httpResponseBody': True},
                 timeout=180,
             )
             if response.status_code == 200:
                 return base64.b64decode(response.json().get('httpResponseBody') or '').decode('utf-8', 'replace')
             last = response.status_code
-        raise RuntimeError(f'Could not fetch {url} through Zyte (last status {last}).')
+        raise RuntimeError(
+            f'Could not fetch a Cettire page through Zyte to read the search key '
+            f'({constants.API_KEY_FETCH_ATTEMPTS} attempts, last status {last}).'
+        )
 
     def _refresh_api_key(self):
         """Read the current search key from a Cettire page. Once per run."""
         if self._api_key_refreshed:
             raise RuntimeError('Cettire search service rejected the key read from the site.')
         self._api_key_refreshed = True
-        key = rules.extract_search_api_key(self._fetch_page_html_via_zyte(constants.API_KEY_PAGE_URL))
+        key = rules.extract_search_api_key(self._fetch_key_page_html_via_zyte())
         if not key:
             raise RuntimeError('Cettire page config has no search key; the page layout may have changed.')
         self._api_key = key
