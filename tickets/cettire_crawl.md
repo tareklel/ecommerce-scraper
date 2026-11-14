@@ -220,9 +220,19 @@ with calls of up to 1,000 products.
 4. About 22 calls per run for shoulder and tote bags, direct from AWS, no
    Zyte, no browser.
 
-Open: the 1.5% shortfall; where the API key is read from each run (the page
-config needs one Zyte fetch because pages are behind DataDome); whether
-sold-out products remain in results.
+**API key (user decision, 2026-11-14):** store the key and reuse it; only
+when the search service rejects it, fetch one page through Zyte, read the new
+key from the page config, and retry once. A rejected key is not a failed run.
+
+**Product pages, Ounass-style (proposed):** the search service plays the role
+of the listing phase and refreshes every product each run. Product pages are
+fetched through Zyte's plain HTML mode (never the browser mode) only for
+products not seen before, to add the full gallery, description and
+composition. Product-page text is English only.
+
+Open: the 1.5% shortfall; whether sold-out products remain in results; how
+many new products appear per day; whether the first run fetches product pages
+for all existing products or starts with listing images only.
 
 ---
 

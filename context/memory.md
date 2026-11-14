@@ -1,5 +1,9 @@
 # Memory
 
+## 2026-11-14 - Cettire: API key handling and product-page plan
+- User decision: store the search-service API key and reuse it; refresh from a page (one Zyte fetch) only when it is rejected, then retry once.
+- Proposed (not yet agreed): Ounass-style split, search service as the listing phase every run, product pages via Zyte plain HTML only for new products.
+
 ## 2026-11-14 - Cettire route chosen: search service, brand groups of up to 1,000
 - User decision (no affiliate feed found): crawl via the search service with `pageSize: 1000`.
 - `vendorQuery` filters by brand name and accepts several brands; Shoulder Bags has 319 brands, none over 333 products, so 11 brand-group calls cover about 9,500 products (about 22 calls per run with Tote Bags). Three groups tested: correct brands and type, no duplicates, but about 1.5% fewer products than `totalNumber` (cause unknown).
