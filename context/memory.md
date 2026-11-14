@@ -1,5 +1,8 @@
 # Memory
 
+## 2026-11-14 - Cettire third live run confirms the fixes
+- `live3` (`--limit 1`): 7 min (was 40), 80 rows / 40 products, no duplicates, no out-of-stock from the page, quality gate pass; 35 of 40 product pages fetched, 5 refused and written from search data. Product pages ran at about 7.5 s each, so a full first pass of about 7,800 would take roughly 16 hours. Next: step 2 (skip product pages for known products).
+
 ## 2026-11-14 - Cettire second live run succeeded; three fixes
 - Live run 2 (`--limit 1`, output under `probes/dev/cettire/live2/`): quality gate pass, 40 products, 39 of 40 product pages fetched, key read from the site in about 3.5 min, run took 40 min.
 - Fixed after it: (1) duplicate rows when a product page was set aside for a retry round (the errback wrote rows each time; `AccessDeferred` now writes nothing); (2) new `access_no_defer` request flag in `ecommercecrawl/access.py`, set on Cettire product pages so a refused page is given up at once instead of holding the run through two 15-minute cool-downs (documented in `docs/ounass_plp_efficient_crawl.md` section 5); (3) stock and sizes are no longer taken from the product page, which is rendered for the site's default region and marked 10 of 40 in-stock products sold out. 592 tests pass (15 skipped in the cloud container).

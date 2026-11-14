@@ -86,6 +86,14 @@ off, output under `probes/dev/cettire/live1` and `live2`)**
      rendered for the site's default region, so stock and sizes now come from
      the search only. Not yet confirmed against the site in a browser.
 
+- **Run 3 (`live3`) confirmed the fixes**: 7 minutes instead of 40, 80 rows
+  for 40 products, no duplicates, nothing marked out of stock, quality gate
+  passed. 35 of 40 product pages fetched; the 5 refused ones were written
+  from search data straight away. Key read took 2 minutes; the 40 product
+  pages took 5 minutes (about 7.5 seconds each). At that pace a first full run
+  with every product page (about 7,800) would take roughly 16 hours, which is
+  the case for step 2 and for spreading the first product-page pass.
+
 **Not done yet**
 
 1. A live test run (`python3 run_crawler.py cettire --env dev --limit 1`, in
