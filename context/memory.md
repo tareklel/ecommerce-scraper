@@ -1,5 +1,9 @@
 # Memory
 
+## 2026-11-14 - Cettire decisions: English first, plain fetch, Zyte only temporarily
+- User decisions, recorded at the top of `tickets/cettire_crawl.md`: build English only for now (Arabic deferred); use the plain HTML fetch like Ounass (`http_response`), no browser rendering.
+- **Zyte for Cettire is temporary.** It was used only because the cloud session could not reach `cettire.com` directly; a direct (non-Zyte) request has never been tested. Test direct access from a laptop and from AWS as soon as possible, and if it works run the Cettire crawler without Zyte. Do not treat "Zyte is necessary" as established.
+
 ## 2026-11-14 - Cettire second probe: Arabic comes from the site's API
 - 4 more Zyte requests (retries on 520, network capture). Browser-rendered product pages call `api.cettire.com/graphql` and get a `lang: ar_SA` object with Arabic title and description; server-rendered HTML always requests `en_US`, cookies make no difference.
 - Saudi prices include duties and taxes (`priceIncludeTax: true`). Product sitemap is ~480,000 URLs with no category or gender. Listing grid source still unknown (capture limit hit).

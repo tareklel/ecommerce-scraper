@@ -1,6 +1,6 @@
 # Ticket: Cettire Crawler (Saudi handbags, AR + EN)
 
-**Status: open; probed 2026-11-14; listing source and crawl option (A/B/C) still to decide**
+**Status: open; probed 2026-11-14; English first with the plain fetch; listing source still to find**
 
 **Site**: https://www.cettire.com/sa/ (country is a URL path)  
 **Languages**: EN in the page data; AR is applied in the browser (see probe results)  
@@ -9,6 +9,21 @@
 **Scope**: women's handbags only, Arabic and English  
 **Platform**: Next.js front end on a Reaction Commerce GraphQL back end, CloudFront, DataDome bot protection  
 **Probe date**: 2026-11-14 (through Zyte from the dev crawler ECS task; pages kept under `s3://price-comparison-bucket-eu-central-1/probes/dev/cettire/`)
+
+---
+
+## Decisions (user, 2026-11-14)
+
+1. **English first.** Build the crawl for English product data only. Arabic
+   is deferred; the options are recorded under "Crawl options" below.
+2. **Plain HTML fetch, the same mode Ounass uses** (`http_response`), reading
+   the product data embedded in the page. No browser rendering.
+3. **Zyte is temporary.** It has been used so far only because the cloud
+   agent session that ran the probe cannot reach `cettire.com` itself (that
+   session's network policy), so every request went through Zyte from the dev
+   crawler task. Whether Cettire can be fetched without Zyte has **not been
+   tested**. Test it as soon as a session can reach the site directly (laptop,
+   and from AWS). If direct requests work, the crawler runs without Zyte.
 
 ---
 
@@ -57,9 +72,11 @@ direct (non-Zyte) request has been made yet.
 
 ### What this means
 
-- **Zyte is necessary**, as far as tested. Product pages work in Zyte's
-  cheap HTTP mode but need retries (about one success in three so far, on a
-  very small sample).
+- **Whether Zyte is necessary is still open.** No direct request has been
+  made (see Decisions). Through Zyte, product pages work in the cheap HTTP
+  mode but need retries (about one success in three in the first probe, on a
+  very small sample). The site uses DataDome, so direct requests may be
+  challenged; that is a guess until tested.
 - **Product pages are easy**: one HTTP fetch gives every field including the
   SAR price and was-price.
 - **Listings are the open problem.** Reading products from listing pages, as
@@ -93,14 +110,14 @@ direct (non-Zyte) request has been made yet.
 Every option still needs a way to **discover** the Saudi women's handbags:
 the listing grid (source unknown), or the sitemap filtered by slug (imprecise).
 
-### Still to probe
+### Still to probe (English-first scope)
 
 1. How the listing grid gets its products (capture only the product query),
    page size, and total women's handbags for Saudi.
 2. Zyte success rate over ~100 requests, and cost per 1,000 successful pages
    for HTTP mode against browser mode.
-3. A direct request from AWS, to close the "is Zyte necessary" question
-   formally.
+3. **Direct requests without Zyte**, from a laptop and from AWS, at crawl
+   pace. If they work, drop Zyte for this site (Decision 3).
 
 ---
 
