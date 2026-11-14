@@ -73,8 +73,49 @@ ticket for decisions and the work to do.
    subcategory mappings, image pipeline check on the Cettire image host.
 4. The completeness shortfall is only logged; it is not yet a degradation in
    the manifest.
-5. **Step 2, efficient crawl:** skip the product page for products already
+5. **Brand mapping for the allowlist** (see the next section): the current
+   list is a name-matched first pass.
+6. **Step 2, efficient crawl:** skip the product page for products already
    known (search data refreshes them every run).
+
+---
+
+## Brand allowlist: rule, and the mapping work it still needs
+
+**Rule (user, 2026-11-14): Cettire is crawled only for brands that Level
+Shoes carries.** The crawler enforces it with
+`resources/cettire_brand_allowlist.csv`: only those brand names are sent to
+the search service, so other brands are never fetched.
+
+**The current list is a first pass, not a real mapping.** It was built once,
+by hand-run script, and has these gaps:
+
+| Gap | Detail |
+|---|---|
+| Name matching only | Level Shoes brand names from gold were matched to Cettire's by normalised spelling (case, accents, punctuation) plus three hand-written aliases (`Valentino Garavani` = `Valentino`, `McQueen` = `Alexander McQueen`, `Michael Kors` = `Michael Michael Kors`). Any brand spelled differently in a way nobody spotted is silently missing |
+| Shoulder bags only | Cettire's brand list was read for shoulder bags (319 brands). Brands that appear only under tote bags were never seen, so they can't be on the list |
+| Not all of Cettire | No one has looked at Cettire's full brand list across categories, or at sub-lines (`Michael Michael Kors`, `Love Moschino`, `Kurt Geiger London`, `Adidas By Stella McCartney`) and whether each belongs to a Level Shoes brand |
+| Unmatched Level Shoes brands unreviewed | 28 Level Shoes brands had no Cettire match (e.g. State Of Escape, Aquazzura, DeMellier, The Jacksons). Nobody checked whether Cettire has them under another name |
+| Frozen snapshot | The list reflects Level Shoes' brands in dev gold on 2026-11-14. When Level Shoes adds or drops a brand, the CSV does not follow |
+| No link to canonical brands | The list is plain names. It is not tied to scraper-pipeline's `dim_canonical_brand` / `dim_map_brand`, which is where "the same brand on two sites" is supposed to be defined |
+
+**Work needed (not yet discussed or planned in detail):**
+
+1. Get Cettire's complete brand list for every category we crawl (one small
+   search call per listing returns the `vendor` facet).
+2. Map each Cettire brand to a canonical brand in scraper-pipeline's
+   `dim_map_brand` (site `cettire`), reviewing sub-lines and near-matches by
+   eye. This is the real mapping; it also serves the downstream onboarding
+   (`../scraper-pipeline/ticket/onboard-cettire.md`).
+3. Derive the allowlist from that mapping: a Cettire brand is allowed when
+   its canonical brand has products on Level Shoes. Decide whether the list
+   is generated (an export, like the Ounass efficient-crawl inputs) or stays
+   a committed CSV refreshed by a script.
+4. Report brands that are on Cettire but unmapped, so new ones are reviewed
+   instead of silently skipped.
+5. Decide the rule's scope: "brand exists on Level Shoes at all" (today) or
+   "brand has bags on Level Shoes"; and whether Ounass brands should count
+   later.
 
 ---
 

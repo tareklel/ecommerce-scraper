@@ -1,5 +1,8 @@
 # Memory
 
+## 2026-11-14 - Cettire allowlist needs a real brand mapping (user note)
+- Ticket gains "Brand allowlist: rule, and the mapping work it still needs". Rule: crawl Cettire only for brands Level Shoes carries. The current `resources/cettire_brand_allowlist.csv` is a first pass: name-matched with three aliases, from shoulder-bag brands only, a frozen snapshot of dev gold, not tied to `dim_map_brand`. Needed and not yet planned: Cettire's full brand list, a reviewed Cettire -> canonical brand mapping in scraper-pipeline, the allowlist derived from it, and a report of unmapped brands.
+
 ## 2026-11-14 - Cettire first live run failed at the key fetch; fetch made more patient
 - Live test (`--limit 1`, dev crawler task running this branch's code unpacked over the image, bronze uploads off, output under `probes/dev/cettire/live1/`): the spider had no stored key, Zyte refused all 4 plain fetches of the key page (520), run ended `failed` / `crash` with the error named. Nothing crawled.
 - Key fetch now rotates over three Cettire pages (`API_KEY_PAGE_URLS`), 12 attempts with a 5 s pause; 2 new tests (42 Cettire tests pass). Second live run started; result not yet known.
