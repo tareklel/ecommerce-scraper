@@ -192,7 +192,24 @@ pages, plus 2 browser-mode Zyte requests to study paging.
 
 1. Paging or slicing on the search service, with a completeness check.
 2. Whether sold-out products stay in the search results or disappear.
-3. Whether Cettire offers an affiliate product feed.
+3. Affiliate product feed: programme exists, feed unconfirmed (see the affiliate feed check).
+
+---
+
+### Affiliate feed check (2026-11-14, web search only)
+
+- Cettire runs an affiliate programme. Public directories list it on
+  **Partnerize** (about 5% revenue share, 30-day cookie) and BlueAff as open,
+  FlexOffers as closed, and on link-monetisation networks (Sovrn/VigLink,
+  Cuelinks). Reported commission rates conflict (4%, 5%, 12%).
+- **No public listing mentions a product feed.** Whether Cettire publishes
+  one is only visible inside the network after approval.
+- No listing mentions Saudi Arabia or Middle East publishers.
+- Not easy access: it needs an application and approval, and Partnerize is
+  described as selective with new publishers.
+- Next step is the user's: apply through Partnerize (or ask Cettire's
+  affiliate team) and ask specifically for a product feed with SAR prices
+  and Arabic titles.
 
 ---
 

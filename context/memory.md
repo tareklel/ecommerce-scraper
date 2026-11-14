@@ -1,5 +1,8 @@
 # Memory
 
+## 2026-11-14 - Cettire affiliate feed check
+- Web search only: Cettire has an affiliate programme (Partnerize about 5% / 30-day cookie, BlueAff; FlexOffers closed). No public listing mentions a product feed or Saudi publishers; a feed can only be confirmed after approval. Recorded in `tickets/cettire_crawl.md`; applying is the user's step.
+
 ## 2026-11-14 - Cettire fourth probe: direct requests from AWS
 - User corrected an assumption: only Ounass goes through Zyte; Level Shoes and Bloomingdale's are fetched directly.
 - Direct from the dev ECS task (user-approved): Cettire product and listing pages return 403 (DataDome); `search.cettire.com` answers 200 with the page-config `x-api-key`, and with `langCode: "ar"` returns both `title` and `title_ar`.
