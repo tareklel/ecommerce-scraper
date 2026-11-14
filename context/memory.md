@@ -1,5 +1,10 @@
 # Memory
 
+## 2026-11-14 - Cettire route chosen: search service, brand groups of up to 1,000
+- User decision (no affiliate feed found): crawl via the search service with `pageSize: 1000`.
+- `vendorQuery` filters by brand name and accepts several brands; Shoulder Bags has 319 brands, none over 333 products, so 11 brand-group calls cover about 9,500 products (about 22 calls per run with Tote Bags). Three groups tested: correct brands and type, no duplicates, but about 1.5% fewer products than `totalNumber` (cause unknown).
+- Planned shape is in `tickets/cettire_crawl.md` (fifth probe). Build not started.
+
 ## 2026-11-14 - Cettire affiliate feed check
 - Web search only: Cettire has an affiliate programme (Partnerize about 5% / 30-day cookie, BlueAff; FlexOffers closed). No public listing mentions a product feed or Saudi publishers; a feed can only be confirmed after approval. Recorded in `tickets/cettire_crawl.md`; applying is the user's step.
 

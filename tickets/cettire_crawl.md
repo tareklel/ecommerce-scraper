@@ -1,6 +1,6 @@
 # Ticket: Cettire Crawler (Saudi handbags, AR + EN)
 
-**Status: open; probed 2026-11-14; search service works directly without Zyte; paging still to solve**
+**Status: open; probed 2026-11-14; route chosen: search service direct, brand groups of up to 1,000; ready to plan the build**
 
 **Site**: https://www.cettire.com/sa/ (country is a URL path)  
 **Languages**: EN in the page data; AR is applied in the browser (see probe results)  
@@ -193,6 +193,36 @@ pages, plus 2 browser-mode Zyte requests to study paging.
 1. Paging or slicing on the search service, with a completeness check.
 2. Whether sold-out products stay in the search results or disappear.
 3. Affiliate product feed: programme exists, feed unconfirmed (see the affiliate feed check).
+
+---
+
+### Fifth probe: covering a category with calls of up to 1,000 (2026-11-14)
+
+User decision after the affiliate check found no feed: use the search service
+with calls of up to 1,000 products.
+
+| Check | Result |
+|---|---|
+| Brand filter | `vendorQuery` takes brand **names** as in the `vendor` facet (`["Totême"]` worked; the handle `["toteme"]` returned 0). Several brands can go in one call |
+| Brands per category | Shoulder Bags: 319 brands, the largest has 333 products, so no single brand exceeds 1,000 |
+| Calls needed | Packing brands into groups whose facet totals stay under 950 gives **11 calls for Shoulder Bags** (about 9,500 products). Tote Bags (8,218) should need about 9 or 10 |
+| Correctness | 3 groups tested: only the requested brands came back, all `Shoulder Bags`, no duplicates |
+| Completeness gap | Each call returned slightly fewer products than its `totalNumber`: 910 of 923, 420 of 427, 28 of 29 (about 1.5% short). Cause unknown |
+
+**Crawl shape that follows (English and Arabic in one pass):**
+
+1. One call per category with a small page size to read `totalNumber` and
+   the `vendor` facet.
+2. Pack brands into groups under 1,000 and make one `pageSize: 1000` call per
+   group, with `langCode: "ar"` so `title` and `title_ar` both come back.
+3. Compare products received with the facet totals; report the shortfall as a
+   degradation in the manifest.
+4. About 22 calls per run for shoulder and tote bags, direct from AWS, no
+   Zyte, no browser.
+
+Open: the 1.5% shortfall; where the API key is read from each run (the page
+config needs one Zyte fetch because pages are behind DataDome); whether
+sold-out products remain in results.
 
 ---
 
