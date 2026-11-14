@@ -236,6 +236,103 @@ for all existing products or starts with listing images only.
 
 ---
 
+### Catalogue analysis and brand allowlist (2026-11-14)
+
+From the saved search responses (about 2,270 of 9,500 shoulder bags, plus the
+site's full brand counts for the category) and the gold table for our sites.
+
+- **Not expired stock**: every sampled product has stock of at least 1 and is
+  visible; 65 to 70% were created in 2026.
+- **Breadth, not depth**: 319 brands in shoulder bags, 144 of them with five
+  products or fewer; median stock per product is 2.
+- **Colours are separate products**: 2,268 sampled products are 1,649 models.
+- **Mostly not luxury**: the largest brands include Coccinelle, Pinko, Furla,
+  Michael Kors, Love Moschino, Zanellato; 225 brands (3,698 shoulder bags)
+  are on neither Level Shoes nor Ounass.
+
+**Decision (user): allowlist Cettire to brands that Level Shoes carries.**
+
+- Level Shoes has 92 bag brands in gold; **64 are on Cettire** (matched by
+  name; `Valentino Garavani` = `Valentino`, `McQueen` = `Alexander McQueen`).
+- Those 64 brands hold **4,175 of Cettire's 9,506 shoulder bags (44%)**.
+  Tote bags not counted: no brand breakdown for totes has been fetched. If the
+  share is similar, about 3,600 of 8,218, so roughly 7,800 in total (estimate).
+- About 5 brand-group calls for shoulder bags instead of 11.
+- The 28 Level Shoes brands not on Cettire are mostly pre-loved lines and
+  small labels (State Of Escape, Aquazzura, DeMellier, The Jacksons).
+- Several allowlisted brands are far bigger on Cettire than on Level Shoes
+  (Marc Jacobs 215 against 11, Michael Michael Kors 212 against 3, Stella
+  McCartney 145 against 10), so a tighter list is an option.
+
+| Cettire brand | Cettire shoulder bags | Level Shoes bags (all types) |
+|---|---|---|
+| Valentino | 275 | 75 |
+| Saint Laurent | 237 | 182 |
+| Marc Jacobs | 215 | 11 |
+| Michael Michael Kors | 212 | 3 |
+| Prada | 201 | 181 |
+| Tory Burch | 187 | 50 |
+| Chloé | 164 | 109 |
+| Stella McCartney | 145 | 10 |
+| Balenciaga | 137 | 168 |
+| Diesel | 121 | 3 |
+| Vivienne Westwood | 113 | 4 |
+| Dragon Diffusion | 110 | 33 |
+| Gucci | 109 | 142 |
+| Jacquemus | 108 | 45 |
+| Margesherwood | 103 | 7 |
+| Alaïa | 99 | 82 |
+| Jil Sander | 97 | 4 |
+| Ferragamo | 90 | 15 |
+| Ganni | 89 | 7 |
+| Burberry | 87 | 57 |
+| Miu Miu | 75 | 70 |
+| Tod's | 73 | 44 |
+| Balmain | 71 | 11 |
+| Fendi | 66 | 24 |
+| Givenchy | 64 | 34 |
+| Mulberry | 57 | 11 |
+| Versace | 55 | 9 |
+| Alexander McQueen | 53 | 20 |
+| Bottega Veneta | 50 | 80 |
+| Dolce & Gabbana | 48 | 159 |
+| Hogan | 45 | 1 |
+| Khaite | 44 | 1 |
+| Yuzefi | 40 | 11 |
+| Staud | 39 | 13 |
+| The Attico | 39 | 9 |
+| Elisabetta Franchi | 31 | 13 |
+| Totême | 29 | 8 |
+| Polo Ralph Lauren | 28 | 15 |
+| Osoi | 28 | 10 |
+| AMI | 28 | 2 |
+| Manu Atelier | 27 | 11 |
+| Hibourama | 24 | 7 |
+| Jimmy Choo | 23 | 58 |
+| Acne Studios | 22 | 7 |
+| Francesco Biasia | 21 | 3 |
+| Christian Louboutin | 19 | 27 |
+| Alexander Wang | 19 | 4 |
+| Roger Vivier | 19 | 1 |
+| Self-Portrait | 19 | 1 |
+| ROTATE | 18 | 8 |
+| JW Anderson | 15 | 3 |
+| Cult Gaia | 13 | 6 |
+| Bally | 12 | 8 |
+| Naghedi | 10 | 10 |
+| Casablanca | 9 | 1 |
+| Simone Rocha | 8 | 1 |
+| JW PEI | 7 | 51 |
+| Rains | 7 | 3 |
+| Gimaguas | 7 | 2 |
+| Amina Muaddi | 7 | 1 |
+| The Row | 4 | 9 |
+| Strathberry | 1 | 11 |
+| Neous | 1 | 2 |
+| Farm Rio | 1 | 2 |
+
+---
+
 ### Affiliate feed check (2026-11-14, web search only)
 
 - Cettire runs an affiliate programme. Public directories list it on

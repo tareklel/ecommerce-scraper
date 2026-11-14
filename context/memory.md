@@ -1,5 +1,9 @@
 # Memory
 
+## 2026-11-14 - Cettire catalogue analysis; allowlist to Level Shoes brands
+- Cettire's size is brand breadth (319 shoulder-bag brands, thin stock, colours as separate products), not expired stock; most of the long tail is accessible brands, 225 brands on neither Level Shoes nor Ounass.
+- User decision: allowlist Cettire to brands Level Shoes carries. 64 of Level's 92 bag brands are on Cettire and hold 4,175 of 9,506 shoulder bags; totes not counted (estimate about 3,600). Brand table is in `tickets/cettire_crawl.md`.
+
 ## 2026-11-14 - Cettire: API key handling and product-page plan
 - User decision: store the search-service API key and reuse it; refresh from a page (one Zyte fetch) only when it is rejected, then retry once.
 - Proposed (not yet agreed): Ounass-style split, search service as the listing phase every run, product pages via Zyte plain HTML only for new products.
