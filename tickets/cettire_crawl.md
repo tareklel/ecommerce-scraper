@@ -1,6 +1,6 @@
 # Ticket: Cettire Crawler (Saudi handbags, AR + EN)
 
-**Status: open; probed 2026-11-14; route chosen: search service direct, brand groups of up to 1,000; ready to plan the build**
+**Status: in progress; step 1 (full crawl) coded and unit-tested 2026-11-14, not yet run live; step 2 (efficient crawl) next**
 
 **Site**: https://www.cettire.com/sa/ (country is a URL path)  
 **Languages**: EN in the page data; AR is applied in the browser (see probe results)  
@@ -15,6 +15,66 @@
 **Research record:** all findings, evidence, field lists and brand tables are
 in `notes/2026-11-14-cettire-research.md`. Keep new research there; keep this
 ticket for decisions and the work to do.
+
+---
+
+## Build status
+
+**Step 1, full crawl (search service + product page): code written
+2026-11-14, unit-tested, not yet run against the live site.**
+
+- `ecommercecrawl/spiders/cettire_crawl.py`, `rules/cettire_rules.py`,
+  `constants/cettire_constants.py`; registered as `cettire` in
+  `run_crawler.py`.
+- Seeds: `resources/cettire_urls.csv` (shoulder bags, tote bags). Allowlist:
+  `resources/cettire_brand_allowlist.csv` (the 64 Level Shoes brands).
+- Per listing: one small search call for brand counts, then one call of up to
+  1,000 products per group of allowlisted brands; each product page fetched
+  through Zyte plain HTML and merged in.
+- Output: two rows per product (EN, AR) in the Level Shoes shape, plus
+  `sizes`, `designer_model_number`, `designer_color`.
+
+| Field | Search service | Product page |
+|---|---|---|
+| `portal_itemid`, `url` | numeric ID at the end of the slug | |
+| `product_name` | `title` (EN row), `title_ar` (AR row) | |
+| `category`, `subcategory` | `category` / `product_type` and their `_ar` versions | |
+| `brand`, `gender`, `color` | `vendor`, `department`, `Color` | fills blanks only |
+| `price`, `was_price`, `currency` | `sa_sar_price_f`, `sa_sar_compare_at_price_f`, SAR | fills blanks only |
+| `price_discount` | computed whole percent; `0` at full price, `None` when the price is missing | |
+| `out_of_stock` | `inventory_quantity` is 0 | page value wins (fetched later) |
+| `sizes` | `Size` | in-stock variant sizes win |
+| `image_urls` | 3 to 4 listing images | full gallery wins when present |
+| `text` | none | EN row only: `details` (feature bullets, composition, made in), `size_fit` (dimensions). `description` stays `None`: Cettire has no prose paragraph |
+| `primary_label` | none | none |
+
+- Search key: `CETTIRE_SEARCH_API_KEY` is optional. Missing or rejected
+  (401/403): the spider reads the current key from one Cettire page through
+  Zyte, retries once, and logs that the stored key should be updated.
+- A product page that fails or has no data does not drop the product: its
+  rows are written from the search data.
+- `--limit N`: at most N brand groups per listing and 20 products per call.
+- Completeness: received against listed counts is logged per listing
+  (`Cettire listing summary`), with a warning when short.
+- Tests: `tests/test_cettire_rules.py`, `tests/test_cettire_spider.py`
+  (40 tests, hand-written fixtures in `tests/cettire_fixtures.py`). The rules
+  were also checked by hand against the saved real responses: 1,000 search
+  products gave 1,998 rows with no blank required field, and three real
+  product pages parsed with prices matching the search data.
+
+**Not done yet**
+
+1. A live test run (`python3 run_crawler.py cettire --env dev --limit 1`, in
+   the dev ECS task): about 20 products.
+2. Infra, only if a stored key is wanted: add `CETTIRE_SEARCH_API_KEY` to the
+   crawler secret and `ecs_secret_env_keys`. Without it each run spends one
+   Zyte request reading the key.
+3. scraper-pipeline: registry row for `cettire`, brand / category /
+   subcategory mappings, image pipeline check on the Cettire image host.
+4. The completeness shortfall is only logged; it is not yet a degradation in
+   the manifest.
+5. **Step 2, efficient crawl:** skip the product page for products already
+   known (search data refreshes them every run).
 
 ---
 

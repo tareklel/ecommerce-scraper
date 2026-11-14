@@ -2,7 +2,7 @@
 
 **What this doc is:** how every crawl run is classified, what lands in S3,
 and what a person should do about it. It applies to all spiders (Ounass,
-Level, Farfetch, Bloomingdale's), normal and PLP-efficient mode. Keep it
+Level, Farfetch, Bloomingdale's, Cettire), normal and PLP-efficient mode. Keep it
 current: any change to run statuses, failure reasons or markers updates this
 doc in the same commit (`context/AGENTS.md`). `tests/test_crawl_run_status_docs.py`
 fails if a marker or failure reason in the verifier is missing here.

@@ -26,8 +26,10 @@ the gold datasets published by scraper-pipeline.
 
 ## What This Repo Is Today
 
-- **Scrapy spiders** for Ounass and Level Shoes (PLP pagination + PDP extraction)
-  with Zyte API routing for rendered pages
+- **Scrapy spiders** for Ounass, Level Shoes and Bloomingdale's (PLP pagination +
+  PDP extraction) with Zyte API routing where a site needs it, and Cettire
+  (built 2026-11-14, not yet run live: listings from the site's search
+  service, product pages through Zyte)
 - **Image download pipeline**: ECS-orchestrated batch job that queries
   `stg_product_image_download_status`, downloads images, validates with Pillow,
   and stores content-addressed blobs at `bronze/images/by-hash/{sha256}`

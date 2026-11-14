@@ -1,5 +1,12 @@
 # Memory
 
+## 2026-11-14 - Cettire spider, step 1 (full crawl), not yet run live
+- New `cettire` spider (`spiders/cettire_crawl.py`, `rules/cettire_rules.py`, `constants/cettire_constants.py`), registered in `run_crawler.py`; seeds `resources/cettire_urls.csv`, allowlist `resources/cettire_brand_allowlist.csv` (64 brands); settings `CETTIRE_URLS_PATH`, `CETTIRE_BRAND_ALLOWLIST_PATH`, `CETTIRE_SEARCH_API_KEY`; quality-gate exceptions for `cettire` (`was_price`, `primary_label`, `text`, `designer_color`).
+- Flow: listing URL -> search-service query; one facet call, then one call (up to 1,000) per group of allowlisted brands, direct via `requests`; each product page through Zyte plain HTML; two rows per product (EN, AR). Field mapping table is in the ticket's "Build status".
+- Choices: `price_discount` computed, 0 at full price; AR rows have no `text`; `text.description` is None (Cettire has no prose); a failed product page still writes the search rows; search key optional, re-read from a page through Zyte when missing or rejected.
+- 40 new tests with hand-written fixtures (no site data committed); full suite 587 passed, 15 skipped in the cloud container (scrapy-zyte-api would not build there on Python 3.13). Rules also checked by hand against saved real responses.
+- Not done: live run, optional key secret (infra), scraper-pipeline registry and mappings, shortfall as a manifest degradation, step 2 efficient crawl.
+
 ## 2026-11-14 - Cettire research note
 - Added `notes/2026-11-14-cettire-research.md`: the full research record (architecture, access matrix, PDP and PLP findings, search-service request and 51 response fields, paging and brand-group tests, catalogue statistics, brand overlap tables with Level Shoes and Ounass, all 319 shoulder-bag brands, affiliate check, cost estimate, compliance notes, decisions, open questions). The ticket links to it.
 - Correction after adding two brand aliases: 223 Cettire shoulder-bag brands (3,605 products) are on neither Level Shoes nor Ounass (earlier figure 225 / 3,698). Cost is $1-3 a month with a daily run, not per day.

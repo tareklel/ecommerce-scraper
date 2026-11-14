@@ -10,6 +10,7 @@ from ecommercecrawl.spiders.farfetch_crawl import FFSpider
 from ecommercecrawl.spiders.ounass_crawl import OunassSpider
 from ecommercecrawl.spiders.level_crawl import LevelSpider
 from ecommercecrawl.spiders.bloomingdales_crawl import BloomingdalesSpider
+from ecommercecrawl.spiders.cettire_crawl import CettireSpider
 
 
 spider_map = {
@@ -17,6 +18,7 @@ spider_map = {
         'ounass': OunassSpider,
         'level': LevelSpider,
         'bloomingdales': BloomingdalesSpider,
+        'cettire': CettireSpider,
     }
 
 
