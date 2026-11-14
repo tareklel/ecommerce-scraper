@@ -333,6 +333,32 @@ site's full brand counts for the category) and the gold table for our sites.
 
 ---
 
+### Cost estimate for the allowlisted crawl (2026-11-14)
+
+Assumptions: about 7,800 products (4,175 shoulder bags counted, about 3,600
+tote bags estimated); Zyte pay-as-you-go plain HTTP at $0.13 to $1.27 per
+1,000 successful requests depending on the site's difficulty tier (Cettire's
+tier is unknown; figures from a web search, not checked in the Zyte account);
+about 13% of sampled products were created in the last 30 days, so roughly
+1,000 new products a month (the sample leans towards newer products).
+
+| Item | Volume | Cost |
+|---|---|---|
+| Daily listing refresh via the search service | about 10 direct calls per run | No Zyte cost; a few minutes of Fargate |
+| API key refresh | one Zyte page fetch, only when the key is rejected | Negligible |
+| Product pages, first run (one-off) | about 7,800 Zyte plain fetches | $1 to $10 |
+| Product pages, ongoing | about 1,000 a month | $0.15 to $1.30 a month |
+| Fargate for the first product-page run | roughly 9 to 17 hours at about $0.025 an hour | under $0.50, one-off |
+| Image storage | about 39,000 images; size per image not measured | well under $1 a month at about 6 GB |
+
+Totals: about **$2 to $11 one-off**, then **about $1 to $3 a month**. Skipping
+product pages (listing data and its 4 images only) makes Zyte cost zero.
+
+Not included: whether Cettire's image CDN can be downloaded directly
+(untested), and dbt / Athena cost for the extra rows.
+
+---
+
 ### Affiliate feed check (2026-11-14, web search only)
 
 - Cettire runs an affiliate programme. Public directories list it on
