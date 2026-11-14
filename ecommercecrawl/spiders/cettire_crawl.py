@@ -9,6 +9,7 @@ from datetime import date
 import requests
 import scrapy
 
+from ecommercecrawl import access
 from ecommercecrawl.constants import cettire_constants as constants
 from ecommercecrawl.crawler_api import REQUEST_TYPE_HTTP_RESPONSE, build_crawler_api_request
 from ecommercecrawl.rules import cettire_rules as rules
@@ -26,7 +27,8 @@ class CettireSpider(MasterCrawl, scrapy.Spider):
 
     Product pages: fetched through the crawler API (plain HTML) to add the
     full gallery and the English copy. A product page that can't be fetched
-    does not lose the product: its rows are written from the search data.
+    does not lose the product: its rows are written from the search data,
+    without waiting for an access retry round.
 
     Every product is written as two rows, EN and AR.
     """
@@ -213,7 +215,9 @@ class CettireSpider(MasterCrawl, scrapy.Spider):
             errback=self.pdp_failed,
             settings=getattr(self, 'settings', None),
             request_type=REQUEST_TYPE_HTTP_RESPONSE,
-            meta={'rows': rows},
+            # A refused product page is not worth a 15-minute retry round:
+            # the product is written from the search data instead.
+            meta={'rows': rows, access.NO_DEFER_META_KEY: True},
         )
 
     def parse_pdp(self, response):
@@ -228,6 +232,10 @@ class CettireSpider(MasterCrawl, scrapy.Spider):
 
     def pdp_failed(self, failure):
         """A product page we couldn't fetch: keep the product, from search data."""
+        if failure.check(access.AccessDeferred):
+            # Set aside for a retry round: the same request comes back, so
+            # writing now would duplicate the product's rows.
+            return
         rows = failure.request.meta.get('rows') or []
         self.logger.warning(
             f'Cettire product page failed ({failure.type.__name__}): {failure.request.url}; '

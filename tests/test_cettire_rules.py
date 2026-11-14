@@ -185,11 +185,17 @@ def test_merge_adds_gallery_to_both_rows_and_copy_to_english_only():
     assert arabic["product_name"] == "حقيبة كتف أكمي" and english["price"] == 3000.0
 
 
-def test_merge_takes_stock_from_the_page_and_fills_blanks():
-    rows = rules.rows_from_hit(search_hit(price=None, compare=None), "run", "d")
-    english, _ = rules.merge_pdp_into_rows(rows, rules.extract_product(pdp_html(sold_out=True)))
-    assert english["out_of_stock"] is True
+def test_merge_fills_blanks_but_keeps_stock_from_the_search():
+    rows = rules.rows_from_hit(search_hit(price=None, compare=None, Size=None), "run", "d")
+    english, _ = rules.merge_pdp_into_rows(rows, rules.extract_product(pdp_html()))
     assert (english["price"], english["was_price"], english["price_discount"]) == (3000.0, 4000.0, 25)
+    assert english["sizes"] == ["Only One Size"]
+
+    # The page is rendered for the site's default region, so its sold-out flag
+    # does not override the Saudi search listing.
+    in_stock = rules.rows_from_hit(search_hit(quantity=2), "run", "d")
+    english, arabic = rules.merge_pdp_into_rows(in_stock, rules.extract_product(pdp_html(sold_out=True)))
+    assert english["out_of_stock"] is False and arabic["out_of_stock"] is False
 
 
 def test_merge_without_page_data_keeps_the_search_rows():

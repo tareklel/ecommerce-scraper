@@ -440,10 +440,15 @@ def merge_pdp_into_rows(rows: list[dict], pdp: dict | None) -> list[dict]:
     """
     Add product-page fields to the rows built from the search hit.
 
-    The search service stays the source for names, category and price (it is
-    read for every product on every run). The product page adds the full
-    gallery and available sizes to every row and the English copy to the EN
-    row, and fills anything the hit left blank.
+    The search service stays the source for names, category, price, sizes
+    and stock (it is read for every product on every run, and for the Saudi
+    region). The product page adds the full gallery to every row and the
+    English copy to the EN row, and fills anything the hit left blank.
+
+    Stock is deliberately not taken from the page: the server-rendered page
+    is built for the site's default region, and in the first live run
+    (2026-11-14) it marked 10 of 40 products sold out that the Saudi search
+    listed as in stock.
     """
     if not pdp:
         return rows
@@ -452,14 +457,9 @@ def merge_pdp_into_rows(rows: list[dict], pdp: dict | None) -> list[dict]:
         out = dict(row)
         if pdp.get('image_urls'):
             out['image_urls'] = pdp['image_urls']
-        if pdp.get('sizes'):
-            out['sizes'] = pdp['sizes']
-        # The page is the fresher stock signal: it was fetched after the listing.
-        if pdp.get('out_of_stock') is not None:
-            out['out_of_stock'] = pdp['out_of_stock']
         if out.get('language') == 'EN' and pdp.get('text'):
             out['text'] = pdp['text']
-        for key in ('brand', 'gender', 'color', 'price', 'currency', 'was_price',
+        for key in ('brand', 'gender', 'color', 'sizes', 'price', 'currency', 'was_price',
                     'price_discount', 'designer_model_number', 'designer_color'):
             if out.get(key) is None and pdp.get(key) is not None:
                 out[key] = pdp[key]

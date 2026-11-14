@@ -130,6 +130,15 @@ def test_rounds_off_means_no_deferral():
     assert mw.process_exception(request, TimeoutError(), spider=None) is None
 
 
+def test_no_defer_flag_gives_up_at_once_and_still_counts_the_failure():
+    mw = _middleware()
+    request = scrapy.Request(URL, meta={access.NO_DEFER_META_KEY: True})
+    assert mw.process_exception(request, RequestError(520), spider=None) is None  # errback sees it
+    assert not mw.busy()
+    host = mw.summary()["hosts"]["saudi.ounass.com"]
+    assert host["gave_up"] == 1 and host["access_failures"] == {"zyte_520": 1}
+
+
 def test_content_errors_are_never_deferred():
     mw = _middleware()
     request = scrapy.Request(URL)

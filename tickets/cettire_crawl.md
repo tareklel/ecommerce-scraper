@@ -42,8 +42,8 @@ ticket for decisions and the work to do.
 | `brand`, `gender`, `color` | `vendor`, `department`, `Color` | fills blanks only |
 | `price`, `was_price`, `currency` | `sa_sar_price_f`, `sa_sar_compare_at_price_f`, SAR | fills blanks only |
 | `price_discount` | computed whole percent; `0` at full price, `None` when the price is missing | |
-| `out_of_stock` | `inventory_quantity` is 0 | page value wins (fetched later) |
-| `sizes` | `Size` | in-stock variant sizes win |
+| `out_of_stock` | `inventory_quantity` is 0 | not used: the page is rendered for the default region, not Saudi |
+| `sizes` | `Size` | fills blanks only |
 | `image_urls` | 3 to 4 listing images | full gallery wins when present |
 | `text` | none | EN row only: `details` (feature bullets, composition, made in), `size_fit` (dimensions). `description` stays `None`: Cettire has no prose paragraph |
 | `primary_label` | none | none |
@@ -61,6 +61,30 @@ ticket for decisions and the work to do.
   were also checked by hand against the saved real responses: 1,000 search
   products gave 1,998 rows with no blank required field, and three real
   product pages parsed with prices matching the search data.
+
+**First live runs (2026-11-14, `--limit 1`, dev crawler task, bronze uploads
+off, output under `probes/dev/cettire/live1` and `live2`)**
+
+- Run 1 failed in a minute: no stored key, and Zyte refused all 4 fetches of
+  the key page. Reported correctly as `failed` / `crash`. Fixed: 12 attempts
+  with a pause, rotating over three pages.
+- Run 2 succeeded: quality gate passed, 40 products (20 per listing), 39 of 40
+  product pages fetched, reading the key took about 3.5 minutes.
+  - EN rows: `Bags | Shoulder Bags`, `Bags | Tote Bags`. AR rows: `أكياس |
+    حقائب الكتف`, `أكياس | حقائب اليد`.
+  - Rows carry 2 to 6 images; 39 of 42 EN rows have `text`.
+- Three problems found in run 2, fixed afterwards:
+  1. **Duplicate rows**: the one refused product page was written three
+     times, once per retry round. A request set aside for a round now writes
+     nothing.
+  2. **30 minutes lost to one page**: the access retry rounds waited 15
+     minutes twice for a single product page, so the run took 40 minutes.
+     Cettire product pages now skip the rounds (`access_no_defer`) and fall
+     back to search data at once.
+  3. **Wrong stock from the page**: 10 of 40 products were marked sold out by
+     the product page while the Saudi search listed them in stock. The page is
+     rendered for the site's default region, so stock and sizes now come from
+     the search only. Not yet confirmed against the site in a browser.
 
 **Not done yet**
 

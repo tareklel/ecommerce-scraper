@@ -1,5 +1,10 @@
 # Memory
 
+## 2026-11-14 - Cettire second live run succeeded; three fixes
+- Live run 2 (`--limit 1`, output under `probes/dev/cettire/live2/`): quality gate pass, 40 products, 39 of 40 product pages fetched, key read from the site in about 3.5 min, run took 40 min.
+- Fixed after it: (1) duplicate rows when a product page was set aside for a retry round (the errback wrote rows each time; `AccessDeferred` now writes nothing); (2) new `access_no_defer` request flag in `ecommercecrawl/access.py`, set on Cettire product pages so a refused page is given up at once instead of holding the run through two 15-minute cool-downs (documented in `docs/ounass_plp_efficient_crawl.md` section 5); (3) stock and sizes are no longer taken from the product page, which is rendered for the site's default region and marked 10 of 40 in-stock products sold out. 592 tests pass (15 skipped in the cloud container).
+- Third live run started to confirm the fixes.
+
 ## 2026-11-14 - Cettire allowlist needs a real brand mapping (user note)
 - Ticket gains "Brand allowlist: rule, and the mapping work it still needs". Rule: crawl Cettire only for brands Level Shoes carries. The current `resources/cettire_brand_allowlist.csv` is a first pass: name-matched with three aliases, from shoulder-bag brands only, a frozen snapshot of dev gold, not tied to `dim_map_brand`. Needed and not yet planned: Cettire's full brand list, a reviewed Cettire -> canonical brand mapping in scraper-pipeline, the allowlist derived from it, and a report of unmapped brands.
 

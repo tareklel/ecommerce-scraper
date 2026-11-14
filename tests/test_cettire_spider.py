@@ -188,11 +188,28 @@ def test_blocked_product_page_still_writes_the_search_rows(spider):
 def test_failed_product_page_request_still_writes_the_search_rows(spider):
     rows = spider_rows(spider)
 
-    class Failure:
-        type = TimeoutError
-        request = Request(url=rows[0]["url"], meta={"rows": rows})
+    from twisted.python.failure import Failure
 
-    assert list(spider.pdp_failed(Failure())) == rows
+    failure = Failure(TimeoutError("timed out"))
+    failure.request = Request(url=rows[0]["url"], meta={"rows": rows})
+    assert list(spider.pdp_failed(failure)) == rows
+
+
+def test_a_request_set_aside_for_a_retry_round_writes_nothing(spider):
+    from ecommercecrawl import access
+    from twisted.python.failure import Failure
+
+    rows = spider_rows(spider)
+    failure = Failure(access.AccessDeferred("later"))
+    failure.request = Request(url=rows[0]["url"], meta={"rows": rows})
+    assert list(spider.pdp_failed(failure)) == []
+
+
+def test_product_pages_skip_access_retry_rounds(spider):
+    from ecommercecrawl import access
+
+    request = spider._pdp_request("https://www.cettire.com/sa/products/acme-bag-900000001", rows=[])
+    assert request.meta[access.NO_DEFER_META_KEY] is True
 
 
 def test_seed_urls_are_routed_by_kind(spider, monkeypatch):
