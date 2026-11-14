@@ -1,6 +1,6 @@
 # Ticket: Cettire Crawler (Saudi handbags, AR + EN)
 
-**Status: open; probed 2026-11-14; English first with the plain fetch; listing source still to find**
+**Status: open; probed 2026-11-14; listing source found; how to read listings still to decide**
 
 **Site**: https://www.cettire.com/sa/ (country is a URL path)  
 **Languages**: EN in the page data; AR is applied in the browser (see probe results)  
@@ -110,14 +110,56 @@ direct (non-Zyte) request has been made yet.
 Every option still needs a way to **discover** the Saudi women's handbags:
 the listing grid (source unknown), or the sitemap filtered by slug (imprecise).
 
-### Still to probe (English-first scope)
+### Third probe: listing pages and product pages (2026-11-14, 7 more Zyte requests)
 
-1. How the listing grid gets its products (capture only the product query),
-   page size, and total women's handbags for Saudi.
-2. Zyte success rate over ~100 requests, and cost per 1,000 successful pages
-   for HTTP mode against browser mode.
+**Listing pages (PLP)**
+
+| Check | Result |
+|---|---|
+| Plain HTML fetch | 3 listing pages fetched (`shoulder-bags`, `shoulder-bags?page=2`, `tote-bags`): **zero products in the HTML**. It only holds the collection's tags. The plain fetch cannot read or discover products from listings |
+| Where the grid comes from | The browser POSTs to `search.cettire.com/search-ai/pro-search/api/aiRecommendForProduct` with a JSON body (`countryCode: SA`, `currencyCode: SAR`, `langCode`, `department: women`, `catQuery: bags`, `subCatQuery: shoulder bags`, `pageSize: 96`, `currentPage`) and an `x-api-key` header taken from the site's public page config. Not the GraphQL API |
+| Page size and totals | 96 products per page. Women's bags for Saudi: **Shoulder Bags about 9,500, Tote Bags 8,216** (also Clutch 1,738, Crossbody 1,316) |
+| Fields per listing item | 51 fields, complete on all 96 items checked: `title` **and `title_ar`**, `vendor`, `product_type` and `product_type_ar`, `category` and `category_ar`, `department`, `handle` (the URL slug with the numeric ID), `sa_sar_price_f`, `sa_sar_compare_at_price_f` (blank on 8 full-price items), `inventory_quantity`, `Color`, `Size`, `designerModelNumber`, `created_at` / `updated_at`, and 3 to 4 image URLs |
+| Arabic | **Present in the listing data** (`title_ar`, `product_type_ar`, `category_ar`). No product page or browser needed for Arabic names once the listing data is read |
+
+**Product pages (PDP)**
+
+| Check | Result |
+|---|---|
+| Plain HTML fetch | 3 different products fetched, all complete in `__NEXT_DATA__`: title, vendor, `productType`, tags, sold-out flag, stock per variant, size, colour, composition, made-in, SAR `price` and `compareAtPrice` under `regionCode: "sa"`, 4 to 6 gallery images |
+| Agreement with the listing | Same product, same numbers: Totême T-Lock, SAR 4,269 / was 6,143 in both |
+| What the PDP adds over the listing | Full gallery (4 to 6 images against 3 to 4), description, composition, made-in |
+| Zyte HTTP attempts needed | 4, 3, 1, 2, 1 across the five plain fetches in this run |
+
+### What the third probe changes
+
+- **Scale**: shoulder and tote bags alone are about 17,700 products, against
+  about 3,100 on Ounass and 2,140 on Level Shoes.
+- **A product-page-only crawl is expensive**: about 17,700 fetches per run,
+  each needing one to four attempts, and it still needs a way to discover the
+  URLs.
+- **Listing-first works and includes Arabic**: about 185 listing pages cover
+  all 17,700 products with names in both languages, prices and stock. There
+  are two ways to read the listing data:
+  1. **Browser-rendered listing page with network capture** (how this probe
+     did it): Zyte loads the page as a visitor would and returns the search
+     response. One request per 96 products. Uses the expensive Zyte mode, but
+     only about 185 times per run. `?page=N` paging still to confirm.
+  2. **Call the search service directly**: cheapest, but it means sending the
+     site's own `x-api-key` to its API from our crawler. Needs the user's
+     decision.
+- Decision 2 (plain HTML only) therefore fits product pages but not listings.
+  Recommended shape: listings via option 1, product pages via the plain fetch
+  only when the full gallery or description is wanted.
+
+### Still to probe
+
+1. Paging: does `?page=N` on a browser-rendered listing return page N of the
+   search response, up to the last page (about 99 for shoulder bags)?
+2. Zyte success rate and cost per run for ~185 browser listing requests.
 3. **Direct requests without Zyte**, from a laptop and from AWS, at crawl
    pace. If they work, drop Zyte for this site (Decision 3).
+4. Whether sold-out products stay in the search results or disappear.
 
 ---
 

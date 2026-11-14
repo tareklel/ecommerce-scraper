@@ -1,5 +1,12 @@
 # Memory
 
+## 2026-11-14 - Cettire third probe: PLP and PDP
+- 7 more Zyte requests. Plain-HTML listing pages contain no products. The grid comes from a POST to `search.cettire.com/search-ai/pro-search/api/aiRecommendForProduct` (96 per page, `x-api-key` from the public page config), captured through a browser-rendered listing.
+- Each listing item is complete: `title` and `title_ar`, vendor, category EN/AR, `sa_sar_price_f` / `sa_sar_compare_at_price_f`, stock, colour, size, 3-4 images. So Arabic names are available from listings.
+- Saudi women's Shoulder Bags about 9,500 and Tote Bags 8,216 (about 17,700 products; ~185 listing pages).
+- Plain-HTML product pages are complete (3 checked) and agree with the listing; they add full gallery and description.
+- Open for the user: read listings by browser render with network capture, or by calling the search service directly.
+
 ## 2026-11-14 - Cettire decisions: English first, plain fetch, Zyte only temporarily
 - User decisions, recorded at the top of `tickets/cettire_crawl.md`: build English only for now (Arabic deferred); use the plain HTML fetch like Ounass (`http_response`), no browser rendering.
 - **Zyte for Cettire is temporary.** It was used only because the cloud session could not reach `cettire.com` directly; a direct (non-Zyte) request has never been tested. Test direct access from a laptop and from AWS as soon as possible, and if it works run the Cettire crawler without Zyte. Do not treat "Zyte is necessary" as established.
