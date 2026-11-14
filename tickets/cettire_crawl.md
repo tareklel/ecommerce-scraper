@@ -1,6 +1,6 @@
 # Ticket: Cettire Crawler (Saudi handbags, AR + EN)
 
-**Status: in progress; step 1 (full crawl) coded and unit-tested 2026-11-14, not yet run live; step 2 (efficient crawl) next**
+**Status: in progress; step 1 (full crawl) built and proven in live test runs 2026-11-14; next is the downstream onboarding in scraper-pipeline, then step 2 (efficient crawl) on a gold export**
 
 **Site**: https://www.cettire.com/sa/ (country is a URL path)  
 **Languages**: EN in the page data; AR is applied in the browser (see probe results)  
@@ -94,21 +94,42 @@ off, output under `probes/dev/cettire/live1` and `live2`)**
   with every product page (about 7,800) would take roughly 16 hours, which is
   the case for step 2 and for spreading the first product-page pass.
 
-**Not done yet**
+**Order of work from here (user decision, 2026-11-14): downstream first,
+then the efficient crawl built on a gold export, like Ounass.**
 
-1. A live test run (`python3 run_crawler.py cettire --env dev --limit 1`, in
-   the dev ECS task): about 20 products.
-2. Infra, only if a stored key is wanted: add `CETTIRE_SEARCH_API_KEY` to the
-   crawler secret and `ecs_secret_env_keys`. Without it each run spends one
-   Zyte request reading the key.
-3. scraper-pipeline: registry row for `cettire`, brand / category /
-   subcategory mappings, image pipeline check on the Cettire image host.
-4. The completeness shortfall is only logged; it is not yet a degradation in
-   the manifest.
+1. **Downstream onboarding in scraper-pipeline** (next). Ticket:
+   `../scraper-pipeline/ticket/onboard-cettire.md` (branch
+   `claude/cettire-onboarding-ticket` of `tareklel/scraper-pipeline-pc`, not
+   merged yet). Seeds, per-site models, unions, image check and tests, so
+   Cettire rows reach silver and gold. Registry rows go in last, because
+   active rows make the scheduled crawl flow crawl Cettire.
+2. **Get this branch onto main and into the crawler image.** The dev image is
+   built from main and does not contain the spider; the live tests ran this
+   branch's code unpacked over the image. Until it is merged, the crawl flow
+   cannot run Cettire.
+3. **First real crawl into bronze** (uploads on), once step 1 can read it.
+   Decide then whether the first run fetches every product page (about 16
+   hours at the measured pace) or spreads them.
+4. **Step 2, efficient crawl**, built on a gold export of known Cettire
+   products: the search service refreshes every product each run; a product
+   page is fetched only for products that have not had one. Needs step 1,
+   and an export from scraper-pipeline like the Ounass efficient-crawl
+   inputs.
 5. **Brand mapping for the allowlist** (see the next section): the current
-   list is a name-matched first pass.
-6. **Step 2, efficient crawl:** skip the product page for products already
-   known (search data refreshes them every run).
+   list is a name-matched first pass. Shares the `dim_map_brand` work in
+   step 1.
+
+Smaller items, any time:
+
+- Stored search key: add `CETTIRE_SEARCH_API_KEY` to the crawler secret and
+  `ecs_secret_env_keys` (infra, needs approval). Without it each run spends
+  about 2 to 3.5 minutes reading the key through Zyte.
+- The completeness shortfall is only logged; make it a degradation in the
+  manifest.
+- Confirm the stock finding in a browser from a Saudi connection (product
+  page said sold out, Saudi search said in stock, on 10 of 40 products).
+- Product pages given up on access do not degrade the run today; decide
+  whether the manifest should count them.
 
 ---
 

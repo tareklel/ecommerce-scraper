@@ -1,5 +1,12 @@
 # Memory
 
+## 2026-11-14 - Cettire: where things stand and what is next
+- **State:** `cettire` spider (step 1: search-service listings + product pages) is built, on branch `claude/project-viability-assessment-sxolr2`, not on main, so not in the crawler image. Proven in three live `--limit 1` runs in the dev crawler task (this branch's code unpacked over the image, bronze uploads off, outputs under `probes/dev/cettire/live1..3`). Nothing has been written to bronze.
+- **User decision:** do the downstream onboarding in scraper-pipeline first, then build step 2 (efficient crawl) on a gold export like Ounass. Not the interim "known products file" option.
+- **Next steps, in order:** (1) scraper-pipeline onboarding per `ticket/onboard-cettire.md` on branch `claude/cettire-onboarding-ticket` of `tareklel/scraper-pipeline-pc` (unmerged; registry rows last); (2) merge this branch so the image has the spider; (3) first real crawl into bronze; (4) step 2 on a gold export; (5) reviewed brand mapping to replace the name-matched allowlist.
+- **Open small items:** stored search key (infra), completeness shortfall as a manifest degradation, confirm the stock finding in a browser, whether given-up product pages should degrade the run.
+- **Working notes for a future session:** this cloud session cannot reach `cettire.com` or Zyte directly; all site access ran inside the dev ECS task via AWS SSO (device login, 1-hour sessions, `AdministratorAccess` is the only role). The agent safety check blocked a direct whole-category search call and, once, the first direct search call until the user gave explicit permission.
+
 ## 2026-11-14 - Cettire third live run confirms the fixes
 - `live3` (`--limit 1`): 7 min (was 40), 80 rows / 40 products, no duplicates, no out-of-stock from the page, quality gate pass; 35 of 40 product pages fetched, 5 refused and written from search data. Product pages ran at about 7.5 s each, so a full first pass of about 7,800 would take roughly 16 hours. Next: step 2 (skip product pages for known products).
 
