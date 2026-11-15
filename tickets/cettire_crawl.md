@@ -119,6 +119,28 @@ then the efficient crawl built on a gold export, like Ounass.**
    list is a name-matched first pass. Shares the `dim_map_brand` work in
    step 1.
 
+**Joining the nightly crawl flow (2026-11-15)**
+
+- **Registry: English only, one row per listing** (user decision). Each
+  Cettire listing URL serves both languages through the search service, so
+  the spider writes EN and AR rows from one URL; no stand-in Arabic registry
+  row. Arabic quality is left to downstream; if a single-language mode is
+  ever wanted, add a switch to turn the AR rows off.
+- `cettire` added to `SITES` in `lambda/crawl_flow_helper/handler.py`
+  (`urls_source`, like Level Shoes). **The helper Lambda is deployed by a
+  targeted Terraform apply, not by CI**: apply it before any Cettire registry
+  row goes active, or the flow refuses to start for every site
+  (`UnknownRegistrySite`).
+- **Product pages off by default** (user decision, 2026-11-15: no
+  ~7,800-page first crawl). `CETTIRE_FETCH_PRODUCT_PAGES` (env var, default
+  false): the spider writes every allowlisted product from the search data
+  alone (names in both languages, price, stock, colour, size, 3 to 4 images),
+  with no Zyte requests apart from reading the search key when it is not
+  stored. No descriptions (`text` null on every row). Turn it on only with
+  the efficient crawl, which fetches pages for new products alone.
+- Registry rows are added in scraper-pipeline with `is_active = FALSE`.
+  Switching them to TRUE is what starts the nightly crawl.
+
 Smaller items, any time:
 
 - Stored search key: add `CETTIRE_SEARCH_API_KEY` to the crawler secret and
