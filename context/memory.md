@@ -1,5 +1,10 @@
 # Memory
 
+## 2026-11-15 - Cettire downstream: seeds and silver models merged; dev bronze table created
+- In `tareklel/scraper-pipeline-pc`, the user merged the ticket (PR #1) and the seeds + four Cettire silver models (PR #2) into `main`. The models read `bronze_cettire_raw`, and the crawl flow runs a full `dbt run`, so this session created `price_comparison_dev.bronze_cettire_raw` (empty) with the user's AWS sign-in and checked the four models' SQL read-only against dev (valid, 0 rows).
+- Still open downstream: `dbt seed` in dev, the prod table, the shared models that list sites, registry rows (last), and in this repo a `cettire` entry in `lambda/crawl_flow_helper/handler.py`'s site table plus bronze partition registration for the new table.
+- This repo's PR #1 (the spider) is still open.
+
 ## 2026-11-15 - Cettire downstream onboarding started: seeds
 - In `tareklel/scraper-pipeline-pc`, branch `claude/cettire-onboarding-seeds` (stacked on the ticket branch, no PR yet): Cettire rows in the site, slug (`ct`), brand (64), category (4) and gender seeds. CSV only; not loaded with `dbt seed`, no model reads them. Next there: the per-site silver models copied from Level Shoes, then the shared models that list sites.
 - This session is subscribed to ecommerce-scraper PR #1 and scraper-pipeline-pc PR #1.
