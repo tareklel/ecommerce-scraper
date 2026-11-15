@@ -1,5 +1,9 @@
 # Memory
 
+## 2026-11-15 - Cettire downstream onboarding started: seeds
+- In `tareklel/scraper-pipeline-pc`, branch `claude/cettire-onboarding-seeds` (stacked on the ticket branch, no PR yet): Cettire rows in the site, slug (`ct`), brand (64), category (4) and gender seeds. CSV only; not loaded with `dbt seed`, no model reads them. Next there: the per-site silver models copied from Level Shoes, then the shared models that list sites.
+- This session is subscribed to ecommerce-scraper PR #1 and scraper-pipeline-pc PR #1.
+
 ## 2026-11-15 - Cettire pull requests opened
 - ecommerce-scraper PR #1 (spider, research, ticket) and scraper-pipeline-pc PR #1 (onboarding ticket), both to `main`, not merged. Merging the crawler PR builds a new image; it does not start crawling Cettire because the registry has no Cettire rows.
 
