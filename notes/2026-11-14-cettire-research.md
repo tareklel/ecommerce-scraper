@@ -459,6 +459,23 @@ run. Browser rendering was rejected by the user on cost grounds.
   rather than hard-coding it, do not rotate IPs or fake device identities,
   and pursue the affiliate programme in parallel.
 
+## 11a. Live test runs of the spider (2026-11-14)
+
+Three `--limit 1` runs in the dev crawler task (branch code unpacked over the
+image, bronze uploads off; outputs under `probes/dev/cettire/live1..3`).
+
+| Run | Result |
+|---|---|
+| 1 | Failed in a minute: no stored key and Zyte refused all 4 fetches of the key page |
+| 2 | Quality gate passed, 40 products, 39 of 40 product pages, 40 minutes. One refused page was written 3 times and held the run through two 15-minute retry cool-downs. Product pages marked 10 of 40 products sold out that the Saudi search listed in stock |
+| 3 | After fixes: 7 minutes, 80 rows for 40 products, no duplicates, 35 of 40 product pages (5 refused, written from search data) |
+
+- Reading the key through Zyte took 2 to 3.5 minutes.
+- Product pages took about 7.5 seconds each; about 16 hours for 7,800.
+- The product page is rendered for the default region (`regionCode: "www"`),
+  so its sold-out flag is not the Saudi one.
+- Arabic categories seen: `أكياس | حقائب الكتف`, `أكياس | حقائب اليد`.
+
 ## 12. Decisions taken (user, 2026-11-14)
 
 1. English first; the search service returns Arabic names in the same call,
