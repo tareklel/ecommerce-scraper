@@ -1,5 +1,9 @@
 # Memory
 
+## 2026-11-15 - Cettire spider merged to main; image built
+- PR #1 merged by the user. The `Crawler image` workflow on main passed (tests, including the Zyte-dependent ones that could not run in the cloud container, then image build). The crawler image now contains the `cettire` spider; the crawl flow still won't crawl it until scraper-pipeline's registry has Cettire rows and `lambda/crawl_flow_helper/handler.py` has a `cettire` site entry.
+- Downstream (scraper-pipeline): ticket, seeds and silver models on main; dev `bronze_cettire_raw` holds the 40-product test partition; shared-model wiring is on branch `claude/cettire-onboarding-shared` (checked read-only against dev, not merged; merging puts the test products into dev gold).
+
 ## 2026-11-15 - Cettire silver models proven in dev on the live-test rows
 - With the user's go-ahead ("all three"): the `live3` test output (40 products) was attached as a partition of `price_comparison_dev.bronze_cettire_raw` from `probes/dev/cettire/bronze_sample/`, the changed seeds were loaded and the four Cettire silver models and their tests were run through scraper-pipeline's dev lock; all passed, no unmapped brand/category/gender. The crawler's output shape is therefore confirmed readable downstream, including the numeric `price_discount` and the null `was_price` at full price.
 - Dev silver holds 40 Cettire test products; nothing in gold. Details in scraper-pipeline's `ticket/onboard-cettire.md` (branch `claude/cettire-onboarding-dev-table`, not yet merged).
