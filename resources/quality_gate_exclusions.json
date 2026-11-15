@@ -19,5 +19,11 @@
     "price_discount",
     "was_price",
     "primary_label"
+  ],
+  "cettire": [
+    "was_price",
+    "primary_label",
+    "text",
+    "designer_color"
   ]
 }

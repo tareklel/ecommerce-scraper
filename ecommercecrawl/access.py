@@ -45,6 +45,13 @@ NETWORK_ERROR_NAMES = {
 # losing one listing page silently drops every product it would have linked to.
 LISTING_META_KEY = "access_listing_page"
 
+# Request meta flag for a request that is not worth a retry round: on an
+# access error it is given up straight away (still counted for its hostname)
+# and its errback runs. For pages a spider can do without, e.g. Cettire
+# product pages, whose rows are written from the listing data instead; one
+# such page otherwise holds the whole run through every cool-down.
+NO_DEFER_META_KEY = "access_no_defer"
+
 
 class AccessDeferred(IgnoreRequest):
     """
@@ -175,6 +182,8 @@ class AccessRetryMiddleware:
         return request.meta.get("access_round", 0)
 
     def _can_defer(self, request):
+        if request.meta.get(NO_DEFER_META_KEY):
+            return False
         return self.rounds > 0 and not self.final_flush and self._round(request) < self.rounds
 
     def _defer(self, request, label):

@@ -16,6 +16,13 @@ FARFETCH_URLS_PATH = "resources/farfetch_urls.csv"
 OUNASS_URLS_PATH = "resources/ounass_urls.csv"
 LEVEL_URLS_PATH = "resources/level_urls.csv"
 BLOOMINGDALES_URLS_PATH = "resources/bloomingdales_urls.csv"
+CETTIRE_URLS_PATH = "resources/cettire_urls.csv"
+# Brands to crawl on Cettire, one name per row as Cettire spells it. Cettire
+# lists far more brands than our other sites (tickets/cettire_crawl.md).
+CETTIRE_BRAND_ALLOWLIST_PATH = "resources/cettire_brand_allowlist.csv"
+# Key for Cettire's search service. Optional: when unset or rejected, the
+# spider reads the current key from a Cettire page (one Zyte request).
+CETTIRE_SEARCH_API_KEY = os.getenv("CETTIRE_SEARCH_API_KEY")
 
 
 

@@ -364,6 +364,9 @@ happen back to back, while the block is still on. So:
    `ACCESS_RETRY_COOLDOWN_SECONDS` and re-sends everything set aside: one
    round. Up to `ACCESS_RETRY_ROUNDS` rounds, stopping early once the total
    wait reaches `ACCESS_RETRY_MAX_TOTAL_SECONDS`.
+   A request flagged `access_no_defer` (2026-11-14) skips the rounds: it is
+   given up at once, still counted for its hostname. Cettire product pages
+   use it, because their rows are written from the listing data anyway.
 3. What still fails is given up. A hostname is reported **blocked** when
    every one of its requests was given up on access (any number), or when
    at least `ACCESS_BLOCKED_HOST_RATIO` of them were (min 5 requests).
