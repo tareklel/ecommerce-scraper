@@ -1,5 +1,9 @@
 # Memory
 
+## 2026-11-15 - Cettire joins the crawl flow (code), registry English only
+- User decision: Cettire registry rows are English only, one per listing; no stand-in Arabic row. The spider still writes EN and AR rows from each URL; Arabic quality is downstream's job, and a future switch could turn AR rows off.
+- `cettire` added to the crawl flow helper's `SITES` (urls_source); test and `docs/cicd_architecture.md` updated (42 helper tests pass). **Needs a targeted Terraform apply of the helper Lambda before any active Cettire registry row**, else the flow fails for every site.
+
 ## 2026-11-15 - Cettire spider merged to main; image built
 - PR #1 merged by the user. The `Crawler image` workflow on main passed (tests, including the Zyte-dependent ones that could not run in the cloud container, then image build). The crawler image now contains the `cettire` spider; the crawl flow still won't crawl it until scraper-pipeline's registry has Cettire rows and `lambda/crawl_flow_helper/handler.py` has a `cettire` site entry.
 - Downstream (scraper-pipeline): ticket, seeds and silver models on main; dev `bronze_cettire_raw` holds the 40-product test partition; shared-model wiring is on branch `claude/cettire-onboarding-shared` (checked read-only against dev, not merged; merging puts the test products into dev gold).

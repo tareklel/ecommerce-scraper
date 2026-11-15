@@ -47,6 +47,10 @@ SITES = {
     "ounass": {"spider": "ounass", "mode": "plp_efficient"},
     "level-shoes": {"spider": "level", "mode": "urls_source"},
     "bloomingdales": {"spider": "bloomingdales", "mode": "urls_source"},
+    # One registry row per listing (English only, user decision 2026-11-15):
+    # each Cettire listing URL serves both languages through its search
+    # service, so the spider writes EN and AR rows from one URL.
+    "cettire": {"spider": "cettire", "mode": "urls_source"},
 }
 
 PUBLISHED = ("success", "degraded")

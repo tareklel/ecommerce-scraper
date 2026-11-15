@@ -135,6 +135,7 @@ def test_start_rejects_bad_input(helper, flow_input):
 REGISTRY = [
     ["bloomingdales", "https://bloomingdales.sa/womens-bags-tote-bags/"],
     ["bloomingdales", "https://en.bloomingdales.sa/womens-bags-tote-bags/"],
+    ["cettire", "https://www.cettire.com/sa/collections/womens-bags/tote-bags"],
     ["level-shoes", "https://en-saudi.levelshoes.com/women/bags/tote-bags"],
     ["ounass", "https://saudi.ounass.com/api/women/bags/tote-bags"],
 ]
@@ -145,7 +146,7 @@ def test_list_crawls_one_crawl_per_site_from_the_registry(helper):
     flow = _start(helper)
     crawls = {c["site"]: c for c in helper.handler({"action": "list_crawls", "flow": flow}, None)["crawls"]}
 
-    assert set(crawls) == {"ounass", "level-shoes", "bloomingdales"}
+    assert set(crawls) == {"ounass", "level-shoes", "bloomingdales", "cettire"}
     assert "WHERE is_active" in helper.athena.queries[0]
     assert crawls["ounass"]["command"] == "python3 run_crawler.py ounass --env dev --plp-efficient"
     key = "bronze/dev/crawl-inputs/run-1/bloomingdales.csv"
@@ -157,8 +158,11 @@ def test_list_crawls_one_crawl_per_site_from_the_registry(helper):
     )
     assert crawls["level-shoes"]["spider"] == "level"
     assert crawls["level-shoes"]["url_count"] == 1
+    assert crawls["cettire"]["command"] == (
+        f"python3 run_crawler.py cettire --env dev --urls-source s3://{BUCKET}/bronze/dev/crawl-inputs/run-1/cettire.csv"
+    )
     # Distinct run IDs, so markers can't collide.
-    assert len({c["run_id"] for c in crawls.values()}) == 3
+    assert len({c["run_id"] for c in crawls.values()}) == 4
 
 
 def test_list_crawls_adds_limit_to_every_crawl(helper):

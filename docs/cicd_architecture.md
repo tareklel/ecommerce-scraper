@@ -131,6 +131,7 @@ active rows; a site with none isn't crawled.
 | `ounass` | `ounass --plp-efficient` | The PLP-efficient export reads the seeded table itself |
 | `level-shoes` | `level` | `--urls-source s3://…/crawl-inputs/<run>/level-shoes.csv`, written by step 3 |
 | `bloomingdales` | `bloomingdales` | `--urls-source s3://…/crawl-inputs/<run>/bloomingdales.csv`, written by step 3 |
+| `cettire` | `cettire` | `--urls-source s3://…/crawl-inputs/<run>/cettire.csv`, written by step 3. One registry row per listing (English only); the spider writes EN and AR rows from it |
 
 **Two dbt runs, one cache refresh, after the tests:** the full run after the
 crawls builds new prices; the second run rebuilds only the 4 image-dependent
