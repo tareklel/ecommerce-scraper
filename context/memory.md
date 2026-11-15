@@ -1,5 +1,9 @@
 # Memory
 
+## 2026-11-15 - Cettire silver models proven in dev on the live-test rows
+- With the user's go-ahead ("all three"): the `live3` test output (40 products) was attached as a partition of `price_comparison_dev.bronze_cettire_raw` from `probes/dev/cettire/bronze_sample/`, the changed seeds were loaded and the four Cettire silver models and their tests were run through scraper-pipeline's dev lock; all passed, no unmapped brand/category/gender. The crawler's output shape is therefore confirmed readable downstream, including the numeric `price_discount` and the null `was_price` at full price.
+- Dev silver holds 40 Cettire test products; nothing in gold. Details in scraper-pipeline's `ticket/onboard-cettire.md` (branch `claude/cettire-onboarding-dev-table`, not yet merged).
+
 ## 2026-11-15 - Cettire downstream: seeds and silver models merged; dev bronze table created
 - In `tareklel/scraper-pipeline-pc`, the user merged the ticket (PR #1) and the seeds + four Cettire silver models (PR #2) into `main`. The models read `bronze_cettire_raw`, and the crawl flow runs a full `dbt run`, so this session created `price_comparison_dev.bronze_cettire_raw` (empty) with the user's AWS sign-in and checked the four models' SQL read-only against dev (valid, 0 rows).
 - Still open downstream: `dbt seed` in dev, the prod table, the shared models that list sites, registry rows (last), and in this repo a `cettire` entry in `lambda/crawl_flow_helper/handler.py`'s site table plus bronze partition registration for the new table.
