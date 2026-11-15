@@ -23,6 +23,12 @@ CETTIRE_BRAND_ALLOWLIST_PATH = "resources/cettire_brand_allowlist.csv"
 # Key for Cettire's search service. Optional: when unset or rejected, the
 # spider reads the current key from a Cettire page (one Zyte request).
 CETTIRE_SEARCH_API_KEY = os.getenv("CETTIRE_SEARCH_API_KEY")
+# Cettire product pages (Zyte, ~7.5 s each) add only the full gallery and the
+# English copy; the search service already gives names in both languages,
+# price, stock and 3-4 images. Off by default (user decision 2026-11-15): a
+# full first crawl would otherwise fetch ~7,800 product pages. Turn on only
+# once the efficient crawl fetches pages for new products alone.
+CETTIRE_FETCH_PRODUCT_PAGES = _env_bool("CETTIRE_FETCH_PRODUCT_PAGES", False)
 
 
 

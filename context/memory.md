@@ -1,5 +1,8 @@
 # Memory
 
+## 2026-11-15 - Cettire product pages off by default
+- User decision: the next Cettire crawl takes every allowlisted product (~7,800) but no product pages. New setting `CETTIRE_FETCH_PRODUCT_PAGES` (env var, default false): rows come from the search service only, so no Zyte product-page requests, no `text`, 3-4 images per product. Turn on only with the efficient crawl (pages for new products only). 2 new tests; 594 pass.
+
 ## 2026-11-15 - Cettire joins the crawl flow (code), registry English only
 - User decision: Cettire registry rows are English only, one per listing; no stand-in Arabic row. The spider still writes EN and AR rows from each URL; Arabic quality is downstream's job, and a future switch could turn AR rows off.
 - `cettire` added to the crawl flow helper's `SITES` (urls_source); test and `docs/cicd_architecture.md` updated (42 helper tests pass). **Needs a targeted Terraform apply of the helper Lambda before any active Cettire registry row**, else the flow fails for every site.

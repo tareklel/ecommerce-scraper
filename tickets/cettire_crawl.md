@@ -131,6 +131,13 @@ then the efficient crawl built on a gold export, like Ounass.**
   targeted Terraform apply, not by CI**: apply it before any Cettire registry
   row goes active, or the flow refuses to start for every site
   (`UnknownRegistrySite`).
+- **Product pages off by default** (user decision, 2026-11-15: no
+  ~7,800-page first crawl). `CETTIRE_FETCH_PRODUCT_PAGES` (env var, default
+  false): the spider writes every allowlisted product from the search data
+  alone (names in both languages, price, stock, colour, size, 3 to 4 images),
+  with no Zyte requests apart from reading the search key when it is not
+  stored. No descriptions (`text` null on every row). Turn it on only with
+  the efficient crawl, which fetches pages for new products alone.
 - Registry rows are added in scraper-pipeline with `is_active = FALSE`.
   Switching them to TRUE is what starts the nightly crawl.
 

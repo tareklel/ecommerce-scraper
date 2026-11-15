@@ -25,7 +25,8 @@ class CettireSpider(MasterCrawl, scrapy.Spider):
     allowlisted brands. Those calls are made directly (the search host is not
     behind bot protection).
 
-    Product pages: fetched through the crawler API (plain HTML) to add the
+    Product pages: off by default (CETTIRE_FETCH_PRODUCT_PAGES); when on,
+    fetched through the crawler API (plain HTML) to add the
     full gallery and the English copy. A product page that can't be fetched
     does not lose the product: its rows are written from the search data,
     without waiting for an access retry round.
@@ -206,7 +207,17 @@ class CettireSpider(MasterCrawl, scrapy.Spider):
         if item_id in self._seen_ids:
             return
         self._seen_ids.add(item_id)
+        if not self._fetch_product_pages():
+            # Listing data only: no Zyte request, rows straight from search.
+            yield from rows
+            return
         yield self._pdp_request(rows[0]['url'], rows)
+
+    def _fetch_product_pages(self):
+        value = self._setting('CETTIRE_FETCH_PRODUCT_PAGES', False)
+        if isinstance(value, str):
+            return value.strip().lower() in ('1', 'true', 'yes', 'on')
+        return bool(value)
 
     def _pdp_request(self, url, rows):
         return build_crawler_api_request(

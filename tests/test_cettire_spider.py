@@ -42,7 +42,7 @@ def spider(monkeypatch, tmp_path):
     allowlist = tmp_path / "allow.csv"
     allowlist.write_text("brand\nAcme\nBeta\n", encoding="utf-8")
     s = CettireSpider()
-    s.settings = {"CETTIRE_BRAND_ALLOWLIST_PATH": str(allowlist)}
+    s.settings = {"CETTIRE_BRAND_ALLOWLIST_PATH": str(allowlist), "CETTIRE_FETCH_PRODUCT_PAGES": True}
     return s
 
 
@@ -245,3 +245,22 @@ def test_key_page_fetch_gives_up_with_a_clear_error(spider, monkeypatch):
     monkeypatch.setattr(cettire_crawl.requests, "post", FakeSearch(lambda url, body, headers: FakeResponse(status=520)))
     with pytest.raises(RuntimeError, match="3 attempts, last status 520"):
         spider._refresh_api_key()
+
+
+def test_product_pages_off_yields_search_rows_without_any_request(spider, monkeypatch):
+    spider.settings["CETTIRE_FETCH_PRODUCT_PAGES"] = False
+    fake = FakeSearch(_facets_then_groups({"Acme": 2}, {"Acme": [_hit(1), _hit(2)]}))
+    monkeypatch.setattr(cettire_crawl.requests, "post", fake)
+
+    out = list(spider.handle_plp_url(LISTING))
+
+    assert not any(isinstance(o, scrapy.Request) for o in out)
+    assert [(r["portal_itemid"], r["language"]) for r in out] == [
+        ("900000001", "EN"), ("900000001", "AR"), ("900000002", "EN"), ("900000002", "AR"),
+    ]
+
+
+def test_product_pages_default_off():
+    from ecommercecrawl import settings
+    assert settings.CETTIRE_FETCH_PRODUCT_PAGES is False
+    assert CettireSpider()._fetch_product_pages() is False
