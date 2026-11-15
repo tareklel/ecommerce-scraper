@@ -242,9 +242,11 @@ affiliate notes: `notes/2026-11-14-cettire-research.md`.
 
 ## Other open items
 
-- **Pull requests**: the crawler work is on branch
-  `claude/project-viability-assessment-sxolr2`; the downstream ticket is on
-  `claude/cettire-onboarding-ticket` in `tareklel/scraper-pipeline-pc`.
+- **Pull requests** (opened 2026-11-15, not merged): crawler work,
+  https://github.com/tareklel/ecommerce-scraper/pull/1; downstream ticket,
+  https://github.com/tareklel/scraper-pipeline-pc/pull/1. Merging the crawler
+  PR builds a new image but does not start crawling Cettire (no registry rows
+  yet).
 - **Tote bags by brand**: never analysed. The allowlist was built from
   shoulder-bag brands, so tote-only brands are missing and the tote count is
   an estimate. One small search call returns the breakdown.

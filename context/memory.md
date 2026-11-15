@@ -1,5 +1,8 @@
 # Memory
 
+## 2026-11-15 - Cettire pull requests opened
+- ecommerce-scraper PR #1 (spider, research, ticket) and scraper-pipeline-pc PR #1 (onboarding ticket), both to `main`, not merged. Merging the crawler PR builds a new image; it does not start crawling Cettire because the registry has no Cettire rows.
+
 ## 2026-11-15 - Cettire ticket tidied; open items recorded
 - `tickets/cettire_crawl.md` cut from about 650 to about 290 lines: decisions rewritten to the current set, the five probe write-ups and the original phase-0 checklist / build plan replaced by a short research summary pointing to `notes/2026-11-14-cettire-research.md`, new "Other open items" (pull requests, tote bags by brand, affiliate application, terms of use unread, Arabic descriptions, probe data in the dev bucket, AWS role for agent sessions), "Done when" and "Open questions" rewritten. The research note gains section 11a on the live test runs. No finding was dropped: all are in the note.
 
