@@ -1,5 +1,10 @@
 # Memory
 
+## 2026-11-16 - State-of-project report, launch tickets, GitHub sync rule
+- `notes/2026-11-13-state-of-price-comparison.md`: meta review of all three repos (launch by year end feasible only if remaining sessions go to the website and prod; acceleration since October; gaps), with a table mapping each launch item to its ticket.
+- New tickets, high priority, each marked "discuss with the user before starting": `tickets/run_count_reconciliation.md` (count check per retailer in the run email), `tickets/affiliate_and_legal_check.md` (affiliate programmes and the legal position, per retailer). Also written in the sibling repos: website name/domain, analytics, about/legal pages; pipeline one set of silver models.
+- `context/AGENTS.md` gains "Syncing With GitHub": fetch all three repos at session start or after a gap, report and fast-forward pull what came in, end finished work with a "pull on the laptop" line. Same section in scraper-pipeline and price-comparison-web. Decided (user): tickets stay per repo; cloud sessions from the phone work per repo (Projects not available on the account).
+
 ## 2026-11-15 - Cettire product pages off by default
 - User decision: the next Cettire crawl takes every allowlisted product (~7,800) but no product pages. New setting `CETTIRE_FETCH_PRODUCT_PAGES` (env var, default false): rows come from the search service only, so no Zyte product-page requests, no `text`, 3-4 images per product. Turn on only with the efficient crawl (pages for new products only). 2 new tests; 594 pass.
 
