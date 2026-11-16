@@ -269,9 +269,15 @@ def test_product_pages_off_yields_search_rows_without_any_request(spider, monkey
     ]
 
 
-def test_product_pages_default_off():
+def test_product_pages_default_on_with_a_cap(monkeypatch):
+    monkeypatch.delenv("CETTIRE_FETCH_PRODUCT_PAGES", raising=False)
+    import importlib
     from ecommercecrawl import settings
-    assert settings.CETTIRE_FETCH_PRODUCT_PAGES is False
+    settings = importlib.reload(settings)
+    assert settings.CETTIRE_FETCH_PRODUCT_PAGES is True
+    # Pages stay bounded per run.
+    assert settings.CETTIRE_MAX_PRODUCT_PAGES == 2000
+    # Without project settings the spider itself stays off (safe default).
     assert CettireSpider()._fetch_product_pages() is False
 
 
