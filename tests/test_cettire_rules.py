@@ -205,3 +205,21 @@ def test_merge_without_page_data_keeps_the_search_rows():
 
 def test_constants_keep_brand_groups_below_the_page_size():
     assert constants.BRAND_GROUP_MAX_PRODUCTS < constants.SEARCH_PAGE_SIZE
+
+
+
+def test_parse_known_products_reads_athena_text_output():
+    text = '931787070\t["https://a.example/1.jpg","https://a.example/2.jpg"]\n954906619\t\\N\nnot-a-number\t[]\n\n'
+    assert rules.parse_known_products(text) == {
+        "931787070": ["https://a.example/1.jpg", "https://a.example/2.jpg"],
+        "954906619": None,
+    }
+    assert rules.parse_known_products("123\t{broken") == {"123": None}
+
+
+def test_rows_for_known_product_swaps_in_the_gallery():
+    rows = rules.rows_from_hit(search_hit(), "run", "d")
+    gallery = ["https://g.example/1.jpg", "https://g.example/2.jpg"]
+    english, arabic = rules.rows_for_known_product(rows, gallery)
+    assert english["image_urls"] == gallery and arabic["image_urls"] == gallery
+    assert rules.rows_for_known_product(rows, None) == rows

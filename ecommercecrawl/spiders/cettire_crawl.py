@@ -1,5 +1,6 @@
 import base64
 import csv
+import gzip
 import os
 import secrets
 import time
@@ -48,6 +49,12 @@ class CettireSpider(MasterCrawl, scrapy.Spider):
         self._api_key_refreshed = False
         self._allowlist = None
         self._seen_ids = set()
+        # Efficient mode: products whose page was read before (None = not
+        # loaded yet; False = could not be read, so no pages this run).
+        self._known = None
+        self.product_pages_requested = 0
+        self.product_pages_skipped_known = 0
+        self.product_pages_over_cap = 0
         # Same session identifiers on every call of a run, as a browser would send.
         self._device_info = {'sessionId': str(uuid.uuid4()), 'deviceId': secrets.token_hex(32)}
         # Per-listing counts for the completeness check, logged at the end.
@@ -187,7 +194,10 @@ class CettireSpider(MasterCrawl, scrapy.Spider):
                 yield from self._handle_hit(hit)
 
         summary = {'url': url, 'brands': len(counts), 'groups': len(groups),
-                   'expected': expected, 'received': received, 'limited': bool(self.limit)}
+                   'expected': expected, 'received': received, 'limited': bool(self.limit),
+                   'product_pages_requested_so_far': self.product_pages_requested,
+                   'skipped_known_so_far': self.product_pages_skipped_known,
+                   'over_cap_so_far': self.product_pages_over_cap}
         self.listing_summaries.append(summary)
         self.logger.info(f'Cettire listing summary: {summary}')
         if not self.limit and received < expected:
@@ -207,11 +217,88 @@ class CettireSpider(MasterCrawl, scrapy.Spider):
         if item_id in self._seen_ids:
             return
         self._seen_ids.add(item_id)
-        if not self._fetch_product_pages():
+        known = self._known_products()
+        if known and item_id in known:
+            # Page already read on an earlier run: never fetch it again.
+            self.product_pages_skipped_known += 1
+            yield from rules.rows_for_known_product(rows, known[item_id])
+            return
+        if not self._fetch_product_pages() or known is False:
             # Listing data only: no Zyte request, rows straight from search.
             yield from rows
             return
+        cap = int(self._setting('CETTIRE_MAX_PRODUCT_PAGES', 0) or 0)
+        if cap and self.product_pages_requested >= cap:
+            # The rest wait for a later run; the product is still written.
+            self.product_pages_over_cap += 1
+            yield from rows
+            return
+        self.product_pages_requested += 1
         yield self._pdp_request(rows[0]['url'], rows)
+
+    # ------------------------------------------------------------ known products
+
+    def _known_products_uri(self):
+        uri = self._setting('CETTIRE_KNOWN_PRODUCTS_URI')
+        if uri:
+            return uri
+        bucket = self._setting('S3_BUCKET') or os.environ.get('S3_BUCKET')
+        if not bucket:
+            return None
+        env = os.environ.get('APP_ENV', 'dev')
+        return f's3://{bucket}/dbt/{env}/gold_cettire_pdp_known/'
+
+    def _read_known_texts(self, uri):
+        """Text of every file under the list's location (gunzipped)."""
+        blobs = []
+        if uri.startswith('s3://'):
+            import boto3
+            bucket, _, prefix = uri[len('s3://'):].partition('/')
+            s3 = boto3.client('s3')
+            for page in s3.get_paginator('list_objects_v2').paginate(Bucket=bucket, Prefix=prefix):
+                for obj in page.get('Contents', []):
+                    blobs.append(s3.get_object(Bucket=bucket, Key=obj['Key'])['Body'].read())
+        elif os.path.isdir(uri):
+            for name in sorted(os.listdir(uri)):
+                path = os.path.join(uri, name)
+                if os.path.isfile(path):
+                    with open(path, 'rb') as f:
+                        blobs.append(f.read())
+        elif os.path.isfile(uri):
+            with open(uri, 'rb') as f:
+                blobs.append(f.read())
+        texts = []
+        for blob in blobs:
+            if blob[:2] == b'\x1f\x8b':
+                blob = gzip.decompress(blob)
+            texts.append(blob.decode('utf-8', 'replace'))
+        return texts
+
+    def _known_products(self):
+        """
+        {portal_itemid: gallery} of products whose page was already read.
+        An empty or missing list is normal before the first pass. A list that
+        exists but can't be read returns False, and the run then fetches no
+        product pages: refetching thousands of known pages costs more than
+        waiting a day.
+        """
+        if self._known is not None:
+            return self._known
+        uri = self._known_products_uri()
+        if not uri:
+            self.logger.warning('No S3_BUCKET or CETTIRE_KNOWN_PRODUCTS_URI; no known Cettire products.')
+            self._known = {}
+            return self._known
+        try:
+            known = {}
+            for text in self._read_known_texts(uri):
+                known.update(rules.parse_known_products(text))
+            self._known = known
+            self.logger.info(f'Cettire known products (page already read): {len(known)} from {uri}')
+        except Exception as exc:  # noqa: BLE001 - any read failure means "don't spend on pages"
+            self.logger.error(f'Could not read Cettire known products from {uri}: {exc}; no product pages this run.')
+            self._known = False
+        return self._known
 
     def _fetch_product_pages(self):
         value = self._setting('CETTIRE_FETCH_PRODUCT_PAGES', False)

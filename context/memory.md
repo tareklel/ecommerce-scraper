@@ -1,5 +1,9 @@
 # Memory
 
+## 2026-11-16 - Cettire efficient mode (step 2) built
+- Spider reads scraper-pipeline's `gold_cettire_pdp_known` from S3 (`dbt/<env>/gold_cettire_pdp_known/`, gzipped tab-separated `portal_itemid`, `image_urls_json`, `\N` = null; verified the format with a throwaway Athena table): known products skip the page and get their stored gallery; others get a page up to `CETTIRE_MAX_PRODUCT_PAGES` per run (default 2000); unreadable list = no pages. Default `CETTIRE_FETCH_PRODUCT_PAGES` still false. 7 new tests, 601 pass.
+- scraper-pipeline: `gold_cettire_pdp_known` (TEXTFILE table) + contract test, built in dev (empty) through the lock.
+
 ## 2026-11-16 - Crawl-flow helper redeployed with Cettire
 - Targeted Terraform apply of `aws_lambda_function.crawl_flow_helper` from main `4128583` (user-approved): 0 added, 1 changed, 0 destroyed; the deployed handler lists `cettire` in `SITES`. Run from the cloud session with a downloaded Terraform 1.17.2 and the locked providers from releases.hashicorp.com (the provider registry is blocked there). Cettire registry rows are still inactive.
 - Not built yet: efficient mode for Cettire product pages. Note for it: search-only rows carry 3-4 `image_urls`, which would replace a 4-6 image product-page gallery downstream (the dim keeps only null galleries), so known products need null `image_urls` (or the full gallery) in efficient mode; `text` null is already retained downstream.

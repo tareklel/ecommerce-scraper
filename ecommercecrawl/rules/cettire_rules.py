@@ -469,3 +469,43 @@ def merge_pdp_into_rows(rows: list[dict], pdp: dict | None) -> list[dict]:
                     out[key] = pdp[key]
         merged.append(out)
     return merged
+
+
+# ---------------------------------------------------------------- known products
+
+def parse_known_products(text: str) -> dict:
+    """
+    Rows of scraper-pipeline's gold_cettire_pdp_known as Athena writes them:
+    `portal_itemid<TAB>image_urls_json`, `\\N` for null. Returns
+    {portal_itemid: [gallery urls] or None}. Malformed lines are skipped.
+    """
+    known = {}
+    for line in (text or '').splitlines():
+        if not line.strip():
+            continue
+        item_id, _, gallery_json = line.partition('\t')
+        item_id = item_id.strip()
+        if not item_id.isdigit():
+            continue
+        gallery = None
+        if gallery_json and gallery_json != '\\N':
+            try:
+                value = json.loads(gallery_json)
+            except ValueError:
+                value = None
+            if isinstance(value, list):
+                gallery = [u for u in value if isinstance(u, str) and u.startswith('http')] or None
+        known[item_id] = gallery
+    return known
+
+
+def rows_for_known_product(rows: list[dict], gallery: list[str] | None) -> list[dict]:
+    """
+    Search rows for a product whose page was already read. The page gallery
+    (4-6 images) replaces the 3-4 search images; downstream only keeps an old
+    gallery when the new one is null, so writing the search images would
+    shrink it every run.
+    """
+    if not gallery:
+        return rows
+    return [dict(row, image_urls=list(gallery)) for row in rows]

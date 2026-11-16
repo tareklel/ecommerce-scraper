@@ -138,6 +138,20 @@ then the efficient crawl built on a gold export, like Ounass.**
   with no Zyte requests apart from reading the search key when it is not
   stored. No descriptions (`text` null on every row). Turn it on only with
   the efficient crawl, which fetches pages for new products alone.
+- **Step 2, efficient mode — built 2026-11-16** (branch, with
+  scraper-pipeline's `gold_cettire_pdp_known`): the spider reads the list of
+  products whose page was already read (tab-separated gzipped text under
+  `s3://<bucket>/dbt/<env>/gold_cettire_pdp_known/`, built in the nightly dbt
+  run; the crawler role reads S3, not Athena). For those products it never
+  fetches the page and writes their stored gallery instead of the 3 to 4
+  search images (downstream keeps an old gallery only when the new one is
+  null). Product copy needs nothing: downstream keeps the last non-null text.
+  Pages are fetched only for products not on the list, at most
+  `CETTIRE_MAX_PRODUCT_PAGES` per run (default 2,000, about 4 hours), so the
+  one-off pass over ~7,800 products takes about four nights and then only new
+  products cost a page. An unreadable list means no pages that run.
+  `CETTIRE_FETCH_PRODUCT_PAGES` still defaults to false: turning it on starts
+  the description pass.
 - Registry rows are added in scraper-pipeline with `is_active = FALSE`.
   Switching them to TRUE is what starts the nightly crawl.
 
