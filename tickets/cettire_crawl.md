@@ -150,8 +150,10 @@ then the efficient crawl built on a gold export, like Ounass.**
   `CETTIRE_MAX_PRODUCT_PAGES` per run (default 2,000, about 4 hours), so the
   one-off pass over ~7,800 products takes about four nights and then only new
   products cost a page. An unreadable list means no pages that run.
-  `CETTIRE_FETCH_PRODUCT_PAGES` still defaults to false: turning it on starts
-  the description pass.
+  `CETTIRE_FETCH_PRODUCT_PAGES` now defaults to **true** (user decision,
+  2026-11-16): the first Cettire night writes every product from search data
+  and fetches the first 2,000 product pages; about four nights complete the
+  pass. Set the env var to false to stop page fetches.
 - Registry rows are added in scraper-pipeline with `is_active = FALSE`.
   Switching them to TRUE is what starts the nightly crawl.
 

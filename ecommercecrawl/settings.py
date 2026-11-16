@@ -25,10 +25,12 @@ CETTIRE_BRAND_ALLOWLIST_PATH = "resources/cettire_brand_allowlist.csv"
 CETTIRE_SEARCH_API_KEY = os.getenv("CETTIRE_SEARCH_API_KEY")
 # Cettire product pages (Zyte, ~7.5 s each) add only the full gallery and the
 # English copy; the search service already gives names in both languages,
-# price, stock and 3-4 images. Off by default (user decision 2026-11-15): a
-# full first crawl would otherwise fetch ~7,800 product pages. Turn on only
-# once the efficient crawl fetches pages for new products alone.
-CETTIRE_FETCH_PRODUCT_PAGES = _env_bool("CETTIRE_FETCH_PRODUCT_PAGES", False)
+# price, stock and 3-4 images. On (user decision 2026-11-16) now that the
+# efficient mode below fetches a page only for products not read before, at
+# most CETTIRE_MAX_PRODUCT_PAGES per run: the one-off pass over ~7,800
+# products takes about four nights, then only new products cost a page.
+# Set the env var to false to stop all product-page fetches.
+CETTIRE_FETCH_PRODUCT_PAGES = _env_bool("CETTIRE_FETCH_PRODUCT_PAGES", True)
 # Efficient mode (step 2): products listed here already had their product page
 # read, so their page is never fetched again; their gallery is written back
 # from the list. Built by scraper-pipeline's gold_cettire_pdp_known

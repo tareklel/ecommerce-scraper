@@ -1,5 +1,8 @@
 # Memory
 
+## 2026-11-16 - Cettire product pages switched on by default
+- User decision ("just flip it"): `CETTIRE_FETCH_PRODUCT_PAGES` defaults to true, with efficient mode and `CETTIRE_MAX_PRODUCT_PAGES` 2000/run. First Cettire night: all products from search plus up to 2,000 pages; ~4 nights for the one-off pass, then only new products. Env var false turns pages off.
+
 ## 2026-11-16 - Cettire efficient mode (step 2) built
 - Spider reads scraper-pipeline's `gold_cettire_pdp_known` from S3 (`dbt/<env>/gold_cettire_pdp_known/`, gzipped tab-separated `portal_itemid`, `image_urls_json`, `\N` = null; verified the format with a throwaway Athena table): known products skip the page and get their stored gallery; others get a page up to `CETTIRE_MAX_PRODUCT_PAGES` per run (default 2000); unreadable list = no pages. Default `CETTIRE_FETCH_PRODUCT_PAGES` still false. 7 new tests, 601 pass.
 - scraper-pipeline: `gold_cettire_pdp_known` (TEXTFILE table) + contract test, built in dev (empty) through the lock.
