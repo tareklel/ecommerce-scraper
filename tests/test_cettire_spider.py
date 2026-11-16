@@ -42,7 +42,15 @@ def spider(monkeypatch, tmp_path):
     allowlist = tmp_path / "allow.csv"
     allowlist.write_text("brand\nAcme\nBeta\n", encoding="utf-8")
     s = CettireSpider()
-    s.settings = {"CETTIRE_BRAND_ALLOWLIST_PATH": str(allowlist), "CETTIRE_FETCH_PRODUCT_PAGES": True}
+    known = tmp_path / "known"
+    known.mkdir()
+    s.settings = {
+        "CETTIRE_BRAND_ALLOWLIST_PATH": str(allowlist),
+        "CETTIRE_FETCH_PRODUCT_PAGES": True,
+        # An empty known-products list: nothing read yet.
+        "CETTIRE_KNOWN_PRODUCTS_URI": str(known),
+        "CETTIRE_MAX_PRODUCT_PAGES": 0,
+    }
     return s
 
 
@@ -79,7 +87,8 @@ def test_listing_asks_only_for_allowlisted_brands_and_requests_each_product_page
     # Product pages go through the crawler API; each carries its EN and AR rows.
     assert all("zyte_api" in r.meta and len(r.meta["rows"]) == 2 for r in requests_out)
     assert spider.listing_summaries == [
-        {"url": LISTING, "brands": 2, "groups": 1, "expected": 3, "received": 3, "limited": False}
+        {"url": LISTING, "brands": 2, "groups": 1, "expected": 3, "received": 3, "limited": False,
+         "product_pages_requested_so_far": 3, "skipped_known_so_far": 0, "over_cap_so_far": 0}
     ]
 
 
@@ -264,3 +273,72 @@ def test_product_pages_default_off():
     from ecommercecrawl import settings
     assert settings.CETTIRE_FETCH_PRODUCT_PAGES is False
     assert CettireSpider()._fetch_product_pages() is False
+
+
+# ---- efficient mode (known products)
+
+def _write_known(spider, text, gz=True):
+    import gzip, os
+    path = os.path.join(spider.settings["CETTIRE_KNOWN_PRODUCTS_URI"], "part-0.gz" if gz else "part-0")
+    with open(path, "wb") as f:
+        f.write(gzip.compress(text.encode()) if gz else text.encode())
+
+
+def test_known_product_skips_its_page_and_keeps_its_gallery(spider, monkeypatch):
+    _write_known(spider, '900000001\t["https://g.example/1.jpg","https://g.example/2.jpg","https://g.example/3.jpg","https://g.example/4.jpg","https://g.example/5.jpg"]\n')
+    fake = FakeSearch(_facets_then_groups({"Acme": 2}, {"Acme": [_hit(1), _hit(2)]}))
+    monkeypatch.setattr(cettire_crawl.requests, "post", fake)
+
+    out = list(spider.handle_plp_url(LISTING))
+
+    rows = [o for o in out if isinstance(o, dict)]
+    pages = [o for o in out if isinstance(o, scrapy.Request)]
+    # Known product: no page, both rows carry the stored 5-image gallery.
+    assert [(r["portal_itemid"], r["language"], len(r["image_urls"])) for r in rows] == [
+        ("900000001", "EN", 5), ("900000001", "AR", 5),
+    ]
+    # Unknown product: page requested as before.
+    assert [p.url for p in pages] == ["https://www.cettire.com/sa/products/acme-bag-900000002"]
+    assert (spider.product_pages_skipped_known, spider.product_pages_requested) == (1, 1)
+
+
+def test_known_products_are_skipped_even_with_pages_off(spider, monkeypatch):
+    spider.settings["CETTIRE_FETCH_PRODUCT_PAGES"] = False
+    _write_known(spider, '900000001\t["https://g.example/1.jpg"]\n', gz=False)
+    fake = FakeSearch(_facets_then_groups({"Acme": 1}, {"Acme": [_hit(1)]}))
+    monkeypatch.setattr(cettire_crawl.requests, "post", fake)
+
+    rows = list(spider.handle_plp_url(LISTING))
+    # The stored gallery still replaces the search images.
+    assert [r["image_urls"] for r in rows] == [["https://g.example/1.jpg"]] * 2
+
+
+def test_page_cap_writes_the_rest_from_search(spider, monkeypatch):
+    spider.settings["CETTIRE_MAX_PRODUCT_PAGES"] = 2
+    fake = FakeSearch(_facets_then_groups({"Acme": 3}, {"Acme": [_hit(1), _hit(2), _hit(3)]}))
+    monkeypatch.setattr(cettire_crawl.requests, "post", fake)
+
+    out = list(spider.handle_plp_url(LISTING))
+
+    assert len([o for o in out if isinstance(o, scrapy.Request)]) == 2
+    assert [r["portal_itemid"] for r in out if isinstance(r, dict)] == ["900000003", "900000003"]
+    assert spider.product_pages_over_cap == 1
+
+
+def test_unreadable_known_list_means_no_pages(spider, monkeypatch):
+    def broken(uri):
+        raise OSError("S3 unavailable")
+    monkeypatch.setattr(spider, "_read_known_texts", broken)
+    fake = FakeSearch(_facets_then_groups({"Acme": 1}, {"Acme": [_hit(1)]}))
+    monkeypatch.setattr(cettire_crawl.requests, "post", fake)
+
+    out = list(spider.handle_plp_url(LISTING))
+    assert not any(isinstance(o, scrapy.Request) for o in out)
+    assert len(out) == 2
+
+
+def test_known_list_defaults_to_the_dbt_location(monkeypatch):
+    monkeypatch.setenv("APP_ENV", "dev")
+    s = CettireSpider()
+    s.settings = {"S3_BUCKET": "bucket-x"}
+    assert s._known_products_uri() == "s3://bucket-x/dbt/dev/gold_cettire_pdp_known/"

@@ -1,9 +1,12 @@
 # Memory
 
-## 2026-11-16 - State-of-project report, launch tickets, GitHub sync rule
-- `notes/2026-11-13-state-of-price-comparison.md`: meta review of all three repos (launch by year end feasible only if remaining sessions go to the website and prod; acceleration since October; gaps), with a table mapping each launch item to its ticket.
-- New tickets, high priority, each marked "discuss with the user before starting": `tickets/run_count_reconciliation.md` (count check per retailer in the run email), `tickets/affiliate_and_legal_check.md` (affiliate programmes and the legal position, per retailer). Also written in the sibling repos: website name/domain, analytics, about/legal pages; pipeline one set of silver models.
-- `context/AGENTS.md` gains "Syncing With GitHub": fetch all three repos at session start or after a gap, report and fast-forward pull what came in, end finished work with a "pull on the laptop" line. Same section in scraper-pipeline and price-comparison-web. Decided (user): tickets stay per repo; cloud sessions from the phone work per repo (Projects not available on the account).
+## 2026-11-16 - Cettire efficient mode (step 2) built
+- Spider reads scraper-pipeline's `gold_cettire_pdp_known` from S3 (`dbt/<env>/gold_cettire_pdp_known/`, gzipped tab-separated `portal_itemid`, `image_urls_json`, `\N` = null; verified the format with a throwaway Athena table): known products skip the page and get their stored gallery; others get a page up to `CETTIRE_MAX_PRODUCT_PAGES` per run (default 2000); unreadable list = no pages. Default `CETTIRE_FETCH_PRODUCT_PAGES` still false. 7 new tests, 601 pass.
+- scraper-pipeline: `gold_cettire_pdp_known` (TEXTFILE table) + contract test, built in dev (empty) through the lock.
+
+## 2026-11-16 - Crawl-flow helper redeployed with Cettire
+- Targeted Terraform apply of `aws_lambda_function.crawl_flow_helper` from main `4128583` (user-approved): 0 added, 1 changed, 0 destroyed; the deployed handler lists `cettire` in `SITES`. Run from the cloud session with a downloaded Terraform 1.17.2 and the locked providers from releases.hashicorp.com (the provider registry is blocked there). Cettire registry rows are still inactive.
+- Not built yet: efficient mode for Cettire product pages. Note for it: search-only rows carry 3-4 `image_urls`, which would replace a 4-6 image product-page gallery downstream (the dim keeps only null galleries), so known products need null `image_urls` (or the full gallery) in efficient mode; `text` null is already retained downstream.
 
 ## 2026-11-15 - Cettire product pages off by default
 - User decision: the next Cettire crawl takes every allowlisted product (~7,800) but no product pages. New setting `CETTIRE_FETCH_PRODUCT_PAGES` (env var, default false): rows come from the search service only, so no Zyte product-page requests, no `text`, 3-4 images per product. Turn on only with the efficient crawl (pages for new products only). 2 new tests; 594 pass.

@@ -29,6 +29,16 @@ CETTIRE_SEARCH_API_KEY = os.getenv("CETTIRE_SEARCH_API_KEY")
 # full first crawl would otherwise fetch ~7,800 product pages. Turn on only
 # once the efficient crawl fetches pages for new products alone.
 CETTIRE_FETCH_PRODUCT_PAGES = _env_bool("CETTIRE_FETCH_PRODUCT_PAGES", False)
+# Efficient mode (step 2): products listed here already had their product page
+# read, so their page is never fetched again; their gallery is written back
+# from the list. Built by scraper-pipeline's gold_cettire_pdp_known
+# (tab-separated, gzipped text files). An s3:// prefix or a local directory;
+# unset = the dbt location for APP_ENV in S3_BUCKET.
+CETTIRE_KNOWN_PRODUCTS_URI = os.getenv("CETTIRE_KNOWN_PRODUCTS_URI")
+# At most this many product pages per run (~7.5 s each through Zyte), so the
+# one-off first pass over ~7,800 products spreads over a few nights instead
+# of one 16-hour crawl. 0 = no cap.
+CETTIRE_MAX_PRODUCT_PAGES = int(os.getenv("CETTIRE_MAX_PRODUCT_PAGES", "2000"))
 
 
 
