@@ -404,7 +404,8 @@ resource "aws_iam_role_policy" "crawl_flow_helper" {
   name = "${var.ecs_name}-crawl-flow-helper-policy"
   role = aws_iam_role.crawl_flow_helper.id
 
-  # Dev only. Reads the seeded registry and the mapping-gaps table (Athena),
+  # Dev only. Reads the seeded registry, the mapping-gaps table and gold's
+  # per-site counts (Athena),
   # writes per-site URL lists, reads crawl markers and manifests and image
   # markers, lists flow runs.
   policy = jsonencode({
@@ -436,7 +437,8 @@ resource "aws_iam_role_policy" "crawl_flow_helper" {
           "arn:aws:glue:${var.region}:${data.aws_caller_identity.current.account_id}:catalog",
           "arn:aws:glue:${var.region}:${data.aws_caller_identity.current.account_id}:database/${var.dbt_database_name}",
           "arn:aws:glue:${var.region}:${data.aws_caller_identity.current.account_id}:table/${var.dbt_database_name}/crawl_plp_registry",
-          "arn:aws:glue:${var.region}:${data.aws_caller_identity.current.account_id}:table/${var.dbt_database_name}/silver_mapping_gaps"
+          "arn:aws:glue:${var.region}:${data.aws_caller_identity.current.account_id}:table/${var.dbt_database_name}/silver_mapping_gaps",
+          "arn:aws:glue:${var.region}:${data.aws_caller_identity.current.account_id}:table/${var.dbt_database_name}/gold_product_serving_latest"
         ]
       },
       {
@@ -508,7 +510,9 @@ resource "aws_lambda_function" "crawl_flow_helper" {
       REGISTRY_TABLE   = "\"${var.dbt_database_name}\".\"crawl_plp_registry\""
       # Read by the summary's mapping-gaps line (scraper-pipeline's seed to-do list).
       MAPPING_GAPS_TABLE = "\"${var.dbt_database_name}\".\"silver_mapping_gaps\""
-      MAX_VERIFY_POLLS   = "15"
+      # Read by the summary's per-site counts (rows in gold, with images).
+      GOLD_TABLE       = "\"${var.dbt_database_name}\".\"gold_product_serving_latest\""
+      MAX_VERIFY_POLLS = "15"
     }
   }
 }

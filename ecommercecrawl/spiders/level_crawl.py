@@ -91,11 +91,15 @@ class LevelSpider(MasterCrawl, scrapy.Spider):
                     # Free gift bundled with a purchase, listed at price 0; not for sale.
                     self.logger.info(f"Skipping gift-with-product item {rules.get_url_from_item(item)}")
                     continue
-                yield from self._handle_item(item)
+                yield from self._handle_item(item, listing_url=url)
             page +=1
         
-    def _handle_item(self, item):
+    def _handle_item(self, item, listing_url=None):
         url = rules.get_url_from_item(item)
+        # Products with a cut-down analytics block have no gender; the listing
+        # being crawled says it, more reliably than the PDP breadcrumb's
+        # displayed text (Arabic "للنساء").
+        gender = rules.get_gender_from_item(item) or rules.get_listing_gender(listing_url)
 
 
         data_dict = {
@@ -107,7 +111,7 @@ class LevelSpider(MasterCrawl, scrapy.Spider):
                 'country': rules.get_country(url),
                 'portal_itemid': rules.get_id_from_item(item),
                 'product_name': rules.get_name_from_item(item),
-                'gender': rules.get_gender_from_item(item),
+                'gender': gender,
                 'brand': rules.get_brand_from_item(item),
                 'color': rules.get_color_from_item(item),
                 'category':rules.get_category_from_item(item),
@@ -124,7 +128,7 @@ class LevelSpider(MasterCrawl, scrapy.Spider):
         yield scrapy.Request(
             url, 
             callback=self.parse_pdp, 
-            meta={"data_dict": data_dict}
+            meta={"data_dict": data_dict, "listing_url": listing_url}
             )
 
     def parse(self, response):
@@ -164,5 +168,12 @@ class LevelSpider(MasterCrawl, scrapy.Spider):
                         data_dict[key] = value
                     else:
                         data_dict[key] = None
+
+            # Some PDP breadcrumbs skip the category level (Home > Women >
+            # product); then the listing the product was found on says it.
+            if data_dict.get('category') is None and data_dict.get('subcategory') is None:
+                category, subcategory = rules.get_category_and_subcategory_from_listing(
+                    response.meta.get('listing_url'))
+                data_dict['category'], data_dict['subcategory'] = category, subcategory
 
             yield data_dict

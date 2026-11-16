@@ -31,6 +31,7 @@ ATHENA_WORKGROUP = os.environ.get("ATHENA_WORKGROUP", "price-comparison")
 ATHENA_OUTPUT = os.environ.get("ATHENA_OUTPUT", f"s3://{BUCKET}/athena-results/crawl-flow/")
 REGISTRY_TABLE = os.environ.get("REGISTRY_TABLE", f'"price_comparison_{APP_ENV}"."crawl_plp_registry"')
 MAPPING_GAPS_TABLE = os.environ.get("MAPPING_GAPS_TABLE", f'"price_comparison_{APP_ENV}"."silver_mapping_gaps"')
+GOLD_TABLE = os.environ.get("GOLD_TABLE", f'"price_comparison_{APP_ENV}"."gold_product_serving_latest"')
 # Polls of the crawl's markers after its task ended (one a minute in the
 # state machine): no marker by then means the crawl died without a manifest.
 MAX_VERIFY_POLLS = int(os.environ.get("MAX_VERIFY_POLLS", "15"))
@@ -244,6 +245,8 @@ def check_crawl(event):
         manifest = _read_json(f"{MANIFESTS_PREFIX}{site}/{dt}/{run_id}/data.json")
         result["run_status"] = manifest.get("run_status") or "success"
         result["degradations"] = manifest.get("degradations")
+        # Language rows written (Arabic and English counted separately).
+        result["rows"] = (manifest.get("artifacts") or {}).get("rows")
         return result
     if polls >= MAX_VERIFY_POLLS:
         # Task ended MAX_VERIFY_POLLS minutes ago and the verifier wrote nothing:
@@ -357,6 +360,34 @@ def _mapping_gaps_line():
         return f"Mapping gaps: not available ({str(e)[:200]})"
 
 
+def _count(value):
+    return f"{int(value):,}" if value not in (None, "") else "?"
+
+
+def _count_lines(crawls):
+    """
+    Per site: language rows this run crawled -> rows in gold -> rows with a
+    served image (what the website shows). Gold keeps products from earlier
+    runs, so it can exceed one run's crawl; a sudden gap is what to look for.
+    """
+    crawled = {c.get("site"): (c.get("result") or {}).get("rows") for c in crawls}
+    try:
+        rows = _athena_rows(
+            "SELECT site, count(*), count_if(coalesce(cardinality(image_s3_blob_keys), 0) > 0) "
+            f"FROM {GOLD_TABLE} GROUP BY site ORDER BY site"
+        )
+        gold = {site: (total, with_images) for site, total, with_images in rows if site}
+    except Exception as e:
+        logger.warning("Gold count query failed: %s", e)
+        return [f"Counts: not available ({str(e)[:200]})"]
+    lines = ["Counts (language rows): crawled this run -> in gold -> with images"]
+    for site in sorted(set(crawled) | set(gold)):
+        total, with_images = gold.get(site, (0, 0))
+        ran = f"{_count(crawled[site])} crawled" if site in crawled else "not crawled this run"
+        lines.append(f"- {site}: {ran} -> {_count(total)} in gold -> {_count(with_images)} with images")
+    return lines
+
+
 def summary(event):
     state = event.get("state") or {}
     flow = state.get("flow") or {}
@@ -373,6 +404,8 @@ def summary(event):
     for crawl in crawls:
         result = crawl.get("result") or {}
         line = f"- {crawl.get('site')} {crawl.get('run_id')}: {result.get('run_status') or 'unknown'}"
+        if result.get("rows") is not None:
+            line += f", {_count(result['rows'])} rows"
         if result.get("failure_reasons"):
             line += f" ({', '.join(result['failure_reasons'])})"
             if "access" in result["failure_reasons"]:
@@ -435,6 +468,7 @@ def summary(event):
                and (failed_step in AFTER_DBT_RUN
                     or (not failed_step and (flow.get("start_at") != "crawl" or gate_result.get("published", 0) > 0))))
     if dbt_ran:
+        lines.extend(_count_lines(crawls))
         lines.append(_mapping_gaps_line())
     if flow.get("execution_arn"):
         lines.append(f"Console: {_console_url(flow['execution_arn'])}")

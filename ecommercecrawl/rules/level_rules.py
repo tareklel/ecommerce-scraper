@@ -36,6 +36,26 @@ def get_gender(url: str):
         return 'kids'
     return None
 
+def get_listing_gender(url):
+    # The gender of the listing a product was found on, spelled like the
+    # listing data's analytics gender ('Women' / 'Men' / 'Kids').
+    gender = get_gender(url) if url else None
+    return gender.capitalize() if gender else None
+
+def get_category_and_subcategory_from_listing(url):
+    # (category, subcategory) slugs from the listing URL path, e.g.
+    # /women/bags/tote-bags -> ("bags", "tote-bags"). Same slug form as the
+    # PDP breadcrumb extractor.
+    if not url:
+        return None, None
+    parts = [p for p in urlparse(url).path.lower().strip("/").split("/") if p]
+    for i, seg in enumerate(parts):
+        if seg in {"men", "women", "kids"}:
+            category = parts[i + 1] if i + 1 < len(parts) else None
+            subcategory = parts[i + 2] if i + 2 < len(parts) else None
+            return category, subcategory
+    return None, None
+
 def get_language_plp(url: str):
     # return language from plp subpath
     if is_plp(url):

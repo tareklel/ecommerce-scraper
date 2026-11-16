@@ -339,4 +339,5 @@ lives in AWS alone, so pausing doesn't need a commit.
 | 2026-11-13 | Step 5b: a crawl that raised and wrote nothing is `crash` (marker `_FAIL_CRASH`, manifest `first_error`), shown with its error in the summary email | — |
 | 2026-11-13 | `STOP_AFTER=crawls`: a crawls-only test run (flow input `stop_after`) | — |
 | 2026-11-13 | Summary email adds a mapping-gaps line (brand spellings to review, products dropped from gold) from scraper-pipeline's `silver_mapping_gaps` | — |
+| 2026-11-16 | Summary email adds per-site counts: rows crawled this run -> in gold -> with images | — |
 | 2026-11-13 | Step 6 built: schedule 02:00 Dubai daily, 2026-11-14 to 2026-11-20 (end date), scheduler role (`states:StartExecution` on the flow only), `make schedule-on/off/status`. Scheduled runs skip the `make crawl-flow` registry check | — |

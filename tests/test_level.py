@@ -4,6 +4,7 @@ import scrapy
 from scrapy.http import HtmlResponse
 from ecommercecrawl.spiders.level_crawl import LevelSpider
 from ecommercecrawl.constants import level_constants as constants
+from ecommercecrawl.rules import level_rules as rules
 
 
 def test_get_api_params_for_plp():
@@ -80,7 +81,7 @@ def test_handle_plp_url_processes_products(monkeypatch):
     def fake_fetch(url, page_number=0):
         return payloads[page_number]
 
-    def fake_handle_item(item):
+    def fake_handle_item(item, listing_url=None):
         seen.append(item)
         return []
 
@@ -100,7 +101,7 @@ def _run_plp(monkeypatch, spider, payloads):
         return payloads[page_number]
 
     monkeypatch.setattr(spider, "_fetch_plp_via_api", fake_fetch)
-    monkeypatch.setattr(spider, "_handle_item", lambda item: seen.append(item) or [])
+    monkeypatch.setattr(spider, "_handle_item", lambda item, listing_url=None: seen.append(item) or [])
     list(spider.handle_plp_url("https://www.levelshoes.com/women/bags"))
     return seen, fetched
 
@@ -271,3 +272,66 @@ def test_parse_pdp_preserves_explicit_empty_plp_gallery(monkeypatch):
     [item] = list(spider.parse_pdp(response))
 
     assert item["image_urls"] == []
+
+
+CUT_DOWN_TOTE = {
+    "action": {"url": "https://ar-saudi.levelshoes.com/bottega-veneta-large-cabat-tote-bag-women-totes-xmuayr.html"},
+    "name": "Large Cabat tote bag",
+    "vpn": "741270V2VW19277",
+    "brandName": "Bottega Veneta",
+    "analytics": {"constructor": {"variationId": "812904595"}},
+}
+TOTE_LISTING = "https://ar-saudi.levelshoes.com/women/bags/tote-bags"
+# The Cabat tote's real breadcrumb (2026-11-16): no category level.
+SHORT_BREADCRUMB = """
+<script type="application/ld+json">[{"@type":"BreadcrumbList","itemListElement":[
+{"@type":"ListItem","position":1,"name":"Home","item":"https://ar-saudi.levelshoes.com/"},
+{"@type":"ListItem","position":2,"name":"\u0644\u0644\u0646\u0633\u0627\u0621","item":"https://ar-saudi.levelshoes.com/women"},
+{"@type":"ListItem","position":3,"name":"Large Cabat tote bag"}]}]</script>
+"""
+
+
+def test_listing_gives_gender_when_the_listing_data_has_none():
+    [request] = list(LevelSpider()._handle_item(CUT_DOWN_TOTE, listing_url=TOTE_LISTING))
+    assert request.meta["data_dict"]["gender"] == "Women"
+    assert request.meta["listing_url"] == TOTE_LISTING
+
+
+def test_listing_data_gender_still_wins_over_the_listing():
+    item = dict(CUT_DOWN_TOTE, analytics={"gender": "Unisex"})
+    [request] = list(LevelSpider()._handle_item(item, listing_url=TOTE_LISTING))
+    assert request.meta["data_dict"]["gender"] == "Unisex"
+
+
+def _parse_cut_down_tote(body, meta_extra=None):
+    spider = LevelSpider()
+    [request] = list(spider._handle_item(CUT_DOWN_TOTE, listing_url=TOTE_LISTING))
+    meta = dict(request.meta, **(meta_extra or {}))
+    response = HtmlResponse(url=request.url, request=scrapy.Request(request.url, meta=meta),
+                            body=body, encoding="utf-8")
+    [item] = list(spider.parse_pdp(response))
+    return item
+
+
+def test_short_breadcrumb_takes_category_from_the_listing():
+    item = _parse_cut_down_tote(SHORT_BREADCRUMB)
+    assert (item["gender"], item["category"], item["subcategory"]) == ("Women", "bags", "tote-bags")
+
+
+def test_breadcrumb_category_wins_over_the_listing():
+    body = SHORT_BREADCRUMB.replace(
+        '"item":"https://ar-saudi.levelshoes.com/women"}',
+        '"item":"https://ar-saudi.levelshoes.com/women"},'
+        '{"@type":"ListItem","position":3,"name":"x","item":"https://ar-saudi.levelshoes.com/women/bags/totes"}')
+    item = _parse_cut_down_tote(body)
+    assert (item["category"], item["subcategory"]) == ("bags", "totes")
+
+
+@pytest.mark.parametrize("url, expected", [
+    ("https://en-saudi.levelshoes.com/women/bags/tote-bags", ("bags", "tote-bags")),
+    ("https://en-saudi.levelshoes.com/women/bags", ("bags", None)),
+    ("https://en-saudi.levelshoes.com/sale", (None, None)),
+    (None, (None, None)),
+])
+def test_category_and_subcategory_from_listing(url, expected):
+    assert rules.get_category_and_subcategory_from_listing(url) == expected

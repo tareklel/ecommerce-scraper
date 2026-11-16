@@ -274,6 +274,15 @@ price-comparison-web have no `.github/workflows`.
     mappings counts twice. A failed query becomes the line itself, never a
     failed summary. Helper role gains Glue read on that one table (data
     already readable under `dbt/dev/`).
+  - **Count lines (user, 2026-11-16):** each crawl line shows the language
+    rows it wrote (from its verified manifest), and when the full dbt run
+    happened the summary adds, per site, "N crawled -> M in gold -> K with
+    images" (`gold_product_serving_latest`, rows with at least one served
+    image = what the website shows). Gold keeps earlier runs' products, so it
+    can exceed one crawl; a sudden gap is the signal. A failed query becomes
+    the line. Helper role gains Glue read on that table (user-approved).
+    Built and pushed; the targeted apply (helper Lambda + its policy, plan 0
+    added, 2 changed) is pending the user's permission.
   - **Crawls-only test runs (user, 2026-11-13):** `make crawl-flow
     CRAWL_LIMIT=1 STOP_AFTER=crawls` (flow input `stop_after: "crawls"`) stops
     after the crawls and their checks, then sends the summary. For testing

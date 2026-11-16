@@ -1,5 +1,11 @@
 # Memory
 
+## 2026-11-16 - Level Shoes listing fallbacks; per-site counts in the run email; Cettire switched on
+- Level Shoes: gender falls back to the listing being crawled ("Women") before the PDP breadcrumb (Arabic "للنساء", 228 products); category/subcategory fall back to the listing URL slugs (`/women/bags/tote-bags` -> bags | tote-bags) when neither the listing analytics nor the PDP breadcrumb has them (Bottega Veneta Large Cabat tote: breadcrumb Home > Women > product). Checked live in both languages. scraper-pipeline asked for the `level-shoes,bags,tote-bags` map row.
+- Run email: each crawl line shows its rows (manifest `artifacts.rows`, via check_crawl); after the full dbt run, per site "crawled -> in gold -> with images" from `gold_product_serving_latest`. Helper role gains Glue read on that table (user-approved). Plan 0 added, 2 changed; the apply was blocked by the session's permission classifier, so it waits for the user.
+- Cettire: scraper-pipeline `ce5ca1c` switched its two registry rows to TRUE (user request) after checking the helper is deployed with `cettire` and both images are current; first scheduled Cettire run 2026-11-17 02:00 Dubai. Terms-of-use item removed from `tickets/cettire_crawl.md` (user).
+- 628 tests pass.
+
 ## 2026-11-16 - Cettire product pages switched on by default
 - User decision ("just flip it"): `CETTIRE_FETCH_PRODUCT_PAGES` defaults to true, with efficient mode and `CETTIRE_MAX_PRODUCT_PAGES` 2000/run. The 2,000 cap was the agent's own choice (not asked for); the user agreed to it once told why: an uncapped first night is ~16 h and holds the whole crawl flow (dbt, cache refresh, email) for all sites. First Cettire night: all products from search plus up to 2,000 pages; ~4 nights for the one-off pass, then only new products. Env var false turns pages off.
 

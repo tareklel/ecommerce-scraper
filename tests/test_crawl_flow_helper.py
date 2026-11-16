@@ -54,7 +54,11 @@ class _FakeAthena:
 
     def get_paginator(self, name):
         assert name == "get_query_results"
-        rows = [["site", "url"]] + self.rows
+        # rows may be {text in the query: rows} to answer each query apart.
+        answer = self.rows
+        if isinstance(answer, dict):
+            answer = next((v for k, v in answer.items() if k in self.queries[-1]), [])
+        rows = [["site", "url"]] + answer
 
         def pages(QueryExecutionId):
             return [{"ResultSet": {"Rows": [
@@ -435,15 +439,15 @@ def _summary_text(helper, **state):
 
 
 def test_summary_reports_mapping_gaps_after_dbt_ran(helper):
-    helper.athena = _FakeAthena([["3", "2"]])
+    helper.athena = _FakeAthena({"silver_mapping_gaps": [["3", "2"]]})
     text = _summary_text(helper, crawls=[_crawl("success")], gate={"published": 1})
     assert ("Mapping gaps: 3 brand spelling(s) to review (scraper-pipeline: make seed-suggestions); "
             "2 product drop(s) from gold (a product missing two mappings counts twice)") in text
-    assert "silver_mapping_gaps" in helper.athena.queries[0]
+    assert "silver_mapping_gaps" in helper.athena.queries[-1]
 
 
 def test_summary_mapping_gaps_also_on_a_failed_dbt_test(helper):
-    helper.athena = _FakeAthena([["0", "5"]])
+    helper.athena = _FakeAthena({"silver_mapping_gaps": [["0", "5"]]})
     text = _summary_text(helper, failed_step="dbt_test", failure={"exit_code": 1})
     assert "5 product drop(s) from gold" in text
 
@@ -468,3 +472,42 @@ def test_crawls_only_summary_skips_mapping_gaps(helper):
         "flow": _start(helper, {"stop_after": "crawls"}), "crawls": [_crawl("success")], "gate": {"published": 1},
     }}, None)
     assert helper.athena.queries == []
+
+
+
+# -- count lines --------------------------------------------------------------
+
+GOLD_ROWS = [["bloomingdales", "230", "228"], ["level-shoes", "4690", "4650"], ["ounass", "6400", "6390"]]
+
+
+def test_check_crawl_reports_the_rows_the_crawl_wrote(helper):
+    helper.s3.objects[MARKERS + "_SUCCESS"] = b""
+    helper.s3.objects[MANIFEST] = json.dumps({"run_status": "success", "artifacts": {"rows": 4712}}).encode()
+    assert _check(helper)["rows"] == 4712
+
+
+def test_summary_counts_crawled_gold_and_with_images_per_site(helper):
+    helper.athena = _FakeAthena({"gold_product_serving_latest": GOLD_ROWS, "silver_mapping_gaps": [["0", "0"]]})
+    crawls = [{"site": "level-shoes", "run_id": "r1", "result": {"run_status": "success", "rows": 4712}},
+              {"site": "bloomingdales", "run_id": "r2", "result": {"run_status": "failed", "failure_reasons": ["quality"]}}]
+    text = _summary_text(helper, crawls=crawls, gate={"published": 1})
+    assert "- level-shoes r1: success, 4,712 rows" in text
+    assert "Counts (language rows): crawled this run -> in gold -> with images" in text
+    assert "- level-shoes: 4,712 crawled -> 4,690 in gold -> 4,650 with images" in text
+    assert "- bloomingdales: ? crawled -> 230 in gold -> 228 with images" in text
+    assert "- ounass: not crawled this run -> 6,400 in gold -> 6,390 with images" in text
+
+
+def test_summary_count_query_failure_never_fails_the_summary(helper):
+    helper.athena = _FakeAthena([], state="FAILED")
+    text = _summary_text(helper, crawls=[_crawl("success")], gate={"published": 1})
+    assert "Counts: not available (boom)" in text
+
+
+def test_crawls_only_summary_shows_crawled_rows_but_no_gold_counts(helper):
+    text = helper.handler({"action": "summary", "state": {
+        "flow": _start(helper, {"stop_after": "crawls"}),
+        "crawls": [{"site": "cettire", "run_id": "r", "result": {"run_status": "success", "rows": 812}}],
+        "gate": {"published": 1},
+    }}, None)["text"]
+    assert "- cettire r: success, 812 rows" in text and "Counts" not in text

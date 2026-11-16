@@ -291,9 +291,6 @@ affiliate notes: `notes/2026-11-14-cettire-research.md`.
 - **Affiliate application** (user): apply through Partnerize or ask Cettire's
   affiliate team whether a product feed with SAR prices and Arabic titles
   exists. A feed could replace the search-service route.
-- **Terms of use**: not read. The agent session's safety check classified
-  direct search-service calls as unauthorized access twice; read the terms
-  before a daily crawl goes live.
 - **Arabic descriptions**: deferred. Arabic rows have names and categories
   but no `text`.
 - **Probe data in the dev bucket**: `probes/dev/cettire/` holds copies of
