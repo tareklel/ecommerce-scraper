@@ -33,6 +33,27 @@ or security-control bypass to endpoint monitoring.
 - Normal source inspection, local unit tests, formatting, and builds are allowed when
   they do not access external systems or security-sensitive stores.
 
+# Syncing With GitHub (Laptop and Cloud Sessions)
+
+The user works both on the laptop and in cloud sessions started from the phone.
+Cloud sessions clone from GitHub and push there; they never see the laptop.
+
+- At the start of a session, and when resuming after a gap (a few hours or a new
+  day), run `git fetch` in all three repos (`ecommerce-scraper`,
+  `../scraper-pipeline`, `../price-comparison-web`) and compare each with
+  `origin/main`. If one is behind, tell the user what came in (commit subjects,
+  merged pull requests) and pull with `git pull --ff-only` before changing
+  anything. If the pull would touch uncommitted changes, ask first.
+- Also mention open pull requests waiting for the user (`gh pr list`).
+- In a cloud session only this repo is cloned, so the siblings can't be
+  checked locally; say so, or check them on GitHub with `gh`.
+- When work is done, commit and push it, and end the reply with one line naming
+  what to pull, e.g. "Pushed to `ecommerce-scraper` `main`: pull on the
+  laptop." If the work is on a branch or a pull request, name it and say it
+  must be merged before pulling.
+- Rules and handoffs belong in repo files (this file, tickets), not only in a
+  local memory folder: cloud sessions see only what is on GitHub.
+
 # Working Alongside Other Agents
 
 - Other agent sessions may be working at the same time, in this repo or in sibling
