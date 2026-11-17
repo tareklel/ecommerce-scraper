@@ -643,4 +643,4 @@
 - Parser built against dbt 1.12's real output (`[ERROR]: in test X (path)` then `Got N results, ...`), checked against the 2026-11-16 log.
 - `infra/terraform/orchestration.tf`: `local.dbt_log_group`, `DBT_LOG_GROUP` env var, and a `ReadDbtTaskLog` statement (`logs:GetLogEvents` on that log group only).
 - Tests: 5 new in `tests/test_crawl_flow_helper.py`. `docs/cicd_architecture.md`: an edge-case row and a decision-log row.
-- Found while deploying: the per-site counts change (`01c4950`, its `GOLD_TABLE` env var and Glue grant) had been committed but never applied, so the 2026-11-16 email had no counts lines.
+- Found while deploying: the per-site counts change (`01c4950`, its `GOLD_TABLE` env var and Glue grant) had been committed but never applied, so the 2026-11-16 email had no counts lines. Both applied 2026-11-17 in one targeted apply (helper Lambda + its policy); a live `summary` invoke with the 2026-11-16 failure showed the dbt error block and the counts.
