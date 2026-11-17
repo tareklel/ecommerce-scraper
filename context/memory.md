@@ -636,3 +636,11 @@
 
 ## 2026-10-29 - Part 6 items 2/3/4 cross-repo pointers in the ticket
 - Updated `tickets/ounass_plp_efficient_crawl.md` to mark Part 6 items 1-4 done/investigated: the discount-clearing fix (this repo, `309f3bd`), `primary_label` surfaced in scraper-pipeline silver/gold (`186d7f3`, data layer only -- website wiring deferred), `plp_extract_flag` kept through silver (`9267ceb`), and item 4 (image pipeline / null-gallery) investigated with no bug found. Updated the Part 6 status table row, the "Next build parts" one-liner, each item's checkbox, and added a 2026-10-29 Decision Log row, so the cross-repo work is findable from the ticket itself, not only from scraper-pipeline's memory.md.
+
+## 2026-11-17 - Run email says why a dbt step failed
+- The 2026-11-16 run email only said "FAILED at dbt test: exit code 1 (Essential container in task exited)". The real cause (`test_silver_product_image_download_status_gallery_contract`, 30,673 rows) was only in the dbt task's CloudWatch log.
+- `lambda/crawl_flow_helper/handler.py`: when a dbt-task step fails (`seed_registry`, `dbt_run`, `dbt_run_images`, `dbt_test`, `refresh_cache`), the summary reads that task's log stream (`/ecs/price-comparison-dbt-dev`, `dbt/dbt/<task id>`; task ID from the caught failure or `last_task`) and adds a "dbt said:" block: each error block after dbt's "Completed with ..." line (up to 10; warnings left out), the `Done. PASS=...` line, and a CloudWatch link. If dbt printed no errors (e.g. the dbt lock timed out), it shows the log's last 5 lines. A log read error becomes the line itself and never fails the summary.
+- Parser built against dbt 1.12's real output (`[ERROR]: in test X (path)` then `Got N results, ...`), checked against the 2026-11-16 log.
+- `infra/terraform/orchestration.tf`: `local.dbt_log_group`, `DBT_LOG_GROUP` env var, and a `ReadDbtTaskLog` statement (`logs:GetLogEvents` on that log group only).
+- Tests: 5 new in `tests/test_crawl_flow_helper.py`. `docs/cicd_architecture.md`: an edge-case row and a decision-log row.
+- Found while deploying: the per-site counts change (`01c4950`, its `GOLD_TABLE` env var and Glue grant) had been committed but never applied, so the 2026-11-16 email had no counts lines.

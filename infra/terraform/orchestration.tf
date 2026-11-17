@@ -26,6 +26,8 @@ locals {
   # (terraform/dbt_job.tf); referenced by name.
   dbt_task_family         = "price-comparison-dbt-dev"
   dbt_task_definition_arn = "arn:aws:ecs:${var.region}:${data.aws_caller_identity.current.account_id}:task-definition/${local.dbt_task_family}"
+  # The dbt task's log group (scraper-pipeline terraform/dbt_job.tf).
+  dbt_log_group = "/ecs/price-comparison-dbt-dev"
 
   crawler_network = {
     AwsvpcConfiguration = {
@@ -418,6 +420,13 @@ resource "aws_iam_role_policy" "crawl_flow_helper" {
         Resource = "*"
       },
       {
+        # The summary reads a failed dbt step's log to say why it failed.
+        Sid      = "ReadDbtTaskLog"
+        Effect   = "Allow"
+        Action   = ["logs:GetLogEvents"]
+        Resource = "arn:aws:logs:${var.region}:${data.aws_caller_identity.current.account_id}:log-group:${local.dbt_log_group}:log-stream:*"
+      },
+      {
         Sid      = "ListFlowRuns"
         Effect   = "Allow"
         Action   = ["states:ListExecutions"]
@@ -511,7 +520,9 @@ resource "aws_lambda_function" "crawl_flow_helper" {
       # Read by the summary's mapping-gaps line (scraper-pipeline's seed to-do list).
       MAPPING_GAPS_TABLE = "\"${var.dbt_database_name}\".\"silver_mapping_gaps\""
       # Read by the summary's per-site counts (rows in gold, with images).
-      GOLD_TABLE       = "\"${var.dbt_database_name}\".\"gold_product_serving_latest\""
+      GOLD_TABLE = "\"${var.dbt_database_name}\".\"gold_product_serving_latest\""
+      # Read by the summary to say why a dbt step failed.
+      DBT_LOG_GROUP    = local.dbt_log_group
       MAX_VERIFY_POLLS = "15"
     }
   }

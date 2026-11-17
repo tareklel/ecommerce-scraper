@@ -17,6 +17,7 @@ Actions (event["action"]):
 import json
 import logging
 import os
+import re
 import time
 from datetime import datetime, timedelta, timezone
 
@@ -36,6 +37,10 @@ GOLD_TABLE = os.environ.get("GOLD_TABLE", f'"price_comparison_{APP_ENV}"."gold_p
 # state machine): no marker by then means the crawl died without a manifest.
 MAX_VERIFY_POLLS = int(os.environ.get("MAX_VERIFY_POLLS", "15"))
 ATHENA_TIMEOUT_SECONDS = 120
+# The dbt task's log (scraper-pipeline terraform/dbt_job.tf: awslogs prefix
+# "dbt", container "dbt"), read to say why a dbt step failed.
+DBT_LOG_GROUP = os.environ.get("DBT_LOG_GROUP", f"/ecs/price-comparison-dbt-{APP_ENV}")
+DBT_LOG_STREAM_PREFIX = "dbt/dbt/"
 
 MARKERS_PREFIX = f"bronze/{APP_ENV}/crawls/markers/"
 MANIFESTS_PREFIX = f"bronze/{APP_ENV}/crawls/manifests/"
@@ -59,6 +64,7 @@ PUBLISHED = ("success", "degraded")
 s3 = boto3.client("s3")
 athena = boto3.client("athena")
 sfn = boto3.client("stepfunctions")
+logs = boto3.client("logs")
 
 
 class FlowAlreadyRunning(Exception):
@@ -321,6 +327,112 @@ def _describe_error(failure):
     return f"{failure.get('Error')} {str(cause)[:500]}".strip()
 
 
+# Steps that run the dbt task, so their log says why they failed.
+DBT_STEPS = ("seed_registry", "dbt_run", "dbt_run_images", "dbt_test", "refresh_cache")
+MAX_DBT_PROBLEMS = 10
+# Each log line starts with an ANSI reset and an HH:MM:SS timestamp.
+_ANSI = re.compile(r"\x1b\[[0-9;]*m")
+_TIMESTAMP = re.compile(r"^\d\d:\d\d:\d\d  ")
+
+
+def _failed_task_id(failure, state):
+    """The ECS task ID of the failed step, from the caught error or last_task."""
+    try:
+        task = json.loads((failure or {}).get("Cause") or "")
+    except (TypeError, ValueError, AttributeError):
+        task = None
+    arn = task.get("TaskArn") if isinstance(task, dict) else None
+    if not arn:
+        containers = (state.get("last_task") or {}).get("containers") or [{}]
+        arn = containers[0].get("TaskArn")
+    return arn.rsplit("/", 1)[-1] if arn else None
+
+
+def _read_dbt_log(task_id):
+    """All messages of one dbt task's log stream, ANSI codes and timestamps removed."""
+    messages, token = [], None
+    for _ in range(20):  # a full dbt run is a few hundred lines; this is a guard
+        kwargs = {"logGroupName": DBT_LOG_GROUP, "logStreamName": DBT_LOG_STREAM_PREFIX + task_id,
+                  "startFromHead": True}
+        if token:
+            kwargs["nextToken"] = token
+        response = logs.get_log_events(**kwargs)
+        messages.extend(_TIMESTAMP.sub("", _ANSI.sub("", e["message"])) for e in response["events"])
+        if not response["events"] or response.get("nextForwardToken") == token:
+            break
+        token = response.get("nextForwardToken")
+    return messages
+
+
+def _dbt_problems(messages):
+    """
+    dbt's own explanation of a failed command (dbt 1.12 format, seen 2026-11-17):
+    after "Completed with N error(s)", each problem is a block of lines between
+    blank lines, e.g. "[ERROR]: in test X (path)" then "Got 30673 results, ...".
+    Warnings are left out (they don't fail the step); the "Done. PASS=..." line
+    gives their count. Returns (problems, done_line).
+    """
+    done = next((m.strip() for m in reversed(messages) if m.strip().startswith("Done. PASS=")), None)
+    start = next((i for i, m in enumerate(messages) if m.strip().startswith("Completed with")), None)
+    if start is None:
+        return [], done
+    blocks, block = [], []
+    for message in messages[start + 1:] + [""]:
+        text = message.strip()
+        if text.startswith("Done. PASS="):
+            break
+        if text:
+            block.append(text)
+        elif block:
+            blocks.append(block)
+            block = []
+    if block:
+        blocks.append(block)
+    problems = []
+    for block in blocks:
+        kept = [line for line in block if not line.startswith("compiled code at")]
+        if kept and not kept[0].startswith("[WARNING]"):
+            problems.append(": ".join(kept).replace("[ERROR]: ", ""))
+    return problems, done
+
+
+def _dbt_log_url(task_id):
+    region = os.environ.get("AWS_REGION", "eu-central-1")
+    group = DBT_LOG_GROUP.replace("/", "$252F")
+    stream = (DBT_LOG_STREAM_PREFIX + task_id).replace("/", "$252F")
+    return (f"https://{region}.console.aws.amazon.com/cloudwatch/home?region={region}"
+            f"#logsV2:log-groups/log-group/{group}/log-events/{stream}")
+
+
+def _dbt_failure_lines(failure, state):
+    """
+    Why a dbt step failed, from its task's log: dbt's error blocks, or the
+    log's last lines when dbt printed none (e.g. the dbt lock timed out).
+    Never fails the summary: a problem reading the log becomes the line itself.
+    """
+    task_id = _failed_task_id(failure, state)
+    if not task_id:
+        return ["dbt said: not available (no task ID in the failure)"]
+    try:
+        messages = _read_dbt_log(task_id)
+        problems, done = _dbt_problems(messages)
+        lines = ["dbt said:"]
+        if problems:
+            lines.extend(f"- {p[:500]}" for p in problems[:MAX_DBT_PROBLEMS])
+            if len(problems) > MAX_DBT_PROBLEMS:
+                lines.append(f"- ...and {len(problems) - MAX_DBT_PROBLEMS} more (see the log)")
+        else:
+            tail = [m.strip() for m in messages if m.strip()][-5:] or ["(the log is empty)"]
+            lines.extend(f"  {m[:500]}" for m in tail)
+        if done:
+            lines.append(f"- {done}")
+    except Exception as e:
+        logger.warning("dbt log read failed: %s", e)
+        lines = [f"dbt said: not available ({str(e)[:200]})"]
+    lines.append(f"dbt log: {_dbt_log_url(task_id)}")
+    return lines
+
+
 def _degradation_line(degradation):
     if isinstance(degradation, dict) and degradation.get("message"):
         return f"{degradation.get('kind', '?')} {degradation.get('scope', '?')}: {degradation['message']}"
@@ -438,6 +550,8 @@ def summary(event):
             containers = (state.get("last_task") or {}).get("containers") or [{}]
             detail += f": exit code {containers[0].get('ExitCode', 'unknown')}"
         lines.append(f"FAILED at {detail}")
+        if failed_step in DBT_STEPS:
+            lines.extend(_dbt_failure_lines(failure, state))
         if failed_step == "refresh_cache":
             lines.append("API cache refresh failed: the API keeps the previous data")
         else:

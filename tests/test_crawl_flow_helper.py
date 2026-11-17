@@ -81,6 +81,25 @@ class _FakeSfn:
         return _Paginator(pages)
 
 
+class _FakeLogs:
+    """One log stream per task ID; pages of `page_size` events."""
+
+    def __init__(self, streams=None, error=None, page_size=1000):
+        self.streams = streams or {}
+        self.error = error
+        self.page_size = page_size
+        self.calls = []
+
+    def get_log_events(self, logGroupName, logStreamName, startFromHead, nextToken=None):
+        self.calls.append((logGroupName, logStreamName))
+        if self.error:
+            raise self.error
+        messages = self.streams.get(logStreamName.rsplit("/", 1)[-1], [])
+        offset = int(nextToken or 0)
+        page = messages[offset:offset + self.page_size]
+        return {"events": [{"message": m} for m in page], "nextForwardToken": str(offset + len(page))}
+
+
 @pytest.fixture
 def helper():
     os.environ.setdefault("AWS_DEFAULT_REGION", "eu-central-1")
@@ -93,6 +112,7 @@ def helper():
     module.s3 = _FakeS3()
     module.athena = _FakeAthena([])
     module.sfn = _FakeSfn([])
+    module.logs = _FakeLogs()
     return module
 
 
@@ -511,3 +531,93 @@ def test_crawls_only_summary_shows_crawled_rows_but_no_gold_counts(helper):
         "gate": {"published": 1},
     }}, None)["text"]
     assert "- cettire r: success, 812 rows" in text and "Counts" not in text
+
+
+# -- why a dbt step failed (its task's log) ------------------------------------
+
+def _dbt_line(text):
+    return f"\x1b[0m23:25:30  {text}"
+
+
+# The 2026-11-16 dbt test failure, as dbt 1.12 logged it (shortened).
+DBT_TEST_LOG = [
+    "[dbt-job] Lock taken: s3://bucket/locks/dbt-dev.lock (cloud:root@ip)",
+    _dbt_line("Running with dbt=1.12.5"),
+    _dbt_line("1 of 56 PASS not_null_gold_product_serving_latest_site ... [\x1b[32mPASS\x1b[0m in 1.2s]"),
+    _dbt_line("53 of 56 FAIL 30673 test_silver_product_image_download_status_gallery_contract . "
+              "[\x1b[31mFAIL 30673\x1b[0m in 3.34s]"),
+    _dbt_line(""),
+    _dbt_line("\x1b[31mCompleted with 1 error, 0 partial successes, and 1 warning:\x1b[0m"),
+    _dbt_line(""),
+    _dbt_line("[\x1b[31mERROR\x1b[0m]: in test test_silver_product_image_download_status_gallery_contract "
+              "(tests/test_silver_product_image_download_status_gallery_contract.sql)"),
+    _dbt_line("  Got 30673 results, configured to fail if != 0"),
+    _dbt_line(""),
+    _dbt_line("  compiled code at target/compiled/price_comparison/tests/x.sql"),
+    _dbt_line(""),
+    _dbt_line("[\x1b[33mWARNING\x1b[0m]: in test test_silver_product_fact_nonpositive_price "
+              "(tests/test_silver_product_fact_nonpositive_price.sql)"),
+    _dbt_line("[\x1b[33mWARNING\x1b[0m]: Got 2 results, configured to warn if != 0"),
+    _dbt_line(""),
+    _dbt_line("  compiled code at target/compiled/price_comparison/tests/y.sql"),
+    _dbt_line(""),
+    _dbt_line("Done. PASS=54 WARN=1 ERROR=1 SKIP=0 NO-OP=0 REUSED=0 TOTAL=56"),
+    "[dbt-job] Lock released.",
+]
+
+
+def _ecs_failure(task_id):
+    return {"Error": "States.TaskFailed", "Cause": json.dumps({
+        "StoppedReason": "Essential container in task exited",
+        "TaskArn": f"arn:aws:ecs:eu-central-1:1:task/price-comparison/{task_id}",
+        "Containers": [{"Name": "dbt", "ExitCode": 1}],
+    })}
+
+
+def test_summary_explains_a_failed_dbt_test_from_its_log(helper):
+    helper.logs = _FakeLogs({"a2de91b7": DBT_TEST_LOG}, page_size=5)  # several pages
+    text = _summary_text(helper, failed_step="dbt_test", failure=_ecs_failure("a2de91b7"))
+    assert ("dbt said:\n"
+            "- in test test_silver_product_image_download_status_gallery_contract "
+            "(tests/test_silver_product_image_download_status_gallery_contract.sql): "
+            "Got 30673 results, configured to fail if != 0\n"
+            "- Done. PASS=54 WARN=1 ERROR=1 SKIP=0 NO-OP=0 REUSED=0 TOTAL=56\n") in text
+    assert "nonpositive_price" not in text  # a warning doesn't fail the step
+    assert helper.logs.calls[0] == ("/ecs/price-comparison-dbt-dev", "dbt/dbt/a2de91b7")
+    assert "dbt log: https://" in text and "dbt$252Fdbt$252Fa2de91b7" in text
+
+
+def test_summary_explains_a_model_error_and_caps_the_list(helper):
+    log = [_dbt_line("Completed with 12 errors, 0 partial successes, and 0 warnings:"), _dbt_line("")]
+    for n in range(12):
+        log += [_dbt_line(f"[ERROR]: in model gold_{n} (models/gold/gold_{n}.sql)"),
+                _dbt_line(f"  Database Error in model gold_{n} (models/gold/gold_{n}.sql)"),
+                _dbt_line("    COLUMN_NOT_FOUND: line 3:8: Column 'brand' cannot be resolved"),
+                _dbt_line("")]
+    helper.logs = _FakeLogs({"t1": log + [_dbt_line("Done. PASS=0 WARN=0 ERROR=12 SKIP=0 TOTAL=12")]})
+    text = _summary_text(helper, failed_step="dbt_run", failure=_ecs_failure("t1"))
+    assert ("- in model gold_0 (models/gold/gold_0.sql): Database Error in model gold_0 "
+            "(models/gold/gold_0.sql): COLUMN_NOT_FOUND: line 3:8: Column 'brand' cannot be resolved") in text
+    assert "gold_9 " in text and "gold_10 " not in text
+    assert "- ...and 2 more (see the log)" in text
+
+
+def test_summary_shows_the_log_tail_when_dbt_printed_no_errors(helper):
+    # The task ran but exited non-zero: the task ARN is in last_task.
+    helper.logs = _FakeLogs({"t2": ["[dbt-job] Waiting for the lock", "",
+                                    "[dbt-job] Lock not taken after 7200s: held by laptop"]})
+    text = _summary_text(helper, failed_step="dbt_test", failure=None, last_task={"containers": [
+        {"ExitCode": 75, "TaskArn": "arn:aws:ecs:eu-central-1:1:task/price-comparison/t2"}]})
+    assert "dbt said:\n  [dbt-job] Waiting for the lock\n  [dbt-job] Lock not taken after 7200s" in text
+
+
+def test_summary_dbt_log_read_failure_never_fails_the_summary(helper):
+    helper.logs = _FakeLogs(error=RuntimeError("AccessDenied"))
+    text = _summary_text(helper, failed_step="dbt_test", failure=_ecs_failure("t3"))
+    assert "dbt said: not available (AccessDenied)" in text
+    assert "API cache not refreshed" in text
+
+
+def test_summary_reads_no_dbt_log_for_other_steps(helper):
+    _summary_text(helper, failed_step="image_pipeline", failure=_ecs_failure("t4"))
+    assert helper.logs.calls == []

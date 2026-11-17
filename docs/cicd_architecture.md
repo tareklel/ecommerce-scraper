@@ -163,6 +163,7 @@ happened.
 | `dbt run` fails | Rare | Stop and report | The previous gold and cache stay; flow **failed** |
 | Cache refresh fails (refresh step exit 77) | Rare; also if `gold_site_nav` is missing or invalid (the dev export reads it since 2026-11-10, release `20261110T071721Z-472182ed`) | The refresh step fails | The cache stays at the previous version; flow **failed** |
 | `dbt test` fails | Seen on 2026-11-10 (new categories brought unmapped labels and a price-0 gift) | No cache refresh | Gold has the new data but the API keeps the last tested version; flow **failed** so it gets looked at |
+| Any dbt step fails (registry seed, dbt run, dbt test, cache refresh) | Now and then | The summary reads that task's log (`/ecs/price-comparison-dbt-dev`) | Email lists dbt's errors (up to 10, warnings left out) and the `Done. PASS=...` line, or the log's last lines when dbt printed none, plus a link to the log |
 | The laptop holds the dbt lock | When you run dbt during a flow | The dbt task waits up to 2 hours | Then fails visibly (exit 75) if still held |
 | A crawl or the flow runs too long | Rare | Time limits: 10 hours per crawl, 24 hours per flow | That crawl counts as failed; the flow **fails** |
 
@@ -340,4 +341,5 @@ lives in AWS alone, so pausing doesn't need a commit.
 | 2026-11-13 | `STOP_AFTER=crawls`: a crawls-only test run (flow input `stop_after`) | — |
 | 2026-11-13 | Summary email adds a mapping-gaps line (brand spellings to review, products dropped from gold) from scraper-pipeline's `silver_mapping_gaps` | — |
 | 2026-11-16 | Summary email adds per-site counts: rows crawled this run -> in gold -> with images | — |
+| 2026-11-17 | Summary email says why a dbt step failed, from the dbt task's log (helper gets `logs:GetLogEvents` on that log group only) | — |
 | 2026-11-13 | Step 6 built: schedule 02:00 Dubai daily, 2026-11-14 to 2026-11-20 (end date), scheduler role (`states:StartExecution` on the flow only), `make schedule-on/off/status`. Scheduled runs skip the `make crawl-flow` registry check | — |
