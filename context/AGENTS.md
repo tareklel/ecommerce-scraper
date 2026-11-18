@@ -1,6 +1,7 @@
 - We are building a luxury clothing price comparison website. See `context/product-brief.md` for the full product vision.
 - This repo manages crawler activity and Lambdas related to crawler activity.
-- After every commit, append a semi-concise summary of what changed to `context/memory.md`.
+- After every commit, add an entry of 1–3 lines to `context/memory.md` under "Log" (newest first): what changed and why, naming the key files, models or tickets. Details belong in the commit message, tickets and docs.
+- Keep the log to the last 10 entry days (dates that have entries). When an 11th day appears, fold the oldest day's lasting facts into the summary at the top of `context/memory.md` and move that day's entries word for word to `../archive/ecommerce-scraper/memory-archive.md` in the workspace repo (`tareklel/price-comparison-workspace`, the folder that holds this repo on the laptop), and commit and push there too. In a cloud session, where that folder is missing, leave the roll-over for a laptop session.
 - Write comments to explain intent, assumptions, and non-obvious logic. Keep comments concise and specific.
 - Before writing changes to files, first explain to me what you plan to do and then do changes once you get agreement.
 - Ounass PLP-efficient crawl mode is documented in `docs/ounass_plp_efficient_crawl.md`, which describes how the mode works today. Any change to its behaviour (spider, rules, settings, quality gate, manifest, verifier Lambda, input contracts) must update that doc in the same commit, including its change log. `tests/test_plp_efficient_docs.py` fails if an `OUNASS_PLP_EFFICIENT_*` setting is missing from the doc.
