@@ -12,6 +12,7 @@ import boto3
 import requests
 
 from ecommercecrawl.constants import bloomingdales_constants
+from ecommercecrawl.constants import cettire_constants
 from ecommercecrawl.constants import farfetch_constants
 from ecommercecrawl.constants import level_constants
 from ecommercecrawl.constants import ounass_constants
@@ -30,6 +31,7 @@ STATUS_SKIPPED_DUPLICATE = "skipped_duplicate"
 
 SITE_ALIASES = {
     "bloomingdales": bloomingdales_constants.NAME,
+    "cettire": cettire_constants.NAME,
     "farfetch": farfetch_constants.NAME,
     "level": level_constants.NAME,
     "level-shoes": level_constants.NAME,
@@ -84,6 +86,13 @@ def get_site_headers(site: str) -> Dict[str, str]:
         return {
             "user-agent": "Mozilla/5.0",
             "referer": bloomingdales_constants.MAIN_SITE_AR,
+        }
+    if site == cettire_constants.NAME:
+        # Images are on the site's CloudFront (d3vfig6e0r0snz.cloudfront.net),
+        # which served a direct download on 2026-11-18 with no Zyte.
+        return {
+            "user-agent": "Mozilla/5.0",
+            "referer": cettire_constants.MAIN_SITE + "/",
         }
     if site == level_constants.NAME:
         return {

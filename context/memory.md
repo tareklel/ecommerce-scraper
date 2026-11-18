@@ -644,3 +644,10 @@
 - `infra/terraform/orchestration.tf`: `local.dbt_log_group`, `DBT_LOG_GROUP` env var, and a `ReadDbtTaskLog` statement (`logs:GetLogEvents` on that log group only).
 - Tests: 5 new in `tests/test_crawl_flow_helper.py`. `docs/cicd_architecture.md`: an edge-case row and a decision-log row.
 - Found while deploying: the per-site counts change (`01c4950`, its `GOLD_TABLE` env var and Glue grant) had been committed but never applied, so the 2026-11-16 email had no counts lines. Both applied 2026-11-17 in one targeted apply (helper Lambda + its policy); a live `summary` invoke with the 2026-11-16 failure showed the dbt error block and the counts.
+
+## 2026-11-18 - Cettire images: the downloader rejected the site
+- The 2026-11-17 run email showed Cettire 15,832 rows in gold, 0 with images. `ecommercecrawl/image_downloader.py` `SITE_ALIASES` had no `cettire`, so `normalize_site` raised and every Cettire job was logged `skipped_invalid` / `invalid_job_input` (61,185 since 2026-11-15). Those log rows carry no site, key or URL, so they never match the pending-images query and the same jobs came back every run.
+- Added `cettire` to `SITE_ALIASES` and a Cettire branch in `get_site_headers` (plain user-agent, `https://www.cettire.com/` referer). The CDN (`d3vfig6e0r0snz.cloudfront.net`) served a direct download (200, JPEG), checked through `download_one_job` locally.
+- Tests: `normalize_site("cettire")`, the Cettire headers, and a guard that every site in the crawl flow helper's `SITES` is accepted by `normalize_site`.
+- The next image step downloads the whole backlog (61,185 images); the step's timeout is 3 hours.
+- Found, not fixed yet: the crawl flow helper's `check_crawl` reads `bronze/.../manifests/.../data.json` as the manifest, but the verifier writes `{run_id, raw_json}` with the manifest as a JSON string inside `raw_json`. So every published crawl shows `success` (never `degraded`), with no degradations and no row count ("? crawled" in the email).

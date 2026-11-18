@@ -1,4 +1,6 @@
+import importlib.util
 import json
+import os
 from pathlib import Path
 
 from ecommercecrawl import image_downloader as downloader
@@ -19,6 +21,30 @@ def test_normalize_site_level_alias():
     assert downloader.normalize_site("level_shoes") == "level-shoes"
     assert downloader.normalize_site("level") == "level-shoes"
     assert downloader.normalize_site("ounass") == "ounass"
+
+
+def test_normalize_site_cettire():
+    assert downloader.normalize_site("cettire") == "cettire"
+
+
+def test_every_crawl_flow_site_is_a_download_site():
+    # 2026-11-18: Cettire was crawled for days while every image job was
+    # rejected as an unsupported site. Each site the flow crawls must download.
+    spec = importlib.util.spec_from_file_location(
+        "crawl_flow_helper_sites", Path("lambda/crawl_flow_helper/handler.py")
+    )
+    module = importlib.util.module_from_spec(spec)
+    os.environ.setdefault("AWS_DEFAULT_REGION", "eu-central-1")
+    spec.loader.exec_module(module)
+    for site in module.SITES:
+        assert downloader.normalize_site(site) == site
+
+
+def test_cettire_download_headers_use_site_referer():
+    headers = downloader.get_site_headers("cettire")
+
+    assert headers["referer"] == "https://www.cettire.com/"
+    assert headers["user-agent"]
 
 
 def test_bloomingdales_download_headers_use_sa_referer():

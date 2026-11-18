@@ -494,7 +494,7 @@ image, bronze uploads off; outputs under `probes/dev/cettire/live1..3`).
 - Whether sold-out products stay in search results.
 - How often the API key changes.
 - Real new-product rate per day.
-- Whether the image CDN allows direct downloads.
+- Whether the image CDN allows direct downloads. Answered 2026-11-18: yes (200, JPEG, plain user-agent and referer, no Zyte).
 - Zyte tier and real price for Cettire product pages.
 - Product-level overlap with Level Shoes and Ounass (model number looks
   usable as a key).

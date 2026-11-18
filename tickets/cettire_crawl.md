@@ -280,6 +280,13 @@ affiliate notes: `notes/2026-11-14-cettire-research.md`.
 
 ## Other open items
 
+- **Images (fixed 2026-11-18, check the next run)**: from the first flow run
+  to 2026-11-17, every Cettire image job was rejected by the image downloader
+  as an unsupported site (`cettire` was missing from `SITE_ALIASES`), so gold
+  had 15,832 Cettire rows and 0 with images. Fixed in
+  `ecommercecrawl/image_downloader.py`; the CDN allows direct downloads. The
+  next image step downloads the whole backlog (61,185 images, 7,917
+  products). Check the run email's Cettire "with images" count.
 - **Pull requests** (opened 2026-11-15, not merged): crawler work,
   https://github.com/tareklel/ecommerce-scraper/pull/1; downstream ticket,
   https://github.com/tareklel/scraper-pipeline-pc/pull/1. Merging the crawler
