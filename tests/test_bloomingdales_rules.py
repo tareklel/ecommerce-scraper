@@ -78,15 +78,6 @@ def test_is_pdp_false(url):
     assert rules.is_pdp(url) is False
 
 
-def test_is_first_plp_page_true():
-    assert rules.is_first_plp_page("https://bloomingdales.sa/womens-bags/") is True
-
-
-def test_is_first_plp_page_false_for_update_grid():
-    url = "https://bloomingdales.sa/on/demandware.store/Sites-BloomingDales_SA-Site/ar_SA/Search-UpdateGrid?cgid=foo&start=48"
-    assert rules.is_first_plp_page(url) is False
-
-
 # ── extract_pid ──────────────────────────────────────────────────────────────
 
 def test_extract_pid_variant():
@@ -109,36 +100,79 @@ def test_extract_pid_returns_none_for_non_pdp():
     assert rules.extract_pid("https://bloomingdales.sa/womens-bags/") is None
 
 
-# ── get_cgid ─────────────────────────────────────────────────────────────────
+# ── Listing product search (Commerce API) ─────────────────────────────────────
 
-def test_get_cgid_extracts_from_data_url():
-    html = '<button class="js-show-more-btn" data-url="/on/demandware.store?cgid=women-womens-bags-cross-body-bags&start=48&sz=48">'
-    assert rules.get_cgid(html) == "women-womens-bags-cross-body-bags"
-
-
-def test_get_cgid_returns_none_when_missing():
-    assert rules.get_cgid("<div>no category here</div>") is None
-
-
-# ── get_update_grid_url ───────────────────────────────────────────────────────
-
-def test_get_update_grid_url_ar():
-    url = rules.get_update_grid_url(
-        "https://bloomingdales.sa/womens-bags/", "women-womens-bags", 48
-    )
-    assert "ar_SA" in url
-    assert "cgid=women-womens-bags" in url
-    assert "start=48" in url
-    assert "bloomingdales.sa" in url
+# The shape of the listing page's settings (2026-11-18), with made-up values.
+COMMERCE_API_PAGE = (
+    '..."commerceAPI":{"proxyPath":"\\u002Fmobify\\u002Fproxy\\u002Fapi","parameters":'
+    '{"clientId":"client-1","organizationId":"f_ecom_test","shortCode":"abc","siteId":"BloomingDales_SA"}}...'
+    '<meta href="https://x.demandware.net/dw/shop/v99_9/product_search?count=25&amp;start=0'
+    '&amp;refine_1=cgid%3Dwomen-womens-bags-shoulder-bags&amp;c_source=web"/>'
+    # Promo blocks elsewhere on the page carry other cgids; they must not win.
+    '{\\"key\\": \\"cgid\\", \\"value\\": \\"bloomingdales-resort-women\\"}'
+)
 
 
-def test_get_update_grid_url_en():
-    url = rules.get_update_grid_url(
-        "https://en.bloomingdales.sa/womens-bags/", "women-womens-bags", 96
-    )
-    assert "en_SA" in url
-    assert "start=96" in url
-    assert "en.bloomingdales.sa" in url
+def test_get_commerce_api_reads_the_page_settings():
+    assert rules.get_commerce_api(COMMERCE_API_PAGE) == {
+        "client_id": "client-1", "organization_id": "f_ecom_test",
+        "site_id": "BloomingDales_SA", "proxy_path": "/mobify/proxy/api",
+    }
+
+
+def test_get_commerce_api_none_without_settings():
+    assert rules.get_commerce_api("<div>old page</div>") is None
+
+
+def test_get_listing_cgid_takes_the_listing_search_not_promo_blocks():
+    assert rules.get_listing_cgid(COMMERCE_API_PAGE) == "women-womens-bags-shoulder-bags"
+
+
+def test_get_listing_cgid_none_when_missing():
+    assert rules.get_listing_cgid("<div>no category here</div>") is None
+
+
+@pytest.mark.parametrize("url, locale, currency", [
+    ("https://en.bloomingdales.sa/womens-bags-shoulder-bags/", "en-SA", "SAR"),
+    ("https://bloomingdales.sa/womens-bags-shoulder-bags/", "ar-SA", "SAR"),
+])
+def test_search_locale_and_currency(url, locale, currency):
+    assert rules.get_search_locale(url) == locale
+    assert rules.get_currency(url) == currency
+
+
+def test_get_guest_code_reads_code_and_usid():
+    assert rules.get_guest_code("https://en.bloomingdales.sa/callback?code=c1&usid=u1") == ("c1", "u1")
+    assert rules.get_guest_code("") == (None, None)
+
+
+def test_pkce_pair_challenge_is_the_verifier_hash():
+    import base64, hashlib
+    verifier, challenge = rules.pkce_pair()
+    digest = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
+    assert challenge == digest and "=" not in verifier
+
+
+@pytest.mark.parametrize("host", ["https://en.bloomingdales.sa", "https://bloomingdales.sa"])
+def test_build_pdp_url_matches_the_sites_own_links(host):
+    # Real pairs from the shoulder-bag listing, 2026-11-18 (both languages use the English slug).
+    hit = {"productId": "BAG219546375xBrown", "c_brand_en": "Furla", "c_brand": "فورلا",
+           "c_name_en": "Large Sfera Soft Shoulder Bag ", "productName": "حقيبة"}
+    assert rules.build_pdp_url(f"{host}/womens-bags-shoulder-bags/", hit) == (
+        f"{host}/furla-Large-Sfera-Soft-Shoulder-Bag-BAG219546375xBrown.html")
+    hit = {"productId": "BAG219846812xRed", "c_brand_en": "STAUD", "c_name_en": "Ollie Bag"}
+    assert rules.build_pdp_url(f"{host}/x/", hit) == f"{host}/staud-Ollie-Bag-BAG219846812xRed.html"
+
+
+def test_build_pdp_url_none_without_an_id_or_name():
+    assert rules.build_pdp_url("https://en.bloomingdales.sa/x/", {"c_brand_en": "Furla", "c_name_en": "Bag"}) is None
+    assert rules.build_pdp_url("https://en.bloomingdales.sa/x/", {"productId": "BAG1x", "c_brand_en": "Furla"}) is None
+
+
+def test_built_pdp_url_is_a_pdp_with_the_right_pid():
+    url = rules.build_pdp_url("https://en.bloomingdales.sa/x/", {
+        "productId": "BAG219546375xBrown", "c_brand_en": "Furla", "c_name_en": "Large Sfera Soft Shoulder Bag"})
+    assert rules.is_pdp(url) and rules.extract_pid(url) == "BAG219546375XBROWN"
 
 
 # ── get_pdp_urls ──────────────────────────────────────────────────────────────

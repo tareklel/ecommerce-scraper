@@ -518,11 +518,13 @@ class PostCrawlPipeline:
         first_error = self.first_error
         if first_error:
             manifest["first_error"] = first_error
+        # Any spider can list skipped work (e.g. a listing it couldn't page through).
+        spider_degradations = list(getattr(spider, "run_degradations", None) or [])
         run_status, failure_reason, degradations = crawler_run_status(
             reason,
             (self.quality_gate_report or {}).get("status"),
             manifest.get("plp_efficient"),
-            access_degradations,
+            access_degradations + spider_degradations,
             rows=self.items_written,
             access=manifest.get("access"),
             first_error=first_error,

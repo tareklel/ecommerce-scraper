@@ -549,3 +549,15 @@ def test_crashed_run_writes_crash_and_first_error_into_the_manifest(pipeline_set
     assert manifest["first_error"]["error"] == "KeyError: 'item_id'"
     [line] = [str(c.args[0]) for c in spider.logger.error.call_args_list if "RUN FAILED" in str(c.args[0])]
     assert "crash: The crawler raised an error" in line and "Error: KeyError: 'item_id' (test_pipeline.py:" in line
+
+
+def test_spider_degradations_reach_the_manifest(pipeline_setup, tmp_path):
+    pipeline, spider, mock_crawler = pipeline_setup
+    spider.entry_points = {}
+    mock_crawler.stats.get_stats.return_value = {"start_time": datetime.now(timezone.utc)}
+    skipped = {"kind": "content", "scope": "https://en.bloomingdales.sa/x/", "message": "listing search failed"}
+    spider.run_degradations = [skipped]
+    pipeline.spider_closed(spider=spider, reason="finished")
+    with open(tmp_path / "metadata" / "manifest.json") as f:
+        manifest = json.load(f)
+    assert skipped in manifest["degradations"]

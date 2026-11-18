@@ -2,6 +2,19 @@
 
 **Status: done ✓** (bags category, SA only — 2026-07-28)
 
+> **Update 2026-11-18: listing paging replaced.** The storefront was rebuilt
+> (Salesforce PWA Kit). The "show more" button and `Search-UpdateGrid` paging
+> below are gone, so since then each listing gave only its first ~28 products
+> (457 on the English shoulder-bag listing). The spider now reads the page's
+> Commerce API settings (`commerceAPI.parameters`) and the listing's `cgid`,
+> does the anonymous guest login every visitor's browser does (PKCE, through
+> the site's `/mobify/proxy/api`), and pages through `shopper-search`
+> `product-search` (48 per call; `--limit` = search calls per listing).
+> Product page URLs are built as `<brand>-<English name>-<productId>.html`,
+> matching the site's own links; the product page parser is unchanged. A
+> listing whose settings, login or search fail crawls its first batch and
+> records a degradation. The UpdateGrid notes below are history.
+
 **Site**: https://bloomingdales.sa (AR) / https://en.bloomingdales.sa (EN)  
 **Country**: SA  
 **Currency**: SAR  

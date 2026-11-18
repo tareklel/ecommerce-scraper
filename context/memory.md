@@ -25,6 +25,11 @@ Full entries: `archive/ecommerce-scraper/memory-archive.md` in the workspace rep
 ## 2026-11-18 - Memory compacted
 - Summary of entries up to 2026-11-03 plus the last 10 entry days; older entries moved word for word to the workspace repo's `archive/ecommerce-scraper/memory-archive.md`. `context/AGENTS.md`: entries of 1–3 lines, and the 10-entry-day roll-over rule.
 
+## 2026-11-18 - Bloomingdale's listings page through the Commerce API again
+- The storefront rebuild (PWA Kit) removed the "show more" / `Search-UpdateGrid` paging; the old cgid regex picked a promo block's ID and each listing gave only its first ~28 products (English shoulder bags: 27 of 457), which is why scraper-pipeline's 14-day unseen rule left 64 Bloomingdale's products in gold.
+- Spider now: page settings (`commerceAPI.parameters`) + listing cgid (`refine_1=cgid%3D...`) -> anonymous guest login (PKCE authorize 303 -> token, via `/mobify/proxy/api`; user-approved probe) -> `product-search` 48 per call until `total` -> product pages built as `<brand>-<English name>-<productId>.html` (matched the site's links 25/25 in both languages). First batch still crawled from the page; any failure is a run degradation. New generic hook: a spider's `run_degradations` reach the manifest. Dead UpdateGrid rules removed.
+- Local crawl `--limit 2`: 99 rows (was 27 for the whole listing), quality pass. Tests: 646 pass. Ticket `tickets/done/bloomingdales_crawl.md` has a dated update.
+
 ## 2026-11-18 - Cettire images: the downloader rejected the site
 - The 2026-11-17 run email showed Cettire 15,832 rows in gold, 0 with images. `ecommercecrawl/image_downloader.py` `SITE_ALIASES` had no `cettire`, so `normalize_site` raised and every Cettire job was logged `skipped_invalid` / `invalid_job_input` (61,185 since 2026-11-15). Those log rows carry no site, key or URL, so they never match the pending-images query and the same jobs came back every run.
 - Added `cettire` to `SITE_ALIASES` and a Cettire branch in `get_site_headers` (plain user-agent, `https://www.cettire.com/` referer). The CDN (`d3vfig6e0r0snz.cloudfront.net`) served a direct download (200, JPEG), checked through `download_one_job` locally.

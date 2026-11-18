@@ -1,7 +1,10 @@
+import base64
+import hashlib
 import html as html_module
 import json
 import re
-from urllib.parse import urlparse
+import secrets
+from urllib.parse import parse_qs, unquote, urlparse
 
 from ecommercecrawl.constants import bloomingdales_constants as constants
 
@@ -55,11 +58,6 @@ def is_pdp(url: str) -> bool:
     )
 
 
-def is_first_plp_page(url: str) -> bool:
-    """True for category URLs; False for UpdateGrid API responses."""
-    return 'demandware.store' not in url
-
-
 def extract_pid(url: str, html: str = '') -> str | None:
     """
     Extract variant PID from the URL slug.
@@ -82,32 +80,91 @@ def extract_pid(url: str, html: str = '') -> str | None:
     return raw.upper()
 
 
-def get_cgid(html: str) -> str | None:
-    """Extract SFCC category ID from the show-more button's data-url."""
-    m = re.search(r'cgid=([^&"\']+)', html)
+_COMMERCE_API_RE = re.compile(r'"commerceAPI":\{"proxyPath":"([^"]*)","parameters":(\{[^}]*\})')
+
+
+def get_commerce_api(html: str) -> dict | None:
+    """
+    The listing page's Commerce API settings: the site's proxy path and the
+    public client settings its own browser code uses. None if the page has
+    none (an older page layout).
+    """
+    m = _COMMERCE_API_RE.search(html or '')
+    if not m:
+        return None
+    try:
+        params = json.loads(m.group(2))
+        proxy_path = json.loads(f'"{m.group(1)}"')   # undoes \u002F escapes
+    except ValueError:
+        return None
+    keys = {'client_id': 'clientId', 'organization_id': 'organizationId', 'site_id': 'siteId'}
+    api = {k: params.get(v) for k, v in keys.items()}
+    if not all(api.values()) or not proxy_path.startswith('/'):
+        return None
+    api['proxy_path'] = proxy_path
+    return api
+
+
+def get_listing_cgid(html: str) -> str | None:
+    """The listing's category ID, from the product search the page itself ran."""
+    m = re.search(r'refine_1=cgid%3D([^&"\'\\]+)', html or '')
+    if m:
+        return unquote(m.group(1))
+    m = re.search(r'"refine"\s*:\s*\[\s*"cgid=([^"\\]+)"', html or '')
     return m.group(1) if m else None
 
 
-def get_update_grid_url(source_url: str, cgid: str, start: int) -> str:
+def get_country(url: str) -> str:
+    """'SA' for bloomingdales.sa / en.bloomingdales.sa."""
+    return (urlparse(url).hostname or '').rsplit('.', 1)[-1].upper()
+
+
+def get_search_locale(url: str) -> str:
+    """'en-SA' / 'ar-SA': the product search's locale for this listing."""
+    return f'{get_language(url).lower()}-{get_country(url)}'
+
+
+def get_currency(url: str) -> str:
+    return constants.CURRENCY_BY_COUNTRY.get(get_country(url), 'SAR')
+
+
+def pkce_pair() -> tuple[str, str]:
+    """(verifier, challenge) for the guest login, as the browser makes them."""
+    verifier = base64.urlsafe_b64encode(secrets.token_bytes(64)).rstrip(b'=').decode()
+    challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b'=').decode()
+    return verifier, challenge
+
+
+def get_guest_code(location: str) -> tuple[str | None, str | None]:
+    """(code, usid) from the guest login's redirect Location."""
+    query = parse_qs(urlparse(location or '').query)
+    return (query.get('code') or [None])[0], (query.get('usid') or [None])[0]
+
+
+def _slug(text: str) -> str:
+    return re.sub(r'[^A-Za-z0-9]+', '-', (text or '').strip()).strip('-')
+
+
+def build_pdp_url(listing_url: str, hit: dict) -> str | None:
     """
-    Build the SFCC Search-UpdateGrid URL for the next product batch.
-    source_url is used only to determine domain and language.
+    The product page URL for a product search hit, in the site's own form:
+    <brand, lower case>-<English product name>-<product ID>.html, on the
+    listing's host (both languages use the English slug). Matches the
+    listing's own links (checked on 25 of 25, both languages, 2026-11-18).
     """
-    parsed = urlparse(source_url)
-    domain = parsed.netloc
-    locale = constants.LOCALE_MAP.get(get_language(source_url), 'ar_SA')
-    path = constants.UPDATE_GRID_PATH.format(
-        site_id=constants.SFCC_SITE_ID, locale=locale,
-    )
-    return (
-        f'https://{domain}{path}'
-        f'?cgid={cgid}&start={start}&sz={constants.UPDATE_GRID_PAGE_SIZE}'
-    )
+    pid = (hit or {}).get('productId')
+    brand = _slug(hit.get('c_brand_en') or hit.get('c_brand') or '').lower() if pid else ''
+    name = _slug(hit.get('c_name_en') or hit.get('productName') or '') if pid else ''
+    if not (pid and brand and name):
+        return None
+    parsed = urlparse(listing_url)
+    return f'{parsed.scheme}://{parsed.netloc}/{brand}-{name}-{pid}.html'
 
 
 def get_pdp_urls(response) -> list[str]:
     """
-    Extract all product-variant PDP URLs from a PLP or UpdateGrid response.
+    Extract all product-variant PDP URLs from a listing page (its first,
+    server-rendered batch).
     Each color variant is a separate href in SFCC PLPs, so all variants are captured.
     """
     base = f'{urlparse(response.url).scheme}://{urlparse(response.url).netloc}'
