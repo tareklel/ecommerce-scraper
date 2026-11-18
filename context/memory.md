@@ -19,6 +19,9 @@ Full entries: `archive/ecommerce-scraper/memory-archive.md` in the workspace rep
 
 ## Log (last 10 entry days, newest first)
 
+## 2026-11-18 - Launch report moved to the workspace repo
+- `notes/2026-11-13-state-of-price-comparison.md` now lives in `tareklel/price-comparison-workspace` as `launch/2026-11-13-state-of-price-comparison.md`, next to the live tracker `launch/LAUNCH.md`; a pointer stays here so ticket references still resolve.
+
 ## 2026-11-18 - Memory compacted
 - Summary of entries up to 2026-11-03 plus the last 10 entry days; older entries moved word for word to the workspace repo's `archive/ecommerce-scraper/memory-archive.md`. `context/AGENTS.md`: entries of 1–3 lines, and the 10-entry-day roll-over rule.
 
