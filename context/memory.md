@@ -651,3 +651,4 @@
 - Tests: `normalize_site("cettire")`, the Cettire headers, and a guard that every site in the crawl flow helper's `SITES` is accepted by `normalize_site`.
 - The next image step downloads the whole backlog (61,185 images); the step's timeout is 3 hours.
 - Found, not fixed yet: the crawl flow helper's `check_crawl` reads `bronze/.../manifests/.../data.json` as the manifest, but the verifier writes `{run_id, raw_json}` with the manifest as a JSON string inside `raw_json`. So every published crawl shows `success` (never `degraded`), with no degradations and no row count ("? crawled" in the email).
+- Fixed the same day: `check_crawl` unpacks `raw_json` before reading `run_status`, `degradations` and `artifacts.rows`; the test now uses the verifier's wrapped format. Helper Lambda deployed (code only); a live `check_crawl` on the 2026-11-17 Cettire run returned `rows: 15588`. None of the 35 manifests since 2026-11-10 was `degraded`, so no degraded run had been hidden.

@@ -342,4 +342,5 @@ lives in AWS alone, so pausing doesn't need a commit.
 | 2026-11-13 | Summary email adds a mapping-gaps line (brand spellings to review, products dropped from gold) from scraper-pipeline's `silver_mapping_gaps` | — |
 | 2026-11-16 | Summary email adds per-site counts: rows crawled this run -> in gold -> with images | — |
 | 2026-11-17 | Summary email says why a dbt step failed, from the dbt task's log (helper gets `logs:GetLogEvents` on that log group only) | — |
+| 2026-11-18 | Fix: `check_crawl` unpacks the verifier's manifest (`raw_json`), so the email shows `degraded`, degradations and rows crawled (before this, every published crawl read as `success` with no row count) | — |
 | 2026-11-13 | Step 6 built: schedule 02:00 Dubai daily, 2026-11-14 to 2026-11-20 (end date), scheduler role (`states:StartExecution` on the flow only), `make schedule-on/off/status`. Scheduled runs skip the `make crawl-flow` registry check | — |

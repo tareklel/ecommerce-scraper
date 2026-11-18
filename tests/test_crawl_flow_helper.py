@@ -237,10 +237,14 @@ def test_check_crawl_killed_after_max_polls(helper):
 
 def test_check_crawl_success_reads_degraded_from_manifest(helper):
     helper.s3.objects[MARKERS + "_SUCCESS"] = b""
-    helper.s3.objects[MANIFEST] = json.dumps({"run_status": "degraded", "degradations": {"pdp_skipped": 3}}).encode()
+    # The verifier's format: the manifest is a JSON string inside raw_json.
+    manifest = {"run_status": "degraded", "degradations": [{"kind": "pdp", "message": "3 skipped"}],
+                "artifacts": {"rows": 15588}}
+    helper.s3.objects[MANIFEST] = json.dumps({"run_id": CRAWL["run_id"], "raw_json": json.dumps(manifest)}).encode()
     result = _check(helper)
     assert result["run_status"] == "degraded"
-    assert result["degradations"] == {"pdp_skipped": 3}
+    assert result["degradations"] == [{"kind": "pdp", "message": "3 skipped"}]
+    assert result["rows"] == 15588
 
 
 def test_check_crawl_failure_markers_give_reasons(helper):

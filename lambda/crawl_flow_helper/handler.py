@@ -249,6 +249,10 @@ def check_crawl(event):
         return result
     if "_SUCCESS" in markers:
         manifest = _read_json(f"{MANIFESTS_PREFIX}{site}/{dt}/{run_id}/data.json")
+        # The verifier writes {run_id, raw_json}: the manifest is a JSON
+        # string inside raw_json (lambda/bronze_manifest_verifier/handler.py).
+        if isinstance(manifest.get("raw_json"), str):
+            manifest = json.loads(manifest["raw_json"])
         result["run_status"] = manifest.get("run_status") or "success"
         result["degradations"] = manifest.get("degradations")
         # Language rows written (Arabic and English counted separately).
