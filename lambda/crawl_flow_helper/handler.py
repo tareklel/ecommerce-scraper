@@ -725,10 +725,11 @@ def _zyte_usage(started_at, ended_at):
     for result in data.get("results") or []:
         site = sites.setdefault(_zyte_site(result.get("domain")),
                                 {"requests": 0, "cost_usd": 0.0, "status_520": 0})
-        site["requests"] += int(result.get("request_count") or 0)
-        site["cost_usd"] += int(result.get("cost_microusd_total") or 0) / 1_000_000
-        site["status_520"] += sum(int(s.get("count") or 0) for s in result.get("status_codes") or []
-                                  if str(s.get("code")) == "520")
+        # Zyte sends numbers as decimal strings ("263473.00"), so read through float.
+        site["requests"] += int(float(result.get("request_count") or 0))
+        site["cost_usd"] += float(result.get("cost_microusd_total") or 0) / 1_000_000
+        site["status_520"] += sum(int(float(s.get("count") or 0)) for s in result.get("status_codes") or []
+                                  if str(s.get("code")).split(".")[0] == "520")
     return {"sites": sites, "total_usd": round(sum(s["cost_usd"] for s in sites.values()), 4)}
 
 

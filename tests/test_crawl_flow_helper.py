@@ -877,3 +877,12 @@ def test_images_only_run_has_no_zyte_section(helper):
     text = helper.handler({"action": "summary", "state": {"flow": _start(helper, {"start_at": "images"})}},
                           None)["text"]
     assert "Zyte" not in text
+
+
+def test_zyte_numbers_sent_as_decimal_strings(helper):
+    # Seen live 2026-11-19: cost_microusd_total came back as "263473.00".
+    _with_zyte(helper, stats={"results": [
+        {"domain": "www.cettire.com", "request_count": "2549", "cost_microusd_total": "910000.00",
+         "status_codes": [{"code": "200", "count": "1991"}, {"code": "520", "count": "558.0"}]}]})
+    text = _full_summary(helper)["text"]
+    assert "- cettire: $0.91, 2,549 requests, 520s 558 (22%)" in text

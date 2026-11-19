@@ -1,8 +1,8 @@
 # Ticket: Count check in every run email
 
-**Status: built 2026-11-19 (day-on-day checks, Zyte real cost); deploy waits
-for the user's OK on the helper's IAM change and the Zyte stats key in Parameter
-Store. "Site says" totals not built (see "▶ Agreed scope").**
+**Status: done 2026-11-19 for the agreed scope (day-on-day checks, Zyte real
+cost), deployed and checked live. "Site says" totals not built (see "▶ Agreed
+scope").**
 **Priority: High. Build before the crawl flow goes on a schedule
 (`tickets/cicd_pipeline.md` step 6).**
 **Before starting: discuss this ticket with the user in an `ecommerce-scraper`
@@ -45,9 +45,15 @@ Not built (user: "keep d2d for now"):
 - Separating products scraper-pipeline drops after 14 days unseen from real
   losses (needs scraper-pipeline data); such a drop can show as a warning.
 
-To check on the first real run: how soon Zyte's figures are complete after a
-crawl (the email says "no usage recorded by Zyte yet" if they lag), and the
-real Cettire rate.
+Deployed 2026-11-19 (targeted apply of the helper Lambda and its policy, user
+approved; a second code-only apply fixed Zyte's numbers arriving as decimal
+strings). Live check, a non-saving summary over the 2026-11-19 02:00 run's
+window: Cettire $0.26 for 2,492 requests (511 hit 520 on the first try, 21%),
+Ounass $0.14 for 314 requests. So Cettire costs about $0.10 per 1,000
+requests, against about $0.45 for Ounass. The first saved counts come from the
+images-only run `409d759e` when it ends; the next run compares against them.
+Still to see on a real run: whether Zyte's figures are complete by the time the
+email is written (if not, the email says "no usage recorded by Zyte yet").
 
 ## Why this is high priority
 

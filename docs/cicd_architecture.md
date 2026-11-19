@@ -308,7 +308,7 @@ flowchart LR
 | SNS | Sends the run summary and failure alerts | Planned |
 | IAM + OIDC | Logins for GitHub; roles for the scheduler and flow | Exists; more roles planned |
 | Secrets Manager | Holds crawler secrets such as the Zyte key | Exists |
-| Systems Manager Parameter Store | Holds Zyte's read-only usage ("stats") key and organization ID for the summary (`/ecommerce-scraper/zyte-stats/api-key` SecureString, `.../organization-id`), entered by hand; the helper may read only that folder. Parameter Store, not Secrets Manager: free, and the helper can't reach the crawler's secrets | Planned (2026-11-19) |
+| Systems Manager Parameter Store | Holds Zyte's read-only usage ("stats") key and organization ID for the summary (`/ecommerce-scraper/zyte-stats/api-key` SecureString, `.../organization-id`), entered by hand; the helper may read only that folder. Parameter Store, not Secrets Manager: free, and the helper can't reach the crawler's secrets | Exists (2026-11-19) |
 | CloudWatch Logs | Logs from each task | Exists |
 
 Region: `eu-central-1`.
