@@ -42,6 +42,31 @@ ATHENA_TIMEOUT_SECONDS = 120
 # "dbt", container "dbt"), read to say why a dbt step failed.
 DBT_LOG_GROUP = os.environ.get("DBT_LOG_GROUP", f"/ecs/price-comparison-dbt-{APP_ENV}")
 DBT_LOG_STREAM_PREFIX = "dbt/dbt/"
+
+# Each full run's counts, so the next run can compare day on day
+# (tickets/run_count_reconciliation.md). latest.json holds the last known
+# value of every count; runs/<flow_id>.json is that run's own record.
+RUN_COUNTS_PREFIX = os.environ.get("RUN_COUNTS_PREFIX", f"bronze/{APP_ENV}/crawl-flow/run-counts/")
+# A count is flagged when it falls by more than this share since the previous
+# run, if it was at least COUNT_CHECK_MIN_PREVIOUS (tiny counts are noise).
+COUNT_DROP_SHARE = 0.10
+COUNT_CHECK_MIN_PREVIOUS = 50
+# Zyte cost is flagged when the run costs more than this many times the
+# previous run, and more than ZYTE_COST_CHECK_MIN_USD.
+ZYTE_COST_RISE_FACTOR = 2.0
+ZYTE_COST_CHECK_MIN_USD = 1.0
+
+# Zyte's own usage report (Stats API, docs.zyte.com/zyte-api/usage/stats):
+# real cost and status codes per domain. Its key is the dashboard "stats" key
+# (read-only usage), not the crawler's Zyte API key, and lives in Parameter
+# Store: <prefix>api-key (SecureString) and <prefix>organization-id (String),
+# both entered by hand, never in Terraform or the repo.
+ZYTE_STATS_URL = os.environ.get("ZYTE_STATS_URL", "https://zyte-api-stats.zyte.com/api/stats")
+ZYTE_STATS_PARAMETER_PREFIX = os.environ.get("ZYTE_STATS_PARAMETER_PREFIX", "/ecommerce-scraper/zyte-stats/")
+ZYTE_STATS_TIMEOUT_SECONDS = 15
+ZYTE_STATS_RETRY_PAUSE_SECONDS = 3
+# Sites crawled through Zyte, and the text their Zyte domains contain.
+ZYTE_SITES = {"ounass": "ounass", "cettire": "cettire"}
 # The exact task definitions (with revision) the flow runs from this repo,
 # {"crawler": arn, "image-pipeline": arn, "image-quality-checker": arn}, set by
 # Terraform from the same ARNs the state machine uses. The start check refuses
@@ -74,6 +99,7 @@ s3 = boto3.client("s3")
 athena = boto3.client("athena")
 sfn = boto3.client("stepfunctions")
 logs = boto3.client("logs")
+ssm = boto3.client("ssm")
 ecs = boto3.client("ecs")
 
 
@@ -531,13 +557,20 @@ def _count(value):
     return f"{int(value):,}" if value not in (None, "") else "?"
 
 
+def _crawled_rows(crawls):
+    return {c.get("site"): (c.get("result") or {}).get("rows") for c in crawls}
+
+
 def _count_lines(crawls):
     """
     Per site: language rows this run crawled -> rows in gold -> rows with a
     served image (what the website shows). Gold keeps products from earlier
     runs, so it can exceed one run's crawl; a sudden gap is what to look for.
+
+    Returns (lines, counts): counts is {site: {crawled, in_gold, with_images}}
+    for the day-on-day check, or None when gold couldn't be read.
     """
-    crawled = {c.get("site"): (c.get("result") or {}).get("rows") for c in crawls}
+    crawled = _crawled_rows(crawls)
     try:
         rows = _athena_rows(
             "SELECT site, count(*), count_if(coalesce(cardinality(image_s3_blob_keys), 0) > 0) "
@@ -546,13 +579,194 @@ def _count_lines(crawls):
         gold = {site: (total, with_images) for site, total, with_images in rows if site}
     except Exception as e:
         logger.warning("Gold count query failed: %s", e)
-        return [f"Counts: not available ({str(e)[:200]})"]
+        return [f"Counts: not available ({str(e)[:200]})"], None
     lines = ["Counts (language rows): crawled this run -> in gold -> with images"]
+    counts = {}
     for site in sorted(set(crawled) | set(gold)):
         total, with_images = gold.get(site, (0, 0))
         ran = f"{_count(crawled[site])} crawled" if site in crawled else "not crawled this run"
         lines.append(f"- {site}: {ran} -> {_count(total)} in gold -> {_count(with_images)} with images")
-    return lines
+        counts[site] = {"in_gold": int(total or 0), "with_images": int(with_images or 0)}
+        if crawled.get(site) is not None:
+            counts[site]["crawled"] = int(crawled[site])
+    return lines, counts
+
+
+# ---------------------------------------------------------------------------
+# Day-on-day counts (tickets/run_count_reconciliation.md)
+# ---------------------------------------------------------------------------
+
+COUNT_LABELS = {"crawled": "crawled rows", "in_gold": "in gold", "with_images": "with images"}
+
+
+def _load_previous_counts():
+    """The last saved counts, {} on the first run. Raises if unreadable."""
+    try:
+        body = s3.get_object(Bucket=BUCKET, Key=f"{RUN_COUNTS_PREFIX}latest.json")["Body"].read()
+    except Exception as e:
+        # NoSuchKey needs s3:ListBucket on the prefix; without it S3 says AccessDenied.
+        if getattr(e, "response", {}).get("Error", {}).get("Code") in ("NoSuchKey", "404"):
+            return {}
+        raise
+    return json.loads(body or b"{}")
+
+
+def _count_checks(counts, previous):
+    """
+    One line per count that fell by more than COUNT_DROP_SHARE since the
+    previous run (or vanished), comparing only counts both runs have.
+    """
+    checks = []
+    for site, before in sorted((previous.get("sites") or {}).items()):
+        now = counts.get(site)
+        for key, label in COUNT_LABELS.items():
+            old = (before.get(key) or {}).get("value")
+            if old is None or old < COUNT_CHECK_MIN_PREVIOUS:
+                continue
+            if key == "crawled":
+                # Crawled rows are compared only when the site was crawled this run.
+                if now is None or now.get("crawled") is None:
+                    continue
+            new = (now or {}).get(key, 0)
+            if new < old * (1 - COUNT_DROP_SHARE):
+                change = f"{(new - old) / old:+.0%}"
+                checks.append(f"- {site}: {label} fell {old:,} -> {new:,} ({change}) "
+                              f"since the previous run ({before[key].get('flow_id', '?')})")
+    return checks
+
+
+def _merge_counts(previous, flow_id, counts=None, zyte=None):
+    """latest.json after this run: each count keeps its last known value and the run it came from."""
+    merged = {"sites": {site: dict(values) for site, values in (previous.get("sites") or {}).items()},
+              "zyte": previous.get("zyte"), "updated_by": flow_id, "updated_at": _now().isoformat()}
+    for site, values in (counts or {}).items():
+        for key, value in values.items():
+            merged["sites"].setdefault(site, {})[key] = {"value": value, "flow_id": flow_id}
+    if zyte is not None:
+        merged["zyte"] = {"total_usd": zyte["total_usd"], "flow_id": flow_id}
+    return merged
+
+
+def _save_counts(flow_id, merged, this_run):
+    s3.put_object(Bucket=BUCKET, Key=f"{RUN_COUNTS_PREFIX}latest.json",
+                  Body=json.dumps(merged, indent=1).encode(), ContentType="application/json")
+    s3.put_object(Bucket=BUCKET, Key=f"{RUN_COUNTS_PREFIX}runs/{flow_id}.json",
+                  Body=json.dumps(this_run, indent=1).encode(), ContentType="application/json")
+
+
+# ---------------------------------------------------------------------------
+# Zyte cost, from Zyte's own usage report
+# ---------------------------------------------------------------------------
+
+class ZyteStatsUnavailable(Exception):
+    pass
+
+
+def _zyte_stats_credentials():
+    names = [f"{ZYTE_STATS_PARAMETER_PREFIX}api-key", f"{ZYTE_STATS_PARAMETER_PREFIX}organization-id"]
+    found = ssm.get_parameters(Names=names, WithDecryption=True)
+    values = {p["Name"]: p["Value"] for p in found.get("Parameters", [])}
+    missing = [name for name in names if not values.get(name)]
+    if missing:
+        raise ZyteStatsUnavailable(f"Parameter Store has no {', '.join(missing)} yet")
+    return values[names[0]], values[names[1]]
+
+
+def _zyte_stats_get(url, api_key):
+    """One GET to the Stats API; basic auth with the key as user, no password."""
+    import base64
+    import urllib.request
+
+    token = base64.b64encode(f"{api_key}:".encode()).decode()
+    request = urllib.request.Request(url, headers={"Authorization": f"Basic {token}",
+                                                   "Accept": "application/json"})
+    with urllib.request.urlopen(request, timeout=ZYTE_STATS_TIMEOUT_SECONDS) as response:
+        return json.loads(response.read())
+
+
+def _zyte_site(domain):
+    for site, marker in ZYTE_SITES.items():
+        if marker in (domain or ""):
+            return site
+    return "other"
+
+
+def _zyte_usage(started_at, ended_at):
+    """
+    Real Zyte cost for this run's time window, per site:
+    {"sites": {site: {"requests", "cost_usd", "status_520"}}, "total_usd"}.
+    Tries twice; raises ZyteStatsUnavailable with a readable reason.
+    """
+    import urllib.error
+    import urllib.parse
+
+    api_key, organization_id = _zyte_stats_credentials()
+    query = urllib.parse.urlencode({
+        "organization_id": organization_id,
+        "start_time": started_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "end_time": ended_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "groupby_domain": "true",
+        "page_size": 500,
+    })
+    url = f"{ZYTE_STATS_URL}?{query}"
+    for attempt in (1, 2):
+        try:
+            data = _zyte_stats_get(url, api_key)
+            break
+        except urllib.error.HTTPError as e:
+            # A wrong key or a bad request won't fix itself on a retry.
+            if e.code in (400, 401, 403, 422) or attempt == 2:
+                raise ZyteStatsUnavailable(f"Zyte stats answered HTTP {e.code}") from e
+        except Exception as e:
+            if attempt == 2:
+                raise ZyteStatsUnavailable(f"Zyte stats didn't answer: {str(e)[:150]}") from e
+        time.sleep(ZYTE_STATS_RETRY_PAUSE_SECONDS)
+    sites = {}
+    for result in data.get("results") or []:
+        site = sites.setdefault(_zyte_site(result.get("domain")),
+                                {"requests": 0, "cost_usd": 0.0, "status_520": 0})
+        site["requests"] += int(result.get("request_count") or 0)
+        site["cost_usd"] += int(result.get("cost_microusd_total") or 0) / 1_000_000
+        site["status_520"] += sum(int(s.get("count") or 0) for s in result.get("status_codes") or []
+                                  if str(s.get("code")) == "520")
+    return {"sites": sites, "total_usd": round(sum(s["cost_usd"] for s in sites.values()), 4)}
+
+
+def _zyte_lines(flow, crawls, previous):
+    """
+    (lines, checks, usage) for the Zyte section. Never raises: if Zyte's
+    report can't be read, the section is one line saying why.
+    """
+    try:
+        started_at = datetime.fromisoformat(flow["started_at"])
+        usage = _zyte_usage(started_at, _now())
+    except Exception as e:
+        logger.warning("Zyte stats failed: %s", e)
+        return [f"Zyte cost: not available ({str(e)[:200]})"], [], None
+    lines = ["Zyte (real cost, from Zyte's usage report, this run's time window):"]
+    crawled = {c.get("site") for c in crawls}
+    for site in sorted(set(usage["sites"]) | (crawled & set(ZYTE_SITES))):
+        s = usage["sites"].get(site)
+        if not s or not s["requests"]:
+            # Zyte's figures may lag the crawl; say so rather than show $0.
+            lines.append(f"- {site}: no usage recorded by Zyte yet")
+            continue
+        share = s["status_520"] / s["requests"]
+        lines.append(f"- {site}: ${s['cost_usd']:.2f}, {s['requests']:,} requests, "
+                     f"520s {s['status_520']:,} ({share:.0%})")
+    total = usage["total_usd"]
+    before = (previous or {}).get("zyte") or {}
+    checks = []
+    if before.get("total_usd") is not None:
+        old = before["total_usd"]
+        change = f" ({(total - old) / old:+.0%})" if old else ""
+        lines.append(f"Run total: ${total:.2f} · previous run ${old:.2f}{change}")
+        if total > ZYTE_COST_CHECK_MIN_USD and total > old * ZYTE_COST_RISE_FACTOR:
+            checks.append(f"- Zyte cost rose ${old:.2f} -> ${total:.2f} since the previous run "
+                          f"({before.get('flow_id', '?')})")
+    else:
+        lines.append(f"Run total: ${total:.2f}")
+    return lines, checks, usage
 
 
 def summary(event):
@@ -636,9 +850,50 @@ def summary(event):
     dbt_ran = (flow.get("stop_after") != "crawls"
                and (failed_step in AFTER_DBT_RUN
                     or (not failed_step and (flow.get("start_at") != "crawl" or gate_result.get("published", 0) > 0))))
+    # Day-on-day checks and saved counts only for full runs: a --limit test
+    # run or a crawls-only run would read as a huge drop and spoil the next
+    # comparison. Nothing below may fail the summary.
+    full_run = not flow.get("limit") and flow.get("stop_after") != "crawls"
+    flow_id = flow.get("flow_id", "?")
+    previous, previous_problem = {}, None
+    if full_run:
+        try:
+            previous = _load_previous_counts()
+        except Exception as e:
+            logger.warning("Previous counts unreadable: %s", e)
+            previous_problem = f"previous run's counts unreadable ({str(e)[:150]})"
+    checks = []
+    counts = None
     if dbt_ran:
-        lines.extend(_count_lines(crawls))
+        count_lines, counts = _count_lines(crawls)
+        lines.extend(count_lines)
+        if full_run and counts is not None:
+            checks.extend(_count_checks(counts, previous))
         lines.append(_mapping_gaps_line())
+    usage = None
+    if flow.get("start_at") == "crawl":
+        zyte_lines, zyte_checks, usage = _zyte_lines(flow, crawls, previous if full_run else None)
+        lines.extend(zyte_lines)
+        if full_run:
+            checks.extend(zyte_checks)
+    if full_run and (counts is not None or usage is not None) and previous_problem is None:
+        try:
+            _save_counts(flow_id, _merge_counts(previous, flow_id, counts, usage),
+                         {"flow_id": flow_id, "counts": counts, "zyte": usage})
+        except Exception as e:
+            logger.warning("Saving counts failed: %s", e)
+            lines.append(f"Counts not saved for the next run's comparison ({str(e)[:150]})")
+    # The checks go at the top, under the first line, where they are seen first.
+    if previous_problem:
+        lines.insert(1, f"Counts to check: not compared, {previous_problem}")
+    elif full_run and not previous and (counts is not None or usage is not None):
+        lines.insert(1, "Counts to check: first run with saved counts, nothing to compare yet")
+    elif checks:
+        lines[1:1] = [f"Counts to check ({len(checks)}): fell more than "
+                      f"{COUNT_DROP_SHARE:.0%} or cost more than doubled since the previous run"] + checks
+        subject += f" · {len(checks)} to check"
+    elif full_run and previous:
+        lines.insert(1, "Counts to check: none, nothing fell or rose beyond the limits since the previous run")
     if flow.get("execution_arn"):
         lines.append(f"Console: {_console_url(flow['execution_arn'])}")
     text = "\n".join(lines)

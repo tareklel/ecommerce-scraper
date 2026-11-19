@@ -20,6 +20,10 @@ Full entries: `archive/ecommerce-scraper/memory-archive.md` in the workspace rep
 
 ## Log (last 10 entry days, newest first)
 
+## 2026-11-19 - Run email: counts to check day on day, Zyte's real cost
+- `lambda/crawl_flow_helper/handler.py` summary: "Counts to check" at the top (per site, crawled rows / in gold / with images fell >10% since the previous full run, or Zyte cost more than doubled and >$1; warning only); each full run's counts saved to `bronze/dev/crawl-flow/run-counts/` (`--limit` and crawls-only runs neither compared nor saved). Zyte section: real cost, requests and 520s per site from Zyte's Stats API, key in Parameter Store `/ecommerce-scraper/zyte-stats/` (user choice over Secrets Manager); any failure is one "not available" line, never a failed email.
+- Rule: no estimated costs in the email (user: "i dont want estimates"). "Site says" totals deferred. Ticket `tickets/run_count_reconciliation.md`; doc `docs/cicd_architecture.md`; 14 new tests.
+
 ## 2026-11-19 - Cettire images: the image task ran a July image; flow now runs only `latest`
 - The 11-19 run still had Cettire 15,944 in gold, 0 with images: the image task family had a revision 3 registered by hand on 2026-07-30 with `ecommerce-scraper:schema-v2-dev-20260730`, and the flow (family name, no revision) ran it every night, so `ba26ece` never ran. Terraform showed no changes (its revision 2 is on `latest`). Revision 3 deregistered (user-approved); an images-only run picked up the 30,458 Cettire images on revision 2 / `latest`.
 - Guard (`tickets/run_latest_image_only.md`): state machine names exact Terraform task revisions; helper `start` refuses unless each is ACTIVE and on `:latest` (`FLOW_TASK_DEFINITIONS`, IAM `ecs:DescribeTaskDefinition`); refusals now emailed (`NotifyRefused`). Rule added to `context/AGENTS.md`; `docs/cicd_architecture.md` updated. 653 tests pass. Applied 2026-11-19 (user-approved, 0/3/0); live `start` invoke passed.

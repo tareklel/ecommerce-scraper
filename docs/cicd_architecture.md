@@ -58,7 +58,7 @@ flowchart TD
     s11["11. dbt run --select<br/>silver_product_image_download_status+"]
     s12{"12. dbt test (full)<br/>passed?"}
     s14["13. Refresh the API cache<br/>dbt_job.py refresh-cache, under the lock"]
-    s13["14. Summary<br/>crawl statuses, images, dbt"]
+    s13["14. Summary<br/>counts to check, crawl statuses, images, dbt,<br/>counts per site, Zyte cost"]
     s1 -->|"start_at: crawl"| s2 --> s3 --> s4 --> s5 --> s6
     s1 -.->|"start_at: images"| s8
     s6 -->|yes| s7 --> s8 --> s9
@@ -166,6 +166,8 @@ happened.
 | Cache refresh fails (refresh step exit 77) | Rare; also if `gold_site_nav` is missing or invalid (the dev export reads it since 2026-11-10, release `20261110T071721Z-472182ed`) | The refresh step fails | The cache stays at the previous version; flow **failed** |
 | `dbt test` fails | Seen on 2026-11-10 (new categories brought unmapped labels and a price-0 gift) | No cache refresh | Gold has the new data but the API keeps the last tested version; flow **failed** so it gets looked at |
 | Any dbt step fails (registry seed, dbt run, dbt test, cache refresh) | Now and then | The summary reads that task's log (`/ecs/price-comparison-dbt-dev`) | Email lists dbt's errors (up to 10, warnings left out) and the `Done. PASS=...` line, or the log's last lines when dbt printed none, plus a link to the log |
+| A count falls more than 10% since the previous run (crawled rows, in gold, with images; per site), a site vanishes from gold, or Zyte's real cost more than doubles (and is over $1) | Should be rare; the three past losses ran for weeks unseen | Summary compares with the counts saved by the previous full run (`bronze/dev/crawl-flow/run-counts/latest.json`); `--limit` and crawls-only runs are neither compared nor saved | "Counts to check" at the top of the email and "· N to check" in the subject. Warning only: run status unchanged |
+| Zyte's usage report can't be read (no key in Parameter Store, wrong key, Zyte down or slow) | Possible | One retry after 3 s (not for a refused key) | The Zyte section is one line, "Zyte cost: not available (reason)"; the rest of the email and the run result are unchanged |
 | The laptop holds the dbt lock | When you run dbt during a flow | The dbt task waits up to 2 hours | Then fails visibly (exit 75) if still held |
 | A crawl or the flow runs too long | Rare | Time limits: 10 hours per crawl, 24 hours per flow | That crawl counts as failed; the flow **fails** |
 
@@ -306,6 +308,7 @@ flowchart LR
 | SNS | Sends the run summary and failure alerts | Planned |
 | IAM + OIDC | Logins for GitHub; roles for the scheduler and flow | Exists; more roles planned |
 | Secrets Manager | Holds crawler secrets such as the Zyte key | Exists |
+| Systems Manager Parameter Store | Holds Zyte's read-only usage ("stats") key and organization ID for the summary (`/ecommerce-scraper/zyte-stats/api-key` SecureString, `.../organization-id`), entered by hand; the helper may read only that folder. Parameter Store, not Secrets Manager: free, and the helper can't reach the crawler's secrets | Planned (2026-11-19) |
 | CloudWatch Logs | Logs from each task | Exists |
 
 Region: `eu-central-1`.
@@ -327,6 +330,8 @@ lives in AWS alone, so pausing doesn't need a commit.
 | Steps in the flow | the state machine definition | `infra/terraform/orchestration.tf` | Terraform |
 | What gets crawled | `crawl_plp_registry.csv` | `../scraper-pipeline/canonical_seeds/` | commit, push; the flow seeds it first |
 | Warning thresholds | `OUNASS_PLP_EFFICIENT_*` | `ecommercecrawl/settings.py` | commit, push |
+| Run email "Counts to check" limits | `COUNT_DROP_SHARE` (10%), `COUNT_CHECK_MIN_PREVIOUS` (50), `ZYTE_COST_RISE_FACTOR` (2), `ZYTE_COST_CHECK_MIN_USD` ($1) | `lambda/crawl_flow_helper/handler.py` | commit, push, targeted apply of the helper Lambda |
+| Zyte usage key | `/ecommerce-scraper/zyte-stats/api-key`, `/ecommerce-scraper/zyte-stats/organization-id` | AWS Parameter Store only | by hand (console), never in Git or Terraform |
 
 ---
 
@@ -354,4 +359,5 @@ lives in AWS alone, so pausing doesn't need a commit.
 | 2026-11-17 | Summary email says why a dbt step failed, from the dbt task's log (helper gets `logs:GetLogEvents` on that log group only) | — |
 | 2026-11-18 | Fix: `check_crawl` unpacks the verifier's manifest (`raw_json`), so the email shows `degraded`, degradations and rows crawled (before this, every published crawl read as `success` with no row count) | — |
 | 2026-11-19 | Flow runs only `latest`: exact Terraform task revisions in the state machine; start check refuses a task not `ACTIVE` or not on `latest` (helper gets `ecs:DescribeTaskDefinition`); refusals are emailed. A hand-registered image-task version (July image) had run since 2026-07-30 | — |
+| 2026-11-19 | Summary email: "Counts to check" (day-on-day drops over 10% per site, Zyte cost more than doubled) at the top; each full run's counts saved under `bronze/dev/crawl-flow/run-counts/`; Zyte section with the real cost, requests and 520s per site from Zyte's Stats API (key in Parameter Store; a failed read never fails the email). Helper timeout 180 -> 300 s | — |
 | 2026-11-13 | Step 6 built: schedule 02:00 Dubai daily, 2026-11-14 to 2026-11-20 (end date), scheduler role (`states:StartExecution` on the flow only), `make schedule-on/off/status`. Scheduled runs skip the `make crawl-flow` registry check | — |

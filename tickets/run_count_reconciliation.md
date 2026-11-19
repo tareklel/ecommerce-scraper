@@ -1,12 +1,53 @@
 # Ticket: Count check in every run email
 
-**Status: open, not built (written 2026-11-13)**
+**Status: built 2026-11-19 (day-on-day checks, Zyte real cost); deploy waits
+for the user's OK on the helper's IAM change and the Zyte stats key in Parameter
+Store. "Site says" totals not built (see "▶ Agreed scope").**
 **Priority: High. Build before the crawl flow goes on a schedule
 (`tickets/cicd_pipeline.md` step 6).**
 **Before starting: discuss this ticket with the user in an `ecommerce-scraper`
 session and agree the scope. Do not start from this ticket alone.**
 
 Source: `notes/2026-11-13-state-of-price-comparison.md`, section 5, gap 3.
+
+## ▶ Agreed scope (with the user, 2026-11-18/19)
+
+Built:
+- **Counts to check**, at the top of the email and in the subject ("· N to
+  check"): per site, crawled rows / in gold / with images fell more than 10%
+  since the previous full run (counts under 50 before are not compared), or
+  the site vanished from gold; Zyte's real cost more than doubled and is over
+  $1. Warning only: the run status doesn't change, so `docs/crawl_run_status.md`
+  is untouched. With no drop the email says "Counts to check: none".
+- **Saved counts**: each full run writes `bronze/dev/crawl-flow/run-counts/latest.json`
+  (last known value of every count, with the run it came from) and
+  `runs/<flow_id>.json`. `--limit` and crawls-only runs are neither compared
+  nor saved.
+- **Zyte section** (every run that crawls): real cost, requests and 520s per
+  site from Zyte's Stats API (`groupby_domain`, the run's time window), run
+  total vs the previous run. The user asked for real figures, no estimates.
+  The key is Zyte's dashboard "stats" key (read-only usage, not the crawler's
+  key) with the organization ID, in Parameter Store
+  `/ecommerce-scraper/zyte-stats/api-key` (SecureString) and
+  `.../organization-id`, entered by hand. Parameter Store, not Secrets
+  Manager: free, and the helper can't read the crawler's secrets. One retry;
+  any failure (no key, wrong key, Zyte down) is one "Zyte cost: not available
+  (reason)" line and never fails the email. The 520 line takes over
+  ecommerce-scraper-fb's proposal.
+- Tests in `tests/test_crawl_flow_helper.py` (a deliberate drop, Zyte failure
+  paths); `docs/cicd_architecture.md` (edge cases, settings, change log).
+
+Not built (user: "keep d2d for now"):
+- "Site says": the site's own product total per listing, compared with what
+  the crawl saw. Bloomingdale's (`total`) and Cettire (brand facet counts)
+  report one; Ounass gives pages × page size; Level Shoes unknown. Needs a
+  crawler change (manifest field) and a crawler image build.
+- Separating products scraper-pipeline drops after 14 days unseen from real
+  losses (needs scraper-pipeline data); such a drop can show as a warning.
+
+To check on the first real run: how soon Zyte's figures are complete after a
+crawl (the email says "no usage recorded by Zyte yet" if they lag), and the
+real Cettire rate.
 
 ## Why this is high priority
 

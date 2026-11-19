@@ -28,6 +28,8 @@ locals {
   dbt_task_definition_arn = "arn:aws:ecs:${var.region}:${data.aws_caller_identity.current.account_id}:task-definition/${local.dbt_task_family}"
   # The dbt task's log group (scraper-pipeline terraform/dbt_job.tf).
   dbt_log_group = "/ecs/price-comparison-dbt-dev"
+  # Parameter Store folder for Zyte's usage key (lambda/crawl_flow_helper).
+  zyte_stats_parameter_prefix = "/ecommerce-scraper/zyte-stats/"
 
   # This repo's flow tasks by their exact Terraform revision (with ":<n>"), not
   # arn_without_revision. A family name alone makes ECS run the newest ACTIVE
@@ -498,6 +500,7 @@ resource "aws_iam_role_policy" "crawl_flow_helper" {
               "dbt/dev/*",
               "bronze/dev/crawls/markers/*",
               "bronze/dev/images/download_log/meta/*",
+              "bronze/dev/crawl-flow/run-counts/*",
               "${var.athena_results_prefix}crawl-flow/*"
             ]
           }
@@ -532,17 +535,36 @@ resource "aws_iam_role_policy" "crawl_flow_helper" {
         Effect   = "Allow"
         Action   = ["s3:PutObject"]
         Resource = "${aws_s3_bucket.price_comparison_bucket.arn}/bronze/dev/crawl-inputs/*"
+      },
+      {
+        # Each run's counts, read by the next run's day-on-day check
+        # (tickets/run_count_reconciliation.md).
+        Sid      = "RunCounts"
+        Effect   = "Allow"
+        Action   = ["s3:GetObject", "s3:PutObject"]
+        Resource = "${aws_s3_bucket.price_comparison_bucket.arn}/bronze/dev/crawl-flow/run-counts/*"
+      },
+      {
+        # Zyte's read-only usage ("stats") key and organization ID, entered by
+        # hand in Parameter Store. SecureString uses the AWS-managed aws/ssm
+        # key, whose policy already allows decryption through Parameter Store.
+        Sid      = "ReadZyteStatsKey"
+        Effect   = "Allow"
+        Action   = ["ssm:GetParameters"]
+        Resource = "arn:aws:ssm:${var.region}:${data.aws_caller_identity.current.account_id}:parameter${local.zyte_stats_parameter_prefix}*"
       }
     ]
   })
 }
 
 resource "aws_lambda_function" "crawl_flow_helper" {
-  function_name    = "${var.ecs_name}-crawl-flow-helper"
-  role             = aws_iam_role.crawl_flow_helper.arn
-  handler          = "handler.handler"
-  runtime          = "python3.11"
-  timeout          = 180
+  function_name = "${var.ecs_name}-crawl-flow-helper"
+  role          = aws_iam_role.crawl_flow_helper.arn
+  handler       = "handler.handler"
+  runtime       = "python3.11"
+  # The summary runs up to two Athena queries (120 s cap each) and Zyte's
+  # usage report (two tries of 15 s); a timed-out summary sends no email.
+  timeout          = 300
   memory_size      = 256
   filename         = data.archive_file.crawl_flow_helper_zip.output_path
   source_code_hash = data.archive_file.crawl_flow_helper_zip.output_base64sha256
@@ -559,8 +581,11 @@ resource "aws_lambda_function" "crawl_flow_helper" {
       # Read by the summary's per-site counts (rows in gold, with images).
       GOLD_TABLE = "\"${var.dbt_database_name}\".\"gold_product_serving_latest\""
       # Read by the summary to say why a dbt step failed.
-      DBT_LOG_GROUP    = local.dbt_log_group
-      MAX_VERIFY_POLLS = "15"
+      DBT_LOG_GROUP = local.dbt_log_group
+      # Day-on-day counts and Zyte's real cost in the summary.
+      RUN_COUNTS_PREFIX           = "bronze/dev/crawl-flow/run-counts/"
+      ZYTE_STATS_PARAMETER_PREFIX = local.zyte_stats_parameter_prefix
+      MAX_VERIFY_POLLS            = "15"
       # Read by the start check: these tasks must be ACTIVE and run `latest`.
       FLOW_TASK_DEFINITIONS = jsonencode(local.flow_task_definitions)
     }

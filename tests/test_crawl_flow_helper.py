@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
+from botocore.exceptions import ClientError
 
 
 BUCKET = "price-comparison-bucket-eu-central-1"
@@ -27,6 +28,8 @@ class _FakeS3:
         self.objects[Key] = Body
 
     def get_object(self, Bucket, Key):
+        if Key not in self.objects:
+            raise ClientError({"Error": {"Code": "NoSuchKey", "Message": "missing"}}, "GetObject")
         return {"Body": io.BytesIO(self.objects[Key])}
 
     def get_paginator(self, name):
@@ -66,6 +69,18 @@ class _FakeAthena:
             ]}}]
 
         return _Paginator(pages)
+
+
+class _FakeSsm:
+    """Parameter Store: {name: value}; missing names come back as InvalidParameters."""
+
+    def __init__(self, values=None):
+        self.values = values or {}
+
+    def get_parameters(self, Names, WithDecryption):
+        assert WithDecryption
+        return {"Parameters": [{"Name": n, "Value": self.values[n]} for n in Names if n in self.values],
+                "InvalidParameters": [n for n in Names if n not in self.values]}
 
 
 class _FakeSfn:
@@ -143,6 +158,8 @@ def helper():
     module.sfn = _FakeSfn([])
     module.logs = _FakeLogs()
     module.ecs = _FakeEcs()
+    module.ssm = _FakeSsm()
+    module.ZYTE_STATS_RETRY_PAUSE_SECONDS = 0
     return module
 
 
@@ -699,3 +716,164 @@ def test_summary_dbt_log_read_failure_never_fails_the_summary(helper):
 def test_summary_reads_no_dbt_log_for_other_steps(helper):
     _summary_text(helper, failed_step="image_pipeline", failure=_ecs_failure("t4"))
     assert helper.logs.calls == []
+
+
+# -- day-on-day counts and Zyte cost (tickets/run_count_reconciliation.md) -----
+
+COUNTS_LATEST = "bronze/dev/crawl-flow/run-counts/latest.json"
+ZYTE_PARAMS = {"/ecommerce-scraper/zyte-stats/api-key": "stats-key",
+               "/ecommerce-scraper/zyte-stats/organization-id": "123"}
+ZYTE_STATS = {"results": [
+    {"domain": "en-saudi.ounass.com", "request_count": 300, "cost_microusd_total": 130000,
+     "status_codes": [{"code": 200, "count": 300}]},
+    {"domain": "saudi.ounass.com", "request_count": 102, "cost_microusd_total": 40000,
+     "status_codes": [{"code": 200, "count": 102}]},
+    {"domain": "www.cettire.com", "request_count": 2549, "cost_microusd_total": 910000,
+     "status_codes": [{"code": 200, "count": 1991}, {"code": 520, "count": 558}]},
+]}
+
+
+def _previous(helper, sites=None, zyte_usd=None):
+    entry = lambda v: {"value": v, "flow_id": "run-0"}
+    helper.s3.objects[COUNTS_LATEST] = json.dumps({
+        "sites": {site: {k: entry(v) for k, v in values.items()} for site, values in (sites or {}).items()},
+        "zyte": {"total_usd": zyte_usd, "flow_id": "run-0"} if zyte_usd is not None else None,
+    }).encode()
+
+
+def _with_zyte(helper, stats=ZYTE_STATS, error=None):
+    helper.ssm = _FakeSsm(ZYTE_PARAMS)
+    calls = []
+
+    def fake_get(url, api_key):
+        calls.append((url, api_key))
+        if error:
+            raise error
+        return stats
+
+    helper._zyte_stats_get = fake_get
+    return calls
+
+
+def _full_summary(helper, crawls=None, flow_input=None, **state):
+    return helper.handler({"action": "summary", "state": {
+        "flow": _start(helper, flow_input), "crawls": crawls if crawls is not None else [_crawl("success")],
+        "gate": {"published": 1}, **state}}, None)
+
+
+def test_a_deliberate_drop_appears_under_counts_to_check_at_the_top(helper):
+    helper.athena = _FakeAthena({"gold_product_serving_latest": GOLD_ROWS, "silver_mapping_gaps": [["0", "0"]]})
+    _previous(helper, {"ounass": {"in_gold": 7200, "with_images": 7000, "crawled": 7000},
+                       "level-shoes": {"in_gold": 4700, "with_images": 4660}})
+    crawls = [{"site": "ounass", "run_id": "r1", "result": {"run_status": "success", "rows": 6900}}]
+    result = _full_summary(helper, crawls=crawls)
+    lines = result["text"].splitlines()
+    assert lines[1].startswith("Counts to check (1): fell more than 10%")
+    assert lines[2] == "- ounass: in gold fell 7,200 -> 6,400 (-11%) since the previous run (run-0)"
+    # Below 10% and not flagged: with images 7,000 -> 6,390 (-9%), crawled
+    # 7,000 -> 6,900, and level-shoes' small changes.
+    assert "with images fell" not in result["text"] and "crawled rows fell" not in result["text"]
+    assert "level-shoes: in gold fell" not in result["text"]
+    assert result["subject"] == "Crawl flow dev SUCCEEDED: 1/1 crawls published · 1 to check"
+
+
+def test_a_site_that_vanished_from_gold_is_flagged(helper):
+    helper.athena = _FakeAthena({"gold_product_serving_latest": GOLD_ROWS, "silver_mapping_gaps": [["0", "0"]]})
+    _previous(helper, {"cettire": {"in_gold": 15832, "with_images": 0}})
+    text = _full_summary(helper)["text"]
+    assert "- cettire: in gold fell 15,832 -> 0 (-100%)" in text
+    # 0 with images before is below the minimum, so it isn't compared.
+    assert "cettire: with images" not in text
+
+
+def test_first_run_saves_counts_and_says_nothing_to_compare(helper):
+    helper.athena = _FakeAthena({"gold_product_serving_latest": GOLD_ROWS, "silver_mapping_gaps": [["0", "0"]]})
+    text = _full_summary(helper)["text"]
+    assert text.splitlines()[1] == "Counts to check: first run with saved counts, nothing to compare yet"
+    saved = json.loads(helper.s3.objects[COUNTS_LATEST])
+    assert saved["sites"]["ounass"]["in_gold"] == {"value": 6400, "flow_id": "run-1"}
+    assert "bronze/dev/crawl-flow/run-counts/runs/run-1.json" in helper.s3.objects
+
+
+def test_no_drop_says_none_and_merges_last_known_values(helper):
+    helper.athena = _FakeAthena({"gold_product_serving_latest": GOLD_ROWS, "silver_mapping_gaps": [["0", "0"]]})
+    _previous(helper, {"ounass": {"in_gold": 6450, "crawled": 6500}, "farfetch": {"in_gold": 10}})
+    text = _full_summary(helper)["text"]
+    assert text.splitlines()[1].startswith("Counts to check: none")
+    saved = json.loads(helper.s3.objects[COUNTS_LATEST])["sites"]
+    # Ounass wasn't crawled this run: its crawled count keeps the previous run's value.
+    assert saved["ounass"]["crawled"] == {"value": 6500, "flow_id": "run-0"}
+    assert saved["ounass"]["in_gold"] == {"value": 6400, "flow_id": "run-1"}
+
+
+@pytest.mark.parametrize("flow_input", [{"limit": 1}, {"stop_after": "crawls"}])
+def test_test_runs_are_neither_compared_nor_saved(helper, flow_input):
+    helper.athena = _FakeAthena({"gold_product_serving_latest": GOLD_ROWS, "silver_mapping_gaps": [["0", "0"]]})
+    _previous(helper, {"ounass": {"in_gold": 9000}})
+    before = dict(helper.s3.objects)
+    text = _full_summary(helper, flow_input=flow_input)["text"]
+    assert "Counts to check" not in text
+    assert helper.s3.objects == before
+
+
+def test_unreadable_previous_counts_never_fail_the_summary(helper):
+    helper.athena = _FakeAthena({"gold_product_serving_latest": GOLD_ROWS, "silver_mapping_gaps": [["0", "0"]]})
+    helper.s3.objects[COUNTS_LATEST] = b"not json"
+    result = _full_summary(helper)
+    assert result["status"] == "succeeded"
+    assert result["text"].splitlines()[1].startswith("Counts to check: not compared, previous run's counts unreadable")
+    assert helper.s3.objects[COUNTS_LATEST] == b"not json"   # not overwritten
+
+
+def test_zyte_section_shows_real_cost_and_520s_per_site(helper):
+    calls = _with_zyte(helper)
+    _previous(helper, zyte_usd=1.00)
+    text = _full_summary(helper)["text"]
+    assert "- cettire: $0.91, 2,549 requests, 520s 558 (22%)" in text
+    assert "- ounass: $0.17, 402 requests, 520s 0 (0%)" in text
+    assert "Run total: $1.08 · previous run $1.00 (+8%)" in text
+    url, key = calls[0]
+    assert key == "stats-key" and "organization_id=123" in url and "groupby_domain=true" in url
+    assert json.loads(helper.s3.objects[COUNTS_LATEST])["zyte"] == {"total_usd": 1.08, "flow_id": "run-1"}
+
+
+def test_zyte_cost_that_more_than_doubles_is_a_count_to_check(helper):
+    _with_zyte(helper)
+    _previous(helper, zyte_usd=0.40)
+    result = _full_summary(helper)
+    assert "- Zyte cost rose $0.40 -> $1.08 since the previous run (run-0)" in result["text"]
+    assert "to check" in result["subject"]
+
+
+def test_zyte_site_crawled_but_not_in_the_report_says_so(helper):
+    _with_zyte(helper, stats={"results": []})
+    crawls = [{"site": "ounass", "run_id": "r1", "result": {"run_status": "success", "rows": 10}}]
+    text = _full_summary(helper, crawls=crawls)["text"]
+    assert "- ounass: no usage recorded by Zyte yet" in text
+
+
+def test_zyte_failure_retries_once_then_never_fails_the_email(helper):
+    calls = _with_zyte(helper, error=TimeoutError("timed out"))
+    result = _full_summary(helper)
+    assert len(calls) == 2
+    assert result["status"] == "succeeded"
+    assert "Zyte cost: not available (Zyte stats didn't answer: timed out)" in result["text"]
+
+
+def test_zyte_wrong_key_is_not_retried(helper):
+    import urllib.error
+    calls = _with_zyte(helper, error=urllib.error.HTTPError("u", 401, "Unauthorized", {}, None))
+    text = _full_summary(helper)["text"]
+    assert len(calls) == 1 and "Zyte cost: not available (Zyte stats answered HTTP 401)" in text
+
+
+def test_zyte_key_not_yet_in_parameter_store(helper):
+    text = _full_summary(helper)["text"]
+    assert "Zyte cost: not available (Parameter Store has no /ecommerce-scraper/zyte-stats/api-key" in text
+
+
+def test_images_only_run_has_no_zyte_section(helper):
+    _with_zyte(helper)
+    text = helper.handler({"action": "summary", "state": {"flow": _start(helper, {"start_at": "images"})}},
+                          None)["text"]
+    assert "Zyte" not in text
