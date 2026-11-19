@@ -22,7 +22,7 @@ Full entries: `archive/ecommerce-scraper/memory-archive.md` in the workspace rep
 
 ## 2026-11-19 - Cettire images: the image task ran a July image; flow now runs only `latest`
 - The 11-19 run still had Cettire 15,944 in gold, 0 with images: the image task family had a revision 3 registered by hand on 2026-07-30 with `ecommerce-scraper:schema-v2-dev-20260730`, and the flow (family name, no revision) ran it every night, so `ba26ece` never ran. Terraform showed no changes (its revision 2 is on `latest`). Revision 3 deregistered (user-approved); an images-only run picked up the 30,458 Cettire images on revision 2 / `latest`.
-- Guard (`tickets/run_latest_image_only.md`): state machine names exact Terraform task revisions; helper `start` refuses unless each is ACTIVE and on `:latest` (`FLOW_TASK_DEFINITIONS`, IAM `ecs:DescribeTaskDefinition`); refusals now emailed (`NotifyRefused`). Rule added to `context/AGENTS.md`; `docs/cicd_architecture.md` updated. 653 tests pass. Targeted apply waits for the user's OK on the IAM line.
+- Guard (`tickets/run_latest_image_only.md`): state machine names exact Terraform task revisions; helper `start` refuses unless each is ACTIVE and on `:latest` (`FLOW_TASK_DEFINITIONS`, IAM `ecs:DescribeTaskDefinition`); refusals now emailed (`NotifyRefused`). Rule added to `context/AGENTS.md`; `docs/cicd_architecture.md` updated. 653 tests pass. Applied 2026-11-19 (user-approved, 0/3/0); live `start` invoke passed.
 
 ## 2026-11-18 - Launch report moved to the workspace repo
 - `notes/2026-11-13-state-of-price-comparison.md` now lives in `tareklel/price-comparison-workspace` as `launch/2026-11-13-state-of-price-comparison.md`, next to the live tracker `launch/LAUNCH.md`; a pointer stays here so ticket references still resolve.

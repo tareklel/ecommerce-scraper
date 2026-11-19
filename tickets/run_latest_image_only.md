@@ -1,6 +1,6 @@
 # Ticket: The crawl flow only ever runs the `latest` crawler image
 
-**Status: in progress (written 2026-11-19)**
+**Status: built and applied 2026-11-19; open until a scheduled run shows Cettire images in gold**
 **Priority: High. A stale image silently undid a shipped fix during the daily trial.**
 
 ## What went wrong
@@ -56,9 +56,12 @@ The dbt task belongs to scraper-pipeline and is out of scope here.
 
 ## Done when
 
-- [ ] 1–5 built, tests pass, pushed.
-- [ ] Targeted apply (helper Lambda, its policy, state machine) with the plan
-      shown to the user first, because of the IAM change.
-- [ ] A live `start` invoke returns normally with today's task definitions, and a
-      test invoke against a non-`latest` image is refused.
+- [x] 1–5 built, tests pass, pushed (`f2daf1a`, 653 tests).
+- [x] Targeted apply (helper Lambda, its policy, state machine) with the plan
+      shown to the user first, because of the IAM change. Applied 2026-11-19
+      13:38 UTC (user-approved): 0 added, 3 changed, 0 destroyed. The state
+      machine runs crawler:2, image-pipeline:2, image-quality-checker:3.
+- [x] A live `start` invoke returns normally with today's task definitions
+      (2026-11-19). The refusal path is covered by unit tests only; no live
+      test, because it would mean registering a non-`latest` task version.
 - [ ] Next scheduled run's email shows Cettire images in gold.
