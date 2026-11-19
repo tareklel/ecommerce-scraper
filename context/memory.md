@@ -1,6 +1,6 @@
 # Memory
 
-## Summary (entries 2026-02-24 to 2026-11-03)
+## Summary (entries 2026-02-24 to 2026-11-04)
 
 Full entries: `archive/ecommerce-scraper/memory-archive.md` in the workspace repo
 (`tareklel/price-comparison-workspace`), and this file's git history.
@@ -15,9 +15,14 @@ Full entries: `archive/ecommerce-scraper/memory-archive.md` in the workspace rep
 - Ounass PLP-efficient mode (`plp_efficient.py`, `plp_parity.py`; doc `docs/ounass_plp_efficient_crawl.md`; ticket `tickets/ounass_plp_efficient_crawl.md`): known products are refreshed from listings and the rest get product pages (Phase 2, 10k ceiling). Startup checks G1–G11: G8 (gold age, warns at 8 days) and stale-crawl (14 days) only warn, and G4/G11 need ≥ 20 products. Parity G9 runs per host, with on-sale top-ups. Steady state is ~300–400 requests a run. Registry rows are category listings with no brand; brand-scoped rows are a possible future direction.
 - Discounts: `0` when there is genuinely no discount, `None` when not observed (silver coalesces nulls).
 - CI/CD: GitHub Actions runs pytest, then builds the crawler image and pushes `sha-<7>` and `latest` (auto-deploy). `promote-crawler-image.yml` is for rollback, and `legacy-20260803` is a rollback tag. The laptop can't build images (company HTTPS inspection). Tests that need gitignored saved pages skip in CI. The crawl flow plan is in `tickets/cicd_pipeline.md` ("▶ Next steps") and `docs/cicd_architecture.md`. Schedule decided: daily for 7 days, then about weekly.
+- Terraform state: both repos in this repo's versioned S3 state bucket (scraper-pipeline under its own key), S3 lock files (`use_lockfile`), Terraform 1.10+ required.
 - Secrets: one Secrets Manager secret `ecommerce-scraper/env` with Make helpers. Never put values in `.env` or Terraform.
 
 ## Log (last 10 entry days, newest first)
+
+## 2026-11-19 - Cettire images: the image task ran a July image; flow now runs only `latest`
+- The 11-19 run still had Cettire 15,944 in gold, 0 with images: the image task family had a revision 3 registered by hand on 2026-07-30 with `ecommerce-scraper:schema-v2-dev-20260730`, and the flow (family name, no revision) ran it every night, so `ba26ece` never ran. Terraform showed no changes (its revision 2 is on `latest`). Revision 3 deregistered (user-approved); an images-only run picked up the 30,458 Cettire images on revision 2 / `latest`.
+- Guard (`tickets/run_latest_image_only.md`): state machine names exact Terraform task revisions; helper `start` refuses unless each is ACTIVE and on `:latest` (`FLOW_TASK_DEFINITIONS`, IAM `ecs:DescribeTaskDefinition`); refusals now emailed (`NotifyRefused`). Rule added to `context/AGENTS.md`; `docs/cicd_architecture.md` updated. 653 tests pass. Targeted apply waits for the user's OK on the IAM line.
 
 ## 2026-11-18 - Launch report moved to the workspace repo
 - `notes/2026-11-13-state-of-price-comparison.md` now lives in `tareklel/price-comparison-workspace` as `launch/2026-11-13-state-of-price-comparison.md`, next to the live tracker `launch/LAUNCH.md`; a pointer stays here so ticket references still resolve.
@@ -266,8 +271,3 @@ Full entries: `archive/ecommerce-scraper/memory-archive.md` in the workspace rep
 - Plan lives in scraper-pipeline `ticket/migrate-dbt-to-cloud-jobs.md`, "▶ Agreed plan". Dev only.
 - Decided (user): one S3 lock shared by laptop and cloud dbt runs; the API cache refreshes whenever gold builds, from the same wrapper, so the EventBridge rule stays off. Seen 2026-11-04: dev cache written Oct 29, dev gold rebuilt Nov 2.
 - `docs/cicd_architecture.md` gains the wrapper diagram (lock, run, cache refresh).
-
-## 2026-11-04 - CI/CD step 1: Terraform state in S3 with locking
-- scraper-pipeline's state moved from the OneDrive file to this repo's state bucket under its own key. This repo's backend gains `use_lockfile`, and both now require Terraform 1.10+. Bucket versioning turned on.
-- Checked: scraper-pipeline plan identical before and after (3 to add, 2 to change, not applied); this repo's plan shows no changes.
-- Next: step 2, dbt in AWS. AWS access from the shell comes and goes (`CERTIFICATE_VERIFY_FAILED`).

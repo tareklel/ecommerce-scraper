@@ -45,7 +45,7 @@ flowchart TD
   manual -->|"start_at: crawl or images"| s1
 
   subgraph sfn["Step Functions: ecommerce-scraper-crawl-flow-dev"]
-    s1["1. Start check<br/>refuse if another run is running<br/>make run IDs"]
+    s1["1. Start check<br/>refuse if another run is running<br/>or a task isn't on the latest image<br/>make run IDs"]
     s2["2. Seed the registry<br/>dbt seed --select crawl_plp_registry + its tests"]
     s3["3. List crawls from the registry<br/>active rows per site"]
     s4["4. Crawl in parallel, each with CRAWL_RUN_ID<br/>a failed crawl is caught; others go on"]
@@ -154,6 +154,8 @@ happened.
 | Every crawl failed or was killed | Rare | Step 6 skips dbt and images | Summary; flow **failed** |
 | A crawl is `degraded` | Common | Counts as published | Listed in the summary |
 | Another flow run is still running | Possible once scheduled daily | Step 1 refuses to start | New run **failed** at once; the running one is untouched |
+| A crawler, image or checker task would run an image other than `latest`, or a task version Terraform replaced | Seen 2026-11-19 (a task version registered by hand on 2026-07-30 with a July image had run every night) | The state machine names each task's exact Terraform revision, so a hand-made version is never run; step 1 also checks those revisions are `ACTIVE` and on `latest` | Nothing runs; "REFUSED at start" email names the task and image. Fix through Terraform, or roll back by moving `latest` |
+| Step 1 refuses for any reason | Rare | Refusal emailed before the run fails | "REFUSED at start" email with the reason; before 2026-11-19 a refusal sent no email |
 | The dbt image is older than the latest registry commit | After a registry push, until the image build passes | `make crawl-flow` refuses to start | Nothing runs; wait for (or fix) the dbt image build |
 | Registry seed or its tests fail | Only after a bad registry edit | Step 2 stops before any crawl | No Zyte spend; flow **failed** |
 | A site has no active registry rows | By choice | Step 3 leaves it out | Not crawled |
@@ -249,6 +251,14 @@ A push to GitHub starts a build, which logs in to AWS with short-lived
 credentials and pushes an image. Running tasks pick up that image on their next
 start.
 
+The flow's crawler, image and checker tasks always run `ecommerce-scraper:latest`.
+The state machine names each by its exact Terraform revision, and the start check
+refuses a run if any of them is on another tag. Never register a task version by
+hand or pin one to another tag; roll back by moving `latest`
+(`promote-crawler-image.yml`). When Terraform replaces one of these task
+definitions, apply the state machine in the same apply
+(`tickets/run_latest_image_only.md`).
+
 ```mermaid
 flowchart LR
   crawler["ecommerce-scraper<br/>crawler code"]
@@ -343,4 +353,5 @@ lives in AWS alone, so pausing doesn't need a commit.
 | 2026-11-16 | Summary email adds per-site counts: rows crawled this run -> in gold -> with images | — |
 | 2026-11-17 | Summary email says why a dbt step failed, from the dbt task's log (helper gets `logs:GetLogEvents` on that log group only) | — |
 | 2026-11-18 | Fix: `check_crawl` unpacks the verifier's manifest (`raw_json`), so the email shows `degraded`, degradations and rows crawled (before this, every published crawl read as `success` with no row count) | — |
+| 2026-11-19 | Flow runs only `latest`: exact Terraform task revisions in the state machine; start check refuses a task not `ACTIVE` or not on `latest` (helper gets `ecs:DescribeTaskDefinition`); refusals are emailed. A hand-registered image-task version (July image) had run since 2026-07-30 | — |
 | 2026-11-13 | Step 6 built: schedule 02:00 Dubai daily, 2026-11-14 to 2026-11-20 (end date), scheduler role (`states:StartExecution` on the flow only), `make schedule-on/off/status`. Scheduled runs skip the `make crawl-flow` registry check | — |

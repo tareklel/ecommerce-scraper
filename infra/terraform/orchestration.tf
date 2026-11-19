@@ -29,6 +29,19 @@ locals {
   # The dbt task's log group (scraper-pipeline terraform/dbt_job.tf).
   dbt_log_group = "/ecs/price-comparison-dbt-dev"
 
+  # This repo's flow tasks by their exact Terraform revision (with ":<n>"), not
+  # arn_without_revision. A family name alone makes ECS run the newest ACTIVE
+  # revision, so a version registered by hand overrides Terraform without any
+  # plan showing it: from 2026-07-30 to 2026-11-19 the image task ran a July
+  # image that way (tickets/run_latest_image_only.md). When Terraform replaces
+  # one of these, apply the state machine in the same apply. The helper's start
+  # check reads the same map and refuses a run on any image but `latest`.
+  flow_task_definitions = {
+    "crawler"               = aws_ecs_task_definition.scraper.arn
+    "image-pipeline"        = aws_ecs_task_definition.image_pipeline.arn
+    "image-quality-checker" = aws_ecs_task_definition.image_quality_checker.arn
+  }
+
   crawler_network = {
     AwsvpcConfiguration = {
       Subnets        = data.aws_subnets.default.ids
@@ -82,7 +95,8 @@ locals {
       next            = "Run_image_pipeline"
     }
     image_pipeline = {
-      task_definition = aws_ecs_task_definition.image_pipeline.arn_without_revision
+      # Exact Terraform revision, never "newest active": see local.flow_task_definitions.
+      task_definition = local.flow_task_definitions["image-pipeline"]
       network         = local.crawler_network
       override = {
         Name        = "image-pipeline"
@@ -92,7 +106,7 @@ locals {
       next    = "FindImageMarker"
     }
     quality_checker = {
-      task_definition = aws_ecs_task_definition.image_quality_checker.arn_without_revision
+      task_definition = local.flow_task_definitions["image-quality-checker"]
       network         = local.crawler_network
       override = {
         Name        = "image-quality-checker"
@@ -186,7 +200,7 @@ locals {
         Resource = "arn:aws:states:::ecs:runTask.sync"
         Parameters = {
           Cluster              = aws_ecs_cluster.scraper.arn
-          TaskDefinition       = aws_ecs_task_definition.scraper.arn_without_revision
+          TaskDefinition       = local.flow_task_definitions["crawler"]
           LaunchType           = "FARGATE"
           NetworkConfiguration = local.crawler_network
           Overrides = {
@@ -261,10 +275,25 @@ locals {
         # Replaces the raw input with {"flow": {...}}: start_at, limit, run IDs.
         ResultSelector = { "flow.$" = "$.Payload" }
         ResultPath     = "$"
-        # Another run in progress, or bad input: refuse before doing anything.
-        Catch = [{ ErrorEquals = ["States.ALL"], ResultPath = "$.failure", Next = "StartRefused" }]
+        # Another run in progress, bad input, or a task not on the `latest`
+        # image: refuse before doing anything, and say so by email (a refused
+        # scheduled run would otherwise fail unseen).
+        Catch = [{ ErrorEquals = ["States.ALL"], ResultPath = "$.failure", Next = "NotifyRefused" }]
         Next  = "StartAt"
       })
+      NotifyRefused = {
+        Type     = "Task"
+        Resource = "arn:aws:states:::sns:publish"
+        Parameters = {
+          TopicArn    = aws_sns_topic.crawl_flow_runs.arn
+          Subject     = "Crawl flow dev REFUSED at start"
+          "Message.$" = "States.Format('The crawl flow refused to start; nothing ran. Execution: {} . Why: {}', $$.Execution.Id, $.failure.Cause)"
+        }
+        ResultPath = null
+        # A failed email doesn't hide the refusal: the run still fails below.
+        Catch = [{ ErrorEquals = ["States.ALL"], ResultPath = "$.notify_error", Next = "StartRefused" }]
+        Next  = "StartRefused"
+      }
       StartRefused = { Type = "Fail", Error = "CrawlFlowRefused", CausePath = "$.failure.Cause" }
       StartAt = {
         Type    = "Choice"
@@ -427,6 +456,14 @@ resource "aws_iam_role_policy" "crawl_flow_helper" {
         Resource = "arn:aws:logs:${var.region}:${data.aws_caller_identity.current.account_id}:log-group:${local.dbt_log_group}:log-stream:*"
       },
       {
+        # Start check: read the flow's task definitions to confirm they run
+        # `latest`. Read-only; this action can't be limited to named resources.
+        Sid      = "CheckFlowTaskImages"
+        Effect   = "Allow"
+        Action   = ["ecs:DescribeTaskDefinition"]
+        Resource = "*"
+      },
+      {
         Sid      = "ListFlowRuns"
         Effect   = "Allow"
         Action   = ["states:ListExecutions"]
@@ -524,6 +561,8 @@ resource "aws_lambda_function" "crawl_flow_helper" {
       # Read by the summary to say why a dbt step failed.
       DBT_LOG_GROUP    = local.dbt_log_group
       MAX_VERIFY_POLLS = "15"
+      # Read by the start check: these tasks must be ACTIVE and run `latest`.
+      FLOW_TASK_DEFINITIONS = jsonencode(local.flow_task_definitions)
     }
   }
 }

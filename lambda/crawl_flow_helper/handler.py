@@ -4,8 +4,9 @@ by one step of the flow. Design: tickets/cicd_pipeline.md, step 3, and
 docs/cicd_architecture.md, "What happens on each run".
 
 Actions (event["action"]):
-- start: refuse if another flow run is running; normalise the input; make the
-  image pipeline's run ID.
+- start: refuse if another flow run is running or any of this repo's flow tasks
+  would run an image other than `latest`; normalise the input; make the image
+  pipeline's run ID.
 - list_crawls: read active rows of the seeded crawl_plp_registry (Athena),
   write a --urls-source CSV per non-Ounass site, return one crawl per site.
 - check_crawl: has the verifier written this crawl's markers yet?
@@ -41,6 +42,14 @@ ATHENA_TIMEOUT_SECONDS = 120
 # "dbt", container "dbt"), read to say why a dbt step failed.
 DBT_LOG_GROUP = os.environ.get("DBT_LOG_GROUP", f"/ecs/price-comparison-dbt-{APP_ENV}")
 DBT_LOG_STREAM_PREFIX = "dbt/dbt/"
+# The exact task definitions (with revision) the flow runs from this repo,
+# {"crawler": arn, "image-pipeline": arn, "image-quality-checker": arn}, set by
+# Terraform from the same ARNs the state machine uses. The start check refuses
+# the run unless each is ACTIVE and runs only `latest` images: on 2026-11-19 a
+# task version registered by hand with a July image had silently run every night
+# (tickets/run_latest_image_only.md). The dbt task is scraper-pipeline's.
+FLOW_TASK_DEFINITIONS = json.loads(os.environ.get("FLOW_TASK_DEFINITIONS") or "{}")
+REQUIRED_IMAGE_TAG = "latest"
 
 MARKERS_PREFIX = f"bronze/{APP_ENV}/crawls/markers/"
 MANIFESTS_PREFIX = f"bronze/{APP_ENV}/crawls/manifests/"
@@ -65,9 +74,14 @@ s3 = boto3.client("s3")
 athena = boto3.client("athena")
 sfn = boto3.client("stepfunctions")
 logs = boto3.client("logs")
+ecs = boto3.client("ecs")
 
 
 class FlowAlreadyRunning(Exception):
+    pass
+
+
+class TaskImageNotLatest(Exception):
     pass
 
 
@@ -91,6 +105,41 @@ def _run_id(moment):
 # ---------------------------------------------------------------------------
 # start
 # ---------------------------------------------------------------------------
+
+def _check_task_images():
+    """Refuse unless every flow task definition is ACTIVE and runs `latest`.
+
+    Collects every problem first so one refusal names them all."""
+    if not FLOW_TASK_DEFINITIONS:
+        raise TaskImageNotLatest(
+            "FLOW_TASK_DEFINITIONS is not set on the helper Lambda, so the flow can't "
+            "check which images it would run. Apply the helper Lambda from "
+            "infra/terraform/orchestration.tf."
+        )
+    problems = []
+    for name, arn in sorted(FLOW_TASK_DEFINITIONS.items()):
+        definition = ecs.describe_task_definition(taskDefinition=arn)["taskDefinition"]
+        revision = f"{definition.get('family', name)}:{definition.get('revision', '?')}"
+        if definition.get("status") != "ACTIVE":
+            problems.append(
+                f"{name} ({revision}) is {definition.get('status')}: the state machine points at a "
+                "task version Terraform has replaced. Apply the state machine together with the "
+                "task definition."
+            )
+        for container in definition.get("containerDefinitions", []):
+            image = container.get("image", "")
+            if image.rsplit("/", 1)[-1].partition(":")[2] != REQUIRED_IMAGE_TAG:
+                problems.append(
+                    f"{name} ({revision}) container {container.get('name')} runs {image}, not "
+                    f":{REQUIRED_IMAGE_TAG}. Roll back by moving `latest` "
+                    "(promote-crawler-image.yml), never by pinning a task to another tag."
+                )
+    if problems:
+        raise TaskImageNotLatest(
+            "Refused: a flow task would not run the latest crawler image "
+            "(tickets/run_latest_image_only.md). " + " ".join(problems)
+        )
+
 
 def start(event):
     execution_arn = event["execution_arn"]
@@ -118,6 +167,8 @@ def start(event):
     limit = flow_input.get("limit")
     if limit is not None and (not isinstance(limit, int) or limit < 1):
         raise ValueError(f"limit must be a positive whole number, got {limit!r}")
+
+    _check_task_images()
 
     now = _now()
     return {

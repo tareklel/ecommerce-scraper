@@ -100,10 +100,39 @@ class _FakeLogs:
         return {"events": [{"message": m} for m in page], "nextForwardToken": str(offset + len(page))}
 
 
+ECR = "565562062476.dkr.ecr.eu-central-1.amazonaws.com/ecommerce-scraper"
+TASK_DEFINITIONS = {
+    "crawler": "arn:aws:ecs:eu-central-1:1:task-definition/ecommerce-scraper:2",
+    "image-pipeline": "arn:aws:ecs:eu-central-1:1:task-definition/ecommerce-scraper-image-pipeline:2",
+    "image-quality-checker": "arn:aws:ecs:eu-central-1:1:task-definition/ecommerce-scraper-image-quality-checker:3",
+}
+
+
+class _FakeEcs:
+    """describe_task_definition by ARN; every task runs :latest unless overridden
+    with {arn: {"image": ..., "status": ...}}."""
+
+    def __init__(self, overrides=None):
+        self.overrides = overrides or {}
+        self.described = []
+
+    def describe_task_definition(self, taskDefinition):
+        self.described.append(taskDefinition)
+        family, revision = taskDefinition.rsplit("/", 1)[-1].split(":")
+        override = self.overrides.get(taskDefinition, {})
+        return {"taskDefinition": {
+            "family": family,
+            "revision": int(revision),
+            "status": override.get("status", "ACTIVE"),
+            "containerDefinitions": [{"name": "main", "image": override.get("image", f"{ECR}:latest")}],
+        }}
+
+
 @pytest.fixture
 def helper():
     os.environ.setdefault("AWS_DEFAULT_REGION", "eu-central-1")
     os.environ["APP_ENV"] = "dev"
+    os.environ["FLOW_TASK_DEFINITIONS"] = json.dumps(TASK_DEFINITIONS)
     spec = importlib.util.spec_from_file_location(
         "crawl_flow_helper_handler", Path("lambda/crawl_flow_helper/handler.py")
     )
@@ -113,6 +142,7 @@ def helper():
     module.athena = _FakeAthena([])
     module.sfn = _FakeSfn([])
     module.logs = _FakeLogs()
+    module.ecs = _FakeEcs()
     return module
 
 
@@ -152,6 +182,50 @@ def test_start_ignores_itself_but_refuses_another_running_flow(helper):
 def test_start_rejects_bad_input(helper, flow_input):
     with pytest.raises(ValueError):
         _start(helper, flow_input)
+
+
+def test_start_checks_every_flow_task_runs_latest(helper):
+    _start(helper)
+    assert sorted(helper.ecs.described) == sorted(TASK_DEFINITIONS.values())
+
+
+def test_start_refuses_a_task_pinned_to_another_tag(helper):
+    # The 2026-11-19 incident: the image task ran a July tag by hand.
+    pinned = TASK_DEFINITIONS["image-pipeline"]
+    helper.ecs = _FakeEcs({pinned: {"image": f"{ECR}:schema-v2-dev-20260730"}})
+    with pytest.raises(helper.TaskImageNotLatest) as refused:
+        _start(helper)
+    message = str(refused.value)
+    assert "ecommerce-scraper-image-pipeline:2" in message
+    assert "schema-v2-dev-20260730" in message
+    # Only the pinned task is named; the others run latest.
+    assert "ecommerce-scraper:2" not in message
+    assert "image-quality-checker" not in message
+
+
+@pytest.mark.parametrize("image", [f"{ECR}:sha-ba26ece", f"{ECR}@sha256:abc", ECR])
+def test_start_refuses_sha_digest_and_untagged_images(helper, image):
+    helper.ecs = _FakeEcs({TASK_DEFINITIONS["crawler"]: {"image": image}})
+    with pytest.raises(helper.TaskImageNotLatest):
+        _start(helper)
+
+
+def test_start_refuses_an_inactive_task_definition_and_names_all_problems(helper):
+    helper.ecs = _FakeEcs({
+        TASK_DEFINITIONS["crawler"]: {"status": "INACTIVE"},
+        TASK_DEFINITIONS["image-quality-checker"]: {"image": f"{ECR}:legacy-20260803"},
+    })
+    with pytest.raises(helper.TaskImageNotLatest) as refused:
+        _start(helper)
+    message = str(refused.value)
+    assert "ecommerce-scraper:2) is INACTIVE" in message
+    assert "legacy-20260803" in message
+
+
+def test_start_refuses_when_task_definitions_are_not_configured(helper):
+    helper.FLOW_TASK_DEFINITIONS = {}
+    with pytest.raises(helper.TaskImageNotLatest, match="FLOW_TASK_DEFINITIONS"):
+        _start(helper)
 
 
 # -- list_crawls ------------------------------------------------------------
