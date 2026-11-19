@@ -20,6 +20,9 @@ Full entries: `archive/ecommerce-scraper/memory-archive.md` in the workspace rep
 
 ## Log (last 10 entry days, newest first)
 
+## 2026-11-19 - Affiliate and legal check deferred until after launch
+- User decision: no affiliate or terms research before launch ("do things first, ask forgiveness later"); launch, get traffic, then ask affiliate networks for feeds, competitors first, then crawled retailers. Only our own legal pages stay before launch (website ticket `about_and_legal_pages.md`, suggested contents listed). `tickets/affiliate_and_legal_check.md` rescoped.
+
 ## 2026-11-19 - Run email: counts to check day on day, Zyte's real cost
 - `lambda/crawl_flow_helper/handler.py` summary: "Counts to check" at the top (per site, crawled rows / in gold / with images fell >10% since the previous full run, or Zyte cost more than doubled and >$1; warning only); each full run's counts saved to `bronze/dev/crawl-flow/run-counts/` (`--limit` and crawls-only runs neither compared nor saved). Zyte section: real cost, requests and 520s per site from Zyte's Stats API, key in Parameter Store `/ecommerce-scraper/zyte-stats/` (user choice over Secrets Manager); any failure is one "not available" line, never a failed email.
 - Rule: no estimated costs in the email (user: "i dont want estimates"). "Site says" totals deferred. Deployed and checked live (Cettire $0.26 / 2,492 requests, Ounass $0.14 / 314 over the 11-19 run); fix: Zyte sends numbers as decimal strings. Ticket `tickets/run_count_reconciliation.md`; doc `docs/cicd_architecture.md`; 15 new tests.

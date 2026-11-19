@@ -1,61 +1,79 @@
-# Ticket: Affiliate programmes and the legal position, before launch
+# Ticket: Affiliate programmes and the legal position
 
-**Status: open, research only, nothing to build yet (written 2026-11-13)**
-**Priority: High. Answer before the site is public.**
-**Before starting: discuss this ticket with the user in an `ecommerce-scraper`
-session and agree the scope. Do not start from this ticket alone.**
+**Status: deferred until after launch (decided by the user 2026-11-19). No
+research before launch.**
+**Priority: Low until the site has traffic; then this is the route to feeds and
+income.**
 
-Source: `notes/2026-11-13-state-of-price-comparison.md`, section 5, gap 6.
+Source: `launch/2026-11-13-state-of-price-comparison.md` in the workspace repo,
+section 5, gap 6. Written 2026-11-13 as a research ticket; rescoped 2026-11-19.
 
-## Why this is high priority
+## Decision (user, 2026-11-19)
 
-Nothing in the three repos mentions affiliate programmes, revenue, or whether
-we may show retailers' prices and images the way we do. Three facts make this
-worth an answer before launch, not after:
+"Do things first and ask for forgiveness later." Phase 1 is to build a site
+that does price comparison and a gallery of available products well, launch it
+and get traffic. Only then approach affiliate networks and ask for product
+feeds: competitors we don't crawl first, then the retailers we crawl. The
+user expects the crawled retailers' terms not to agree with what we do today,
+so reading them now would not change the plan.
 
-- The site shows three retailers' products and prices, taken by crawling.
-- We download their product images and serve them from our own CDN.
-- Every "buy" link sends a shopper to a retailer, with nothing that tells the
-  retailer the visit came from us.
+The one thing kept for before launch is our own legal pages. They belong to
+the website: `../price-comparison-web/tickets/about_and_legal_pages.md`
+(launch tracker item 8).
 
-If a retailer objects after launch, the fix is rushed and public. If a retailer
-runs an affiliate programme, we may be giving away the product's only income,
-and possibly crawling data they would hand us as a feed.
+## Why the ticket was written
 
-## Questions to answer, per retailer (Ounass, Level Shoes, Bloomingdale's, Cettire)
+- The site shows retailers' products and prices, taken by crawling.
+- We download their product images and serve copies from our own CDN.
+- "Buy" links carry nothing that tells the retailer the visit came from us, so
+  we earn nothing and they can't see the traffic.
 
-Cettire is partly done (2026-11-14, `tickets/cettire_crawl.md` and
-`notes/2026-11-14-cettire-research.md`): it has an affiliate programme
-(Partnerize, BlueAff), no public product feed was found, and its terms of use
-are not read yet.
+## What was ruled out for phase 1, and why
 
-1. Is there an affiliate or partner programme that covers Saudi Arabia? Through
-   which network? What does it pay, and on what?
-2. Does the programme supply a product feed (products, prices, stock, images)?
-   A feed could replace some crawling and its cost.
-3. What do the programme's terms say about showing prices, using product
-   images, and linking straight to product pages?
-4. What do the site's terms of use and `robots.txt` say about automated access?
-5. Is there a stated way to ask for content to be removed?
+| Item (2026-11-13 list) | Decision |
+| --- | --- |
+| Affiliate programme per retailer covering Saudi, network, pay | After launch. Networks want a live site with traffic. Cettire is already known: Partnerize (about 5%, 30-day cookie) and BlueAff (`notes/2026-11-14-cettire-research.md` section 9). |
+| Product feed from the programme | After launch; usually visible only after acceptance. The crawlers work meanwhile. |
+| Programme terms on prices, images, deep links | After launch; only matters once a programme is joined. |
+| Site terms of use and `robots.txt` on automated access | Not researched; the user accepts the risk for phase 1. |
+| Stated route to request removal | Not researched. Our own removal contact on the legal pages covers the practical need. |
+| Tracking tag on buy links | When a programme is joined. A plain source tag (`utm_source=...`) is a cheap option any time. |
+| Serve image copies vs link to the retailer's | Keep copies for phase 1; revisit if a retailer objects. |
+| Review by a lawyer (Saudi / UAE commercial law) | Not before the soft launch. |
 
-## Questions about our own site
+## Kept: our own legal pages, before launch
 
-- Should buy links carry a tracking tag, and where would it be added (the
-  pipeline's export, or the website)?
-- What the about and legal pages must say
-  (`../price-comparison-web/tickets/about_and_legal_pages.md`).
-- Whether to keep serving copies of the images or link to the retailer's own.
+Handed to the website ticket above. Suggested contents (general practice, not
+legal advice):
 
-## How to do it
+1. What we are: an independent discovery and comparison site; we don't sell,
+   ship or take payment; purchases are made with the retailer on its terms.
+2. Prices and stock come from retailers' sites and can be out of date; the
+   retailer's price and availability at checkout prevail.
+3. Brand names, logos and product images belong to their owners and are shown
+   to identify products; no affiliation or endorsement implied.
+4. A removal and contact route (an email address) for brands and retailers,
+   with a promise to act quickly. This is the "forgiveness" channel: an
+   annoyed retailer's first step should be an email to us.
+5. Privacy policy and cookie notice: what is collected (analytics, cookies)
+   and why. Saudi PDPL applies once visitors are tracked.
+6. Terms of use: site provided as is, no warranty, limited liability,
+   governing law.
+7. Later: an affiliate disclosure, once links earn commission.
+8. Arabic and English versions.
 
-- An agent session can read the public pages (terms, robots.txt, affiliate
-  sign-up pages) and write up what each says, with links.
-- The legal reading is not something an agent should decide. Take the write-up
-  to someone qualified in Saudi and UAE commercial law for a short review.
+## Phase 2 (after launch, once there is traffic)
+
+1. Apply to affiliate programmes of competitors we don't crawl, asking for
+   product feeds.
+2. Then the retailers we crawl (Ounass, Level Shoes, Bloomingdale's, Cettire),
+   asking for feeds that could replace crawling.
+3. When a programme is accepted: read its terms on prices, images and links,
+   and open tickets for tracking tags and any image change in the repos that
+   own them.
 
 ## Done when
 
-- A dated note in `notes/` records the answers per retailer, with links.
-- You have decided: apply to any programme before launch, or after.
-- Any change that follows (tracking tags, image handling, page text) has its
-  own ticket in the repo that owns it.
+- Phase 1: the legal pages are live (tracked in the website ticket).
+- Phase 2: a decision per retailer and competitor (applied, accepted, feed or
+  not), recorded here or in a dated note in `notes/`.
