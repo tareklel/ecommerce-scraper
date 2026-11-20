@@ -1,6 +1,6 @@
 # Memory
 
-## Summary (entries 2026-02-24 to 2026-11-04)
+## Summary (entries 2026-02-24 to 2026-11-09)
 
 Full entries: `archive/ecommerce-scraper/memory-archive.md` in the workspace repo
 (`tareklel/price-comparison-workspace`), and this file's git history.
@@ -15,10 +15,15 @@ Full entries: `archive/ecommerce-scraper/memory-archive.md` in the workspace rep
 - Ounass PLP-efficient mode (`plp_efficient.py`, `plp_parity.py`; doc `docs/ounass_plp_efficient_crawl.md`; ticket `tickets/ounass_plp_efficient_crawl.md`): known products are refreshed from listings and the rest get product pages (Phase 2, 10k ceiling). Startup checks G1–G11: G8 (gold age, warns at 8 days) and stale-crawl (14 days) only warn, and G4/G11 need ≥ 20 products. Parity G9 runs per host, with on-sale top-ups. Steady state is ~300–400 requests a run. Registry rows are category listings with no brand; brand-scoped rows are a possible future direction.
 - Discounts: `0` when there is genuinely no discount, `None` when not observed (silver coalesces nulls).
 - CI/CD: GitHub Actions runs pytest, then builds the crawler image and pushes `sha-<7>` and `latest` (auto-deploy). `promote-crawler-image.yml` is for rollback, and `legacy-20260803` is a rollback tag. The laptop can't build images (company HTTPS inspection). Tests that need gitignored saved pages skip in CI. The crawl flow plan is in `tickets/cicd_pipeline.md` ("▶ Next steps") and `docs/cicd_architecture.md`. Schedule decided: daily for 7 days, then about weekly.
+- dbt runs in AWS (scraper-pipeline ECS task, 2026-11-09) and on the laptop behind one shared S3 lock, renewed while dbt runs; the same wrapper refreshes the dev API cache whenever gold builds (the EventBridge rule stays off). The website API hides products without images.
 - Terraform state: both repos in this repo's versioned S3 state bucket (scraper-pipeline under its own key), S3 lock files (`use_lockfile`), Terraform 1.10+ required.
 - Secrets: one Secrets Manager secret `ecommerce-scraper/env` with Make helpers. Never put values in `.env` or Terraform.
 
 ## Log (last 10 entry days, newest first)
+
+## 2026-11-20 - Cettire search key kept in Parameter Store, renewed by the spider
+- The 11-20 Cettire run failed (`crash`, 0 rows): the key was never stored and Zyte got 520 on all 12 tries to read it from a page. Spider now reads `/ecommerce-scraper/cettire/search-api-key` (SecureString); missing/rejected -> read via Zyte and saved back; Zyte refused -> run fails; saved fails -> run goes on `degraded` (new kind `setup`). `CETTIRE_SEARCH_API_KEY` setting removed (user design).
+- Crawler task role may read/write that one parameter (`aws_iam_role_policy.ecs_task_cettire_search_key`, applied 1/0/0, user-approved). 7 new tests, 674 pass. Ticket, `docs/cicd_architecture.md`, `docs/crawl_run_status.md` updated.
 
 ## 2026-11-19 - Affiliate and legal check deferred until after launch
 - User decision: no affiliate or terms research before launch ("do things first, ask forgiveness later"); launch, get traffic, then ask affiliate networks for feeds, competitors first, then crawled retailers. Only our own legal pages stay before launch (website ticket `about_and_legal_pages.md`, suggested contents listed). `tickets/affiliate_and_legal_check.md` rescoped.
@@ -253,28 +258,3 @@ Full entries: `archive/ecommerce-scraper/memory-archive.md` in the workspace rep
 - Checked with the scraper-pipeline and website sessions first: image filter live in dev; website's export change (releases/ + manifest, legacy keys kept) pending the user's OK, and it makes the cache refresh depend on `gold_site_nav`; prod dbt will run a pinned image (ECR rule for `prod-` needed then).
 - Flow: start check → registry seed + tests → crawl list from the registry (Ounass PLP-efficient; Level Shoes and Bloomingdale's via `--urls-source` CSVs the helper Lambda writes from Athena) → parallel crawls with `CRAWL_RUN_ID` → wait for verification → full dbt run → image pipeline → quality checker (flow-run, also on `_FAILED`; S3 trigger removed) → `dbt run --select silver_product_image_download_status+` → dbt test → summary. Images-only start too.
 - Recorded in `tickets/cicd_pipeline.md` step 3 (step 4 trimmed) and `docs/cicd_architecture.md`. Waiting on the user's registry URLs for the first test run.
-
-## 2026-11-09 - CI/CD step 2 done: dbt runs in AWS (dev)
-- scraper-pipeline pushed (with the other session's site-nav commits); first dbt image build passed. Cloud task: registry seed + tests, full run 24/24 with automatic dev cache refresh, full test 46/46; lock checked both ways.
-- Next: step 3, the state machine. Website image filter is built (other session) but not deployed to dev; deploy before step 3 runs.
-
-## 2026-11-09 - AGENTS.md: working alongside other agent sessions
-- Added a "Working Alongside Other Agents" section to `context/AGENTS.md`, matching scraper-pipeline `d47a6a6`: check for other sessions and worktrees before starting, send a heads-up before editing outside this repo or in claimed files, answer heads-ups with context, commit only your own files by path. The dbt-lock rule was left out (it applies to scraper-pipeline).
-
-## 2026-11-09 - CI/CD step 2: cloud dbt task built (not yet run)
-- scraper-pipeline: Dockerfile, image workflow, `terraform/dbt_job.tf` applied with `-target` (11 added: ECR, task, logs, SG, 3 IAM roles, user-approved), `make dbt-job-dev`. Dev API cache Lambda redeployed; first wrapper run (laptop) refreshed the cache, 23/23 models, 43/43 tests.
-- Next: GitHub variable `AWS_DBT_IMAGE_ROLE_ARN`, push scraper-pipeline `main`, test the cloud task. `docs/cicd_architecture.md` and step 2 updated.
-
-## 2026-11-09 - CI/CD step 2: dbt lock built (laptop side)
-- scraper-pipeline `scripts/dbt_job.py`: every table-writing dbt `make` target takes the S3 lock, renews it, refreshes the dev API cache when gold built (even if other models failed), then releases. Prod gets its own lock, no refresh. Checked in dev.
-- `docs/cicd_architecture.md` wrapper diagram updated (refresh on gold even when dbt fails; lock-lost path). Step 2 next: redeploy the dev API cache Lambda, then the cloud parts.
-
-## 2026-11-09 - CI/CD step 2: lock renewal and image filter decided
-- dbt lock is renewed every few minutes while dbt runs; a crashed run's lock expires within minutes. A run that finds its lock taken over stops.
-- The website API will hide products without images, so the cache refresh after the flow's first gold build is safe (no skip exception). Ticket: `../price-comparison-web/tickets/hide_products_without_images.md`, to build before step 3.
-- Updated `docs/cicd_architecture.md` (diagram, notes, change log) and `tickets/cicd_pipeline.md` step 2. Docs only.
-
-## 2026-11-09 - CI/CD step 2 plan agreed (not built)
-- Plan lives in scraper-pipeline `ticket/migrate-dbt-to-cloud-jobs.md`, "▶ Agreed plan". Dev only.
-- Decided (user): one S3 lock shared by laptop and cloud dbt runs; the API cache refreshes whenever gold builds, from the same wrapper, so the EventBridge rule stays off. Seen 2026-11-04: dev cache written Oct 29, dev gold rebuilt Nov 2.
-- `docs/cicd_architecture.md` gains the wrapper diagram (lock, run, cache refresh).
