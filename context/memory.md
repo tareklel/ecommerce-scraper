@@ -21,6 +21,9 @@ Full entries: `archive/ecommerce-scraper/memory-archive.md` in the workspace rep
 
 ## Log (last 10 entry days, newest first)
 
+## 2026-11-20 - Daily trial extended by 3 runs, regroup 2026-11-24
+- User decision after the trial's errors: daily runs 2026-11-21 to 2026-11-23 (`crawl_schedule_end_date` 2026-11-23T20:00Z in `infra/terraform/variables.tf`, targeted apply 0/1/0, status confirmed). Weekly-or-daily decided with the user on Tuesday 2026-11-24 (`tickets/cicd_pipeline.md` step 6).
+
 ## 2026-11-20 - Level Shoes details and Arabic size/fit captured again
 - Level Shoes changed its product page: detail bullets are now `<div data-testid="lineitems-item">` (was `<li>`), and the Arabic size/fit heading is `المقاس والتصميم` (was `المقاس والملاءمة`). So dev silver had details for 17 of 2,339 products and Arabic size/fit for none. `extract_product_details` in `level_rules.py` reads both layouts and headings; 2 tests on hand-written HTML in the new layout. Checked on live en/ar pages; takes effect from the next crawl. Old saved test pages (`tests/levels_html_fixtures/pdp/`) are all the old layout.
 

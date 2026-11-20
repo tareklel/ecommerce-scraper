@@ -303,8 +303,14 @@ price-comparison-web have no `.github/workflows`.
     Applied 2026-11-13 (targeted, with the helper's mapping-gaps change: 3
     added, 2 changed; re-plan clean); `make schedule-status`: ENABLED, ends
     2026-11-21 00:00 Dubai. First run 2026-11-14 02:00 Dubai.
-    **Next:** review the 7 runs, then switch to weekly (check the sold-out
-    cutoff first) and clear `crawl_schedule_end_date`.
+    **Extended 2026-11-20 (user):** the 7-day trial had errors (Cettire
+    search-key and Zyte 520 failures, Level Shoes details layout change), so 3
+    more daily runs, 2026-11-21 to 2026-11-23. `crawl_schedule_end_date` is now
+    2026-11-23T20:00Z (applied, targeted, 0/1/0; `make schedule-status`: ENABLED,
+    ends 2026-11-24 00:00 Dubai).
+    **Next:** regroup with the user on Tuesday 2026-11-24: review the 10 runs,
+    then decide weekly or daily (check the sold-out cutoff first) and clear or
+    move `crawl_schedule_end_date`. The prod data migration waits for this.
   - Crawls-only test run measured 2026-11-13 (`b3453a08-…`): about 9 minutes
     from start to email.
   - Config lives in this repo's Terraform: a new
