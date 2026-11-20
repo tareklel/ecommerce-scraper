@@ -226,7 +226,7 @@ QUERY = {"department": "women", "catQuery": "bags", "subCatQuery": ""}
 def test_a_saved_key_that_works_needs_no_zyte_request_and_is_not_rewritten(spider, monkeypatch, ssm):
     fake = FakeSearch(_site_key_then_search(rejected=()))
     monkeypatch.setattr(cettire_crawl.requests, "post", fake)
-    monkeypatch.setattr(spider, "_fetch_key_page_html_via_zyte", lambda: pytest.fail("no Zyte fetch expected"))
+    monkeypatch.setattr(spider, "_fetch_key_via_zyte", lambda: pytest.fail("no Zyte fetch expected"))
     spider._search(QUERY)
     spider._search(QUERY)
     assert ssm.puts == []
@@ -360,9 +360,43 @@ def test_key_page_fetch_retries_zyte_bans_across_pages(spider, monkeypatch):
 def test_key_page_fetch_gives_up_with_a_clear_error(spider, monkeypatch):
     monkeypatch.setenv("ZYTE_API_KEY", "zyte-key")
     monkeypatch.setattr(constants, "API_KEY_FETCH_ATTEMPTS", 3)
+    monkeypatch.setattr(constants, "API_KEY_PLAIN_ATTEMPTS", 2)
     monkeypatch.setattr(cettire_crawl.requests, "post", FakeSearch(lambda url, body, headers: FakeResponse(status=520)))
-    with pytest.raises(RuntimeError, match="3 attempts, last status 520"):
+    with pytest.raises(RuntimeError, match=r"3 attempts: 2 plain, 1 browser; last: status 520"):
         spider._refresh_api_key()
+
+
+def test_key_page_fetch_switches_to_browser_mode_after_the_plain_attempts(spider, monkeypatch, ssm):
+    monkeypatch.setenv("ZYTE_API_KEY", "zyte-key")
+    ssm.values.clear()
+    plain = constants.API_KEY_PLAIN_ATTEMPTS
+
+    def answer(url, body, headers):
+        if url != constants.ZYTE_EXTRACT_URL:
+            return FakeResponse(payload=search_payload(hits=[], vendor_facet={}))
+        if body.get("browserHtml"):
+            return FakeResponse(payload={"browserHtml": pdp_html(api_key="browser-key")})
+        return FakeResponse(status=520)
+
+    fake = FakeSearch(answer)
+    monkeypatch.setattr(cettire_crawl.requests, "post", fake)
+    spider._search(QUERY)
+
+    zyte = [c["json"] for c in fake.calls if c["url"] == constants.ZYTE_EXTRACT_URL]
+    assert [("browserHtml" in b, "httpResponseBody" in b) for b in zyte] == [(False, True)] * plain + [(True, False)]
+    assert fake.calls[-1]["headers"]["x-api-key"] == "browser-key"
+    assert ssm.values[constants.SEARCH_KEY_PARAMETER] == "browser-key"
+
+
+def test_a_page_without_the_key_is_retried(spider, monkeypatch):
+    monkeypatch.setenv("ZYTE_API_KEY", "zyte-key")
+    import base64
+    without = base64.b64encode(b"<html>challenge</html>").decode()
+    with_key = base64.b64encode(pdp_html(api_key="site-key").encode()).decode()
+    answers = iter([FakeResponse(payload={"httpResponseBody": without}),
+                    FakeResponse(payload={"httpResponseBody": with_key})])
+    monkeypatch.setattr(cettire_crawl.requests, "post", FakeSearch(lambda url, body, headers: next(answers)))
+    assert spider._refresh_api_key() == "site-key"
 
 
 def test_product_pages_off_yields_search_rows_without_any_request(spider, monkeypatch):

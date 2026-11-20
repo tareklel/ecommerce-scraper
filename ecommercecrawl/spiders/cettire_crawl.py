@@ -129,10 +129,12 @@ class CettireSpider(MasterCrawl, scrapy.Spider):
             self.logger.error(message)
             self.run_degradations.append({'kind': 'setup', 'scope': name, 'message': message})
 
-    def _fetch_key_page_html_via_zyte(self):
+    def _fetch_key_via_zyte(self):
         """
-        Plain-HTML fetch of a Cettire page through Zyte, for the search key.
-        Retried on Zyte's 520 "Website Ban", rotating over a few pages.
+        The search key from a Cettire page fetched through Zyte, rotating over
+        a few pages. Plain fetch first, then browser mode
+        (API_KEY_PLAIN_ATTEMPTS). Retried on Zyte's 520 "Website Ban" and on a
+        page without the key (e.g. a challenge page).
         """
         zyte_key = self._setting('ZYTE_API_KEY') or os.environ.get('ZYTE_API_KEY')
         if not zyte_key:
@@ -142,18 +144,29 @@ class CettireSpider(MasterCrawl, scrapy.Spider):
         for attempt in range(constants.API_KEY_FETCH_ATTEMPTS):
             if attempt:
                 time.sleep(constants.API_KEY_FETCH_PAUSE_SECONDS)
-            response = requests.post(
-                constants.ZYTE_EXTRACT_URL,
-                auth=(zyte_key, ''),
-                json={'url': urls[attempt % len(urls)], 'httpResponseBody': True},
-                timeout=180,
-            )
-            if response.status_code == 200:
-                return base64.b64decode(response.json().get('httpResponseBody') or '').decode('utf-8', 'replace')
-            last = response.status_code
+            browser = attempt >= constants.API_KEY_PLAIN_ATTEMPTS
+            body = {'url': urls[attempt % len(urls)]}
+            body['browserHtml' if browser else 'httpResponseBody'] = True
+            response = requests.post(constants.ZYTE_EXTRACT_URL, auth=(zyte_key, ''), json=body, timeout=180)
+            if response.status_code != 200:
+                last = f'status {response.status_code}'
+                continue
+            payload = response.json()
+            if browser:
+                html = payload.get('browserHtml') or ''
+            else:
+                html = base64.b64decode(payload.get('httpResponseBody') or '').decode('utf-8', 'replace')
+            key = rules.extract_search_api_key(html)
+            if key:
+                self.logger.info(f"Read the Cettire search key from {body['url']} "
+                                 f"({'browser' if browser else 'plain'} fetch, attempt {attempt + 1}).")
+                return key
+            last = 'page had no search key'
+        plain = min(constants.API_KEY_PLAIN_ATTEMPTS, constants.API_KEY_FETCH_ATTEMPTS)
         raise RuntimeError(
             f'Could not fetch a Cettire page through Zyte to read the search key '
-            f'({constants.API_KEY_FETCH_ATTEMPTS} attempts, last status {last}).'
+            f'({constants.API_KEY_FETCH_ATTEMPTS} attempts: {plain} plain, '
+            f'{constants.API_KEY_FETCH_ATTEMPTS - plain} browser; last: {last}).'
         )
 
     def _refresh_api_key(self):
@@ -161,9 +174,7 @@ class CettireSpider(MasterCrawl, scrapy.Spider):
         if self._api_key_refreshed:
             raise RuntimeError('Cettire search service rejected the key read from the site.')
         self._api_key_refreshed = True
-        key = rules.extract_search_api_key(self._fetch_key_page_html_via_zyte())
-        if not key:
-            raise RuntimeError('Cettire page config has no search key; the page layout may have changed.')
+        key = self._fetch_key_via_zyte()
         self._api_key = key
         self._save_api_key(key)
         return key

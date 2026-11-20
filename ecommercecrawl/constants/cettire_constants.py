@@ -52,6 +52,12 @@ API_KEY_PAGE_URLS = (
 API_KEY_CONFIG_FIELD = 'searchAIAPIKey'
 API_KEY_FETCH_ATTEMPTS = 12
 API_KEY_FETCH_PAUSE_SECONDS = 5.0
+# The first attempts use Zyte's plain fetch, the rest its browser mode. From
+# 2026-11-19 the plain fetch of these pages was refused 12 times out of 12 on
+# every try (it had needed 1-4 minutes of retries the nights before); browser
+# mode got through 2 of 2 in the 2026-11-14 probes. Browser requests cost
+# more, but this runs only when the saved key is missing or rejected.
+API_KEY_PLAIN_ATTEMPTS = 4
 ZYTE_EXTRACT_URL = 'https://api.zyte.com/v1/extract'
 # Where the search key is kept between runs (Parameter Store, SecureString).
 # The spider reads it at the start of a run and overwrites it whenever it had

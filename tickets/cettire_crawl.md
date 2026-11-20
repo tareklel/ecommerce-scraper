@@ -51,7 +51,10 @@ ticket for decisions and the work to do.
 - Search key: kept in Parameter Store, `/ecommerce-scraper/cettire/search-api-key`
   (SecureString; the crawler may read and write that one parameter only). Missing,
   unreadable or rejected (401/403): the spider reads the current key from a
-  Cettire page through Zyte (12 tries), saves it back and retries once. Zyte
+  Cettire page through Zyte (12 tries: 4 plain, then 8 in browser mode, because
+  the plain fetch of listing pages has been refused every time since 11-19;
+  `/sa/products/<id>` alone is "page not found", so product pages can't be
+  used without their full address), saves it back and retries once. Zyte
   refused throughout: the run fails. Key works but can't be saved: the run goes
   on and is `degraded` (`kind: setup`). Decided 2026-11-20 (user), after the
   11-20 run failed on 12 Zyte 520s reading the key; replaces the earlier
