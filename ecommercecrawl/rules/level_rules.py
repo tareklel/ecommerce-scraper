@@ -210,16 +210,24 @@ def extract_product_details(response) -> dict:
         desc = _norm_ws(' '.join(t for t in p_texts if t))
         if desc:
             description = desc
-        # Bullets from <ul data-testid="lineitems"> <li>
-        bullets = [_norm_ws(li) for li in root.css('ul[data-testid="lineitems"] li::text').getall()]
+        # Bullets inside <ul data-testid="lineitems">. Since about 2026-11 each
+        # bullet is a <div data-testid="lineitems-item"> (seen 2026-11-20); before
+        # that they were <li>. Read the new items first, the old <li> as fallback.
+        items = root.css('ul[data-testid="lineitems"] [data-testid="lineitems-item"]')
+        bullets = [_norm_ws(item.xpath('string()').get()) for item in items]
+        if not any(bullets):
+            bullets = [_norm_ws(li) for li in root.css('ul[data-testid="lineitems"] li::text').getall()]
         bullets = [b for b in bullets if b]
         if bullets:
             details = bullets
 
-    # Size and Fit accordion
+    # Size and Fit accordion. The Arabic heading changed to "المقاس والتصميم"
+    # (seen 2026-11-20); the old "المقاس والملاءمة" is kept in case it returns.
     sf_nodes = response.xpath(
         '//div[contains(@class,"accordion-root")]'
-        '[.//button//*[normalize-space()="Size and Fit" or normalize-space()="المقاس والملاءمة"]]'
+        '[.//button//*[normalize-space()="Size and Fit"'
+        ' or normalize-space()="المقاس والتصميم"'
+        ' or normalize-space()="المقاس والملاءمة"]]'
     )
     if sf_nodes:
         root = sf_nodes[0]

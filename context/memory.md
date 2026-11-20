@@ -21,6 +21,9 @@ Full entries: `archive/ecommerce-scraper/memory-archive.md` in the workspace rep
 
 ## Log (last 10 entry days, newest first)
 
+## 2026-11-20 - Level Shoes details and Arabic size/fit captured again
+- Level Shoes changed its product page: detail bullets are now `<div data-testid="lineitems-item">` (was `<li>`), and the Arabic size/fit heading is `المقاس والتصميم` (was `المقاس والملاءمة`). So dev silver had details for 17 of 2,339 products and Arabic size/fit for none. `extract_product_details` in `level_rules.py` reads both layouts and headings; 2 tests on hand-written HTML in the new layout. Checked on live en/ar pages; takes effect from the next crawl. Old saved test pages (`tests/levels_html_fixtures/pdp/`) are all the old layout.
+
 ## 2026-11-20 - Cettire search key kept in Parameter Store, renewed by the spider
 - The 11-20 Cettire run failed (`crash`, 0 rows): the key was never stored and Zyte got 520 on all 12 tries to read it from a page. Spider now reads `/ecommerce-scraper/cettire/search-api-key` (SecureString); missing/rejected -> read via Zyte and saved back; Zyte refused -> run fails; saved fails -> run goes on `degraded` (new kind `setup`). `CETTIRE_SEARCH_API_KEY` setting removed (user design).
 - Crawler task role may read/write that one parameter (`aws_iam_role_policy.ecs_task_cettire_search_key`, applied 1/0/0, user-approved). 7 new tests, 674 pass. Ticket, `docs/cicd_architecture.md`, `docs/crawl_run_status.md` updated.

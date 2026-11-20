@@ -252,6 +252,69 @@ def test_extract_product_details_returns_bullets_and_text():
     }
 
 
+def _pdp_response(html):
+    return HtmlResponse(
+        url="https://ar-saudi.levelshoes.com/product.html",
+        request=Request(url="https://ar-saudi.levelshoes.com/product.html"),
+        body=html,
+        encoding="utf-8",
+    )
+
+
+# Layout seen live on 2026-11-20: detail bullets are <div data-testid="lineitems-item">
+# inside the lineitems <ul> (not <li>), and the Arabic size/fit heading is
+# "المقاس والتصميم". Hand-written HTML; no downloaded page is committed.
+def test_extract_product_details_reads_div_line_items_and_size_fit_en():
+    html = """
+    <div class="accordion-root">
+      <button><span>Product Details</span></button>
+      <div class="accordion-details-root">
+        <p>A sculptural shoulder bag.</p>
+        <ul data-testid="lineitems">
+          <div data-testid="lineitems-item">SKU: 00079P10-CREAM</div>
+          <div data-testid="lineitems-item">Made in: <span>Italy</span></div>
+        </ul>
+      </div>
+    </div>
+    <div class="accordion-root">
+      <button><span>Size and Fit</span><span>cm</span></button>
+      <div class="accordion-details-root">
+        <ul><li>Dimensions: 12cm x 19cm x 20cm</li></ul>
+      </div>
+    </div>
+    """
+    assert rules.extract_product_details(_pdp_response(html)) == {
+        "description": "A sculptural shoulder bag.",
+        "details": ["SKU: 00079P10-CREAM", "Made in: Italy"],
+        "size_fit": ["Dimensions: 12cm x 19cm x 20cm"],
+    }
+
+
+def test_extract_product_details_reads_arabic_size_fit_heading():
+    html = """
+    <div class="accordion-root">
+      <button><span>تفاصيل المنتج</span></button>
+      <div class="accordion-details-root">
+        <p>حقيبة كتف.</p>
+        <ul data-testid="lineitems">
+          <div data-testid="lineitems-item">صُنع في: إيطاليا</div>
+        </ul>
+      </div>
+    </div>
+    <div class="accordion-root">
+      <button><span>المقاس والتصميم</span></button>
+      <div class="accordion-details-root">
+        <ul><li>المقاسات والأبعاد: 12 سم × 19 سم × 20 سم</li></ul>
+      </div>
+    </div>
+    """
+    assert rules.extract_product_details(_pdp_response(html)) == {
+        "description": "حقيبة كتف.",
+        "details": ["صُنع في: إيطاليا"],
+        "size_fit": ["المقاسات والأبعاد: 12 سم × 19 سم × 20 سم"],
+    }
+
+
 def test_extract_product_details_returns_none_when_missing():
     html = "<div class='other-section'>No product details here</div>"
     response = HtmlResponse(
