@@ -39,6 +39,9 @@ CETTIRE_FETCH_PRODUCT_PAGES = _env_bool("CETTIRE_FETCH_PRODUCT_PAGES", True)
 # (tab-separated, gzipped text files). An s3:// prefix or a local directory;
 # unset = the dbt location for APP_ENV in S3_BUCKET.
 CETTIRE_KNOWN_PRODUCTS_URI = os.getenv("CETTIRE_KNOWN_PRODUCTS_URI")
+# Where the spider keeps a few product addresses for the next search-key
+# renewal (unset: s3://<S3_BUCKET>/resources/cettire/key-pages.json).
+CETTIRE_KEY_PAGES_URI = os.getenv("CETTIRE_KEY_PAGES_URI")
 # At most this many product pages per run (~7.5 s each through Zyte), so the
 # one-off first pass over ~7,800 products spreads over a few nights instead
 # of one 16-hour crawl. 0 = no cap.

@@ -50,14 +50,21 @@ API_KEY_PAGE_URLS = (
     MAIN_SITE + '/sa/collections/womens-bags/tote-bags',
 )
 API_KEY_CONFIG_FIELD = 'searchAIAPIKey'
-API_KEY_FETCH_ATTEMPTS = 12
 API_KEY_FETCH_PAUSE_SECONDS = 5.0
-# The first attempts use Zyte's plain fetch, the rest its browser mode. From
-# 2026-11-19 the plain fetch of these pages was refused 12 times out of 12 on
-# every try (it had needed 1-4 minutes of retries the nights before); browser
-# mode got through 2 of 2 in the 2026-11-14 probes. Browser requests cost
-# more, but this runs only when the saved key is missing or rejected.
-API_KEY_PLAIN_ATTEMPTS = 4
+# Renewing the key (only when the saved one is missing or rejected): one plain
+# Zyte fetch per candidate page (product pages saved by the last good run
+# first, then the listing pages above; at least API_KEY_MIN_PLAIN_ATTEMPTS),
+# then API_KEY_BROWSER_ATTEMPTS in Zyte's browser mode over the same pages.
+# Product pages first: on 2026-11-17/18 they got through ~99% of the time
+# while the listing pages needed 1-4 minutes of retries, and from 2026-11-19
+# the listing pages were refused every time. On 2026-11-20 every page was
+# refused (plain and browser, TR geolocation too), hence the saved key.
+API_KEY_MIN_PLAIN_ATTEMPTS = 4
+API_KEY_BROWSER_ATTEMPTS = 8
+# Product addresses kept for the next key renewal, under S3_BUCKET. Written
+# by every run that got products (one file for all envs, like the key).
+KEY_PAGES_S3_KEY = 'resources/cettire/key-pages.json'
+KEY_PAGES_COUNT = 10
 ZYTE_EXTRACT_URL = 'https://api.zyte.com/v1/extract'
 # Where the search key is kept between runs (Parameter Store, SecureString).
 # The spider reads it at the start of a run and overwrites it whenever it had

@@ -1,6 +1,8 @@
 import base64
 import csv
 import gzip
+import hashlib
+import json
 import os
 import secrets
 import time
@@ -61,6 +63,9 @@ class CettireSpider(MasterCrawl, scrapy.Spider):
         self.listing_summaries = []
         # Skipped work, written into the manifest (degraded run).
         self.run_degradations = []
+        # Product addresses from this run, saved for the next key renewal.
+        self._key_page_urls = []
+        self._key_pages_saved = False
 
     # ------------------------------------------------------------ settings
 
@@ -89,11 +94,18 @@ class CettireSpider(MasterCrawl, scrapy.Spider):
 
     # The key lives in Parameter Store between runs. Lifecycle:
     #   stored and accepted          -> used, no Zyte request
-    #   missing, unreadable, or rejected -> read from a Cettire page via Zyte;
-    #       page fetch fails         -> the run fails
-    #       page fetch works         -> key saved back, run carries on
+    #   missing, unreadable, or rejected -> read from a Cettire page via Zyte
+    #       (product pages saved by the last good run, then listing pages;
+    #       plain fetch, then browser mode);
+    #       every page refused       -> the run fails
+    #       a page gives the key     -> key saved back, run carries on
     #       ...but saving fails      -> run carries on, marked degraded
     # The crawler may read and write this one parameter only (iam_ecs.tf).
+    # Logs show a short fingerprint of the key, never the key itself.
+
+    @staticmethod
+    def _fingerprint(key):
+        return hashlib.sha256(key.encode()).hexdigest()[:8]
 
     def _key_parameter_name(self):
         return self._setting('CETTIRE_SEARCH_KEY_PARAMETER') or constants.SEARCH_KEY_PARAMETER
@@ -109,7 +121,10 @@ class CettireSpider(MasterCrawl, scrapy.Spider):
         name = self._key_parameter_name()
         try:
             found = self._ssm_client().get_parameter(Name=name, WithDecryption=True)
-            return found['Parameter']['Value'] or None
+            key = found['Parameter']['Value'] or None
+            if key:
+                self.logger.info(f'Using the saved Cettire search key (fingerprint {self._fingerprint(key)}).')
+            return key
         except Exception as exc:  # noqa: BLE001 - missing or unreadable both mean "read it from the site"
             if type(exc).__name__ == 'ParameterNotFound':
                 self.logger.info(f'No Cettire search key saved at {name} yet.')
@@ -122,30 +137,93 @@ class CettireSpider(MasterCrawl, scrapy.Spider):
         name = self._key_parameter_name()
         try:
             self._ssm_client().put_parameter(Name=name, Value=key, Type='SecureString', Overwrite=True)
-            self.logger.info(f'Saved the new Cettire search key to {name}.')
+            self.logger.info(f'Saved the new Cettire search key (fingerprint {self._fingerprint(key)}) to {name}.')
         except Exception as exc:  # noqa: BLE001 - the run has a working key; flag it and go on
             message = (f'Could not save the new Cettire search key to {name} ({type(exc).__name__}); '
                        f'the next run will read it from the site again.')
             self.logger.error(message)
             self.run_degradations.append({'kind': 'setup', 'scope': name, 'message': message})
 
+    # ---- product addresses for the next renewal
+
+    def _key_pages_uri(self):
+        uri = self._setting('CETTIRE_KEY_PAGES_URI')
+        if uri:
+            return uri
+        bucket = self._setting('S3_BUCKET') or os.environ.get('S3_BUCKET')
+        return f's3://{bucket}/{constants.KEY_PAGES_S3_KEY}' if bucket else None
+
+    def _read_key_pages(self):
+        """Product addresses saved by the last good run; [] when none or unreadable."""
+        uri = self._key_pages_uri()
+        if not uri:
+            return []
+        try:
+            if uri.startswith('s3://'):
+                import boto3
+                bucket, _, key = uri[len('s3://'):].partition('/')
+                text = boto3.client('s3').get_object(Bucket=bucket, Key=key)['Body'].read().decode('utf-8')
+            elif os.path.isfile(uri):
+                with open(uri, encoding='utf-8') as f:
+                    text = f.read()
+            else:
+                return []
+            urls = json.loads(text).get('urls') or []
+            return [u for u in urls if isinstance(u, str) and rules.is_pdp(u)]
+        except Exception as exc:  # noqa: BLE001 - no saved pages just means listing pages only
+            self.logger.warning(f'Could not read saved Cettire product addresses from {uri}: {exc}')
+            return []
+
+    def _save_key_pages(self):
+        """Keep a few of this run's product addresses for the next key renewal."""
+        uri = self._key_pages_uri()
+        if self._key_pages_saved or not self._key_page_urls or not uri:
+            return
+        self._key_pages_saved = True
+        text = json.dumps({'run_id': self.run_id, 'urls': self._key_page_urls}, indent=1)
+        try:
+            if uri.startswith('s3://'):
+                import boto3
+                bucket, _, key = uri[len('s3://'):].partition('/')
+                boto3.client('s3').put_object(Bucket=bucket, Key=key, Body=text.encode('utf-8'),
+                                              ContentType='application/json')
+            else:
+                with open(uri, 'w', encoding='utf-8') as f:
+                    f.write(text)
+            self.logger.info(f'Saved {len(self._key_page_urls)} Cettire product addresses to {uri} for key renewal.')
+        except Exception as exc:  # noqa: BLE001 - the previous run's addresses stay; never stops the run
+            self.logger.warning(f'Could not save Cettire product addresses to {uri}: {exc}')
+
+    def _key_page_candidates(self):
+        """Pages to read the key from: saved product pages first, then listing pages."""
+        urls = []
+        for url in self._read_key_pages() + list(constants.API_KEY_PAGE_URLS):
+            if url not in urls:
+                urls.append(url)
+        return urls
+
+    # ---- reading the key from a page
+
     def _fetch_key_via_zyte(self):
         """
-        The search key from a Cettire page fetched through Zyte, rotating over
-        a few pages. Plain fetch first, then browser mode
-        (API_KEY_PLAIN_ATTEMPTS). Retried on Zyte's 520 "Website Ban" and on a
-        page without the key (e.g. a challenge page).
+        The search key from a Cettire page fetched through Zyte: one plain
+        fetch per candidate page (at least API_KEY_MIN_PLAIN_ATTEMPTS, rotating),
+        then API_KEY_BROWSER_ATTEMPTS in browser mode. Moves on after Zyte's
+        520 "Website Ban" and after a page without the key (e.g. a challenge
+        page or a product that is gone).
         """
         zyte_key = self._setting('ZYTE_API_KEY') or os.environ.get('ZYTE_API_KEY')
         if not zyte_key:
             raise RuntimeError('ZYTE_API_KEY is not set; cannot read the Cettire search key from a page.')
-        urls = constants.API_KEY_PAGE_URLS
+        urls = self._key_page_candidates()
+        plain = max(len(urls), constants.API_KEY_MIN_PLAIN_ATTEMPTS)
+        total = plain + constants.API_KEY_BROWSER_ATTEMPTS
         last = None
-        for attempt in range(constants.API_KEY_FETCH_ATTEMPTS):
+        for attempt in range(total):
             if attempt:
                 time.sleep(constants.API_KEY_FETCH_PAUSE_SECONDS)
-            browser = attempt >= constants.API_KEY_PLAIN_ATTEMPTS
-            body = {'url': urls[attempt % len(urls)]}
+            browser = attempt >= plain
+            body = {'url': urls[(attempt - plain if browser else attempt) % len(urls)]}
             body['browserHtml' if browser else 'httpResponseBody'] = True
             response = requests.post(constants.ZYTE_EXTRACT_URL, auth=(zyte_key, ''), json=body, timeout=180)
             if response.status_code != 200:
@@ -158,15 +236,16 @@ class CettireSpider(MasterCrawl, scrapy.Spider):
                 html = base64.b64decode(payload.get('httpResponseBody') or '').decode('utf-8', 'replace')
             key = rules.extract_search_api_key(html)
             if key:
-                self.logger.info(f"Read the Cettire search key from {body['url']} "
-                                 f"({'browser' if browser else 'plain'} fetch, attempt {attempt + 1}).")
+                self.logger.info(f"Read the Cettire search key (fingerprint {self._fingerprint(key)}) from "
+                                 f"{body['url']} ({'browser' if browser else 'plain'} fetch, attempt {attempt + 1}).")
                 return key
             last = 'page had no search key'
-        plain = min(constants.API_KEY_PLAIN_ATTEMPTS, constants.API_KEY_FETCH_ATTEMPTS)
+        product_pages = len(urls) - len(constants.API_KEY_PAGE_URLS)
         raise RuntimeError(
             f'Could not fetch a Cettire page through Zyte to read the search key '
-            f'({constants.API_KEY_FETCH_ATTEMPTS} attempts: {plain} plain, '
-            f'{constants.API_KEY_FETCH_ATTEMPTS - plain} browser; last: {last}).'
+            f'({total} attempts over {product_pages} saved product page(s) and '
+            f'{len(constants.API_KEY_PAGE_URLS)} listing pages: {plain} plain, '
+            f'{constants.API_KEY_BROWSER_ATTEMPTS} browser; last: {last}).'
         )
 
     def _refresh_api_key(self):
@@ -252,6 +331,9 @@ class CettireSpider(MasterCrawl, scrapy.Spider):
                    'over_cap_so_far': self.product_pages_over_cap}
         self.listing_summaries.append(summary)
         self.logger.info(f'Cettire listing summary: {summary}')
+        # This run's products are live on the site: keep a few addresses for
+        # the next key renewal (once per run).
+        self._save_key_pages()
         if not self.limit and received < expected:
             # The service returns slightly fewer products than its own counts
             # (about 1.5% in the 2026-11-14 probe; cause unknown).
@@ -269,6 +351,8 @@ class CettireSpider(MasterCrawl, scrapy.Spider):
         if item_id in self._seen_ids:
             return
         self._seen_ids.add(item_id)
+        if len(self._key_page_urls) < constants.KEY_PAGES_COUNT:
+            self._key_page_urls.append(rows[0]['url'])
         known = self._known_products()
         if known and item_id in known:
             # Page already read on an earlier run: never fetch it again.

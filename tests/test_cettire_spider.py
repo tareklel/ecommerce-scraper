@@ -82,6 +82,8 @@ def spider(monkeypatch, tmp_path, ssm):
         # An empty known-products list: nothing read yet.
         "CETTIRE_KNOWN_PRODUCTS_URI": str(known),
         "CETTIRE_MAX_PRODUCT_PAGES": 0,
+        # Product addresses for key renewal: a local file, none saved yet.
+        "CETTIRE_KEY_PAGES_URI": str(tmp_path / "key-pages.json"),
     }
     return s
 
@@ -359,17 +361,18 @@ def test_key_page_fetch_retries_zyte_bans_across_pages(spider, monkeypatch):
 
 def test_key_page_fetch_gives_up_with_a_clear_error(spider, monkeypatch):
     monkeypatch.setenv("ZYTE_API_KEY", "zyte-key")
-    monkeypatch.setattr(constants, "API_KEY_FETCH_ATTEMPTS", 3)
-    monkeypatch.setattr(constants, "API_KEY_PLAIN_ATTEMPTS", 2)
+    monkeypatch.setattr(constants, "API_KEY_MIN_PLAIN_ATTEMPTS", 2)
+    monkeypatch.setattr(constants, "API_KEY_BROWSER_ATTEMPTS", 1)
     monkeypatch.setattr(cettire_crawl.requests, "post", FakeSearch(lambda url, body, headers: FakeResponse(status=520)))
-    with pytest.raises(RuntimeError, match=r"3 attempts: 2 plain, 1 browser; last: status 520"):
+    with pytest.raises(RuntimeError, match=r"4 attempts over 0 saved product page\(s\) and 3 listing pages: "
+                                           r"3 plain, 1 browser; last: status 520"):
         spider._refresh_api_key()
 
 
 def test_key_page_fetch_switches_to_browser_mode_after_the_plain_attempts(spider, monkeypatch, ssm):
     monkeypatch.setenv("ZYTE_API_KEY", "zyte-key")
     ssm.values.clear()
-    plain = constants.API_KEY_PLAIN_ATTEMPTS
+    plain = max(len(constants.API_KEY_PAGE_URLS), constants.API_KEY_MIN_PLAIN_ATTEMPTS)
 
     def answer(url, body, headers):
         if url != constants.ZYTE_EXTRACT_URL:
@@ -491,3 +494,73 @@ def test_known_list_defaults_to_the_dbt_location(monkeypatch):
     s = CettireSpider()
     s.settings = {"S3_BUCKET": "bucket-x"}
     assert s._known_products_uri() == "s3://bucket-x/dbt/dev/gold_cettire_pdp_known/"
+
+
+# ---------------------------------------------------------------- key renewal from product pages
+
+def _product_url(n):
+    return f"https://www.cettire.com/sa/products/acme-bag-90000000{n}"
+
+
+def test_a_listing_saves_a_few_product_addresses_once(spider, monkeypatch, tmp_path):
+    import json
+    monkeypatch.setattr(constants, "KEY_PAGES_COUNT", 2)
+    spider.settings["CETTIRE_FETCH_PRODUCT_PAGES"] = False
+    hits = {"Acme": [_hit(1), _hit(2), _hit(3)]}
+    monkeypatch.setattr(cettire_crawl.requests, "post", FakeSearch(_facets_then_groups({"Acme": 3}, hits)))
+    list(spider.handle_plp_url(LISTING))
+
+    saved = json.loads((tmp_path / "key-pages.json").read_text())
+    assert saved["urls"] == [_product_url(1), _product_url(2)]
+    # A second listing in the same run does not rewrite it.
+    (tmp_path / "key-pages.json").write_text('{"urls": []}')
+    list(spider.handle_plp_url(LISTING))
+    assert json.loads((tmp_path / "key-pages.json").read_text())["urls"] == []
+
+
+def test_renewal_tries_saved_product_pages_before_listing_pages(spider, monkeypatch, ssm, tmp_path, caplog):
+    import base64
+    import json
+    import logging
+    ssm.values.clear()
+    monkeypatch.setenv("ZYTE_API_KEY", "zyte-key")
+    (tmp_path / "key-pages.json").write_text(json.dumps({"urls": [_product_url(1), _product_url(2)]}))
+
+    def answer(url, body, headers):
+        if url != constants.ZYTE_EXTRACT_URL:
+            return FakeResponse(payload=search_payload(hits=[], vendor_facet={}))
+        if body["url"] == _product_url(2):
+            page = base64.b64encode(pdp_html(api_key="product-page-key").encode()).decode()
+            return FakeResponse(payload={"httpResponseBody": page})
+        return FakeResponse(status=520)
+
+    fake = FakeSearch(answer)
+    monkeypatch.setattr(cettire_crawl.requests, "post", fake)
+    with caplog.at_level(logging.INFO):
+        spider._search(QUERY)
+
+    zyte_urls = [c["json"]["url"] for c in fake.calls if c["url"] == constants.ZYTE_EXTRACT_URL]
+    assert zyte_urls == [_product_url(1), _product_url(2)]
+    assert ssm.values[constants.SEARCH_KEY_PARAMETER] == "product-page-key"
+    # The logs carry a fingerprint, never the key.
+    fingerprint = CettireSpider._fingerprint("product-page-key")
+    assert fingerprint in caplog.text and "product-page-key" not in caplog.text
+
+
+def test_renewal_candidates_are_product_pages_then_listing_pages(spider, tmp_path):
+    import json
+    (tmp_path / "key-pages.json").write_text(json.dumps(
+        {"urls": [_product_url(1), "https://www.cettire.com/sa/collections/womens-bags", "not a url"]}))
+    assert spider._key_page_candidates() == [_product_url(1)] + list(constants.API_KEY_PAGE_URLS)
+
+
+def test_an_unreadable_address_file_falls_back_to_listing_pages(spider, tmp_path):
+    (tmp_path / "key-pages.json").write_text("not json")
+    assert spider._key_page_candidates() == list(constants.API_KEY_PAGE_URLS)
+
+
+def test_the_saved_key_is_logged_by_fingerprint_only(spider, caplog):
+    import logging
+    with caplog.at_level(logging.INFO):
+        assert spider._get_api_key() == "stored-key"
+    assert CettireSpider._fingerprint("stored-key") in caplog.text and "stored-key" not in caplog.text

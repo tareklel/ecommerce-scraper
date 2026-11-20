@@ -333,6 +333,7 @@ lives in AWS alone, so pausing doesn't need a commit.
 | Run email "Counts to check" limits | `COUNT_DROP_SHARE` (10%), `COUNT_CHECK_MIN_PREVIOUS` (50), `ZYTE_COST_RISE_FACTOR` (2), `ZYTE_COST_CHECK_MIN_USD` ($1) | `lambda/crawl_flow_helper/handler.py` | commit, push, targeted apply of the helper Lambda |
 | Zyte usage key | `/ecommerce-scraper/zyte-stats/api-key`, `/ecommerce-scraper/zyte-stats/organization-id` | AWS Parameter Store only | by hand (console), never in Git or Terraform |
 | Cettire search key | `/ecommerce-scraper/cettire/search-api-key` | AWS Parameter Store only | the Cettire spider, when the saved key is missing or rejected; never in Git or Terraform |
+| Pages to renew that key from | `resources/cettire/key-pages.json` (up to 10 product addresses) | S3 bucket | the Cettire spider, every run that got products |
 
 ---
 

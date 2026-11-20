@@ -51,10 +51,14 @@ ticket for decisions and the work to do.
 - Search key: kept in Parameter Store, `/ecommerce-scraper/cettire/search-api-key`
   (SecureString; the crawler may read and write that one parameter only). Missing,
   unreadable or rejected (401/403): the spider reads the current key from a
-  Cettire page through Zyte (12 tries: 4 plain, then 8 in browser mode, because
-  the plain fetch of listing pages has been refused every time since 11-19;
-  `/sa/products/<id>` alone is "page not found", so product pages can't be
-  used without their full address), saves it back and retries once.
+  Cettire page through Zyte, saves it back and retries once. Pages tried, in
+  order: up to 10 product addresses saved by the last run that got products
+  (`s3://<bucket>/resources/cettire/key-pages.json`, written after the first
+  listing of every run), then the three listing pages; one plain fetch each
+  (at least 4), then 8 in browser mode. Product pages first because they got
+  through ~99% on 11-17/18 while listing pages failed from 11-19;
+  `/sa/products/<id>` alone is "page not found", so the full address is kept.
+  Logs show a key fingerprint (first 8 of its SHA-256), never the key.
 - 2026-11-20 state: Zyte is refused on every Cettire page tried (listing
   pages plain and browser, a product page plain, a listing page plain with
   geolocation TR: all 520). The first key was loaded by hand (user-approved)
@@ -63,9 +67,9 @@ ticket for decisions and the work to do.
   (`--limit 1`, uploads off) read it from Parameter Store, made no Zyte
   request, wrote 38 rows, quality pass. So the key lasted at least 6 days.
   While Zyte is refused, new products' pages fail and are written from search
-  data. Proposed, not built: renew from ~10 product addresses saved by the
-  last good run before the listing pages; log a key fingerprint on renewal;
-  a second proxy (Oxylabs settings exist, account status unknown). Zyte
+  data. Built the same day: renewal from saved product addresses and the
+  fingerprint log (above). Still open: a second proxy as another renewal route
+  (Oxylabs settings exist, account status unknown). Zyte
   refused throughout: the run fails. Key works but can't be saved: the run goes
   on and is `degraded` (`kind: setup`). Decided 2026-11-20 (user), after the
   11-20 run failed on 12 Zyte 520s reading the key; replaces the earlier
