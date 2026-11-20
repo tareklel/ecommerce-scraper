@@ -48,7 +48,7 @@ ticket for decisions and the work to do.
 | `text` | none | EN row only: `details` (feature bullets, composition, made in), `size_fit` (dimensions). `description` stays `None`: Cettire has no prose paragraph |
 | `primary_label` | none | none |
 
-- Search key: kept in Parameter Store, `/ecommerce-scraper/cettire/search-api-key`
+- Search key (full description: `docs/cettire_search_key.md`): kept in Parameter Store, `/ecommerce-scraper/cettire/search-api-key`
   (SecureString; the crawler may read and write that one parameter only). Missing,
   unreadable or rejected (401/403): the spider reads the current key from a
   Cettire page through Zyte, saves it back and retries once. Pages tried, in

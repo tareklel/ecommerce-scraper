@@ -26,6 +26,7 @@ Full entries: `archive/ecommerce-scraper/memory-archive.md` in the workspace rep
 - Crawler task role may read/write that one parameter (`aws_iam_role_policy.ecs_task_cettire_search_key`, applied 1/0/0, user-approved). 7 new tests, 674 pass. Ticket, `docs/cicd_architecture.md`, `docs/crawl_run_status.md` updated.
 - Then Zyte refused every Cettire page (listing plain + browser fallback `e2e9dae`, a product page, TR geolocation). First key loaded by hand from the 11-14 probe pages (user-approved, fingerprint `51200e93`); still accepted: dev test run read it from Parameter Store, no Zyte, 38 rows, quality pass. Next proposed: renew from saved product addresses, fingerprint log.
 - Built: renewal tries up to 10 product addresses saved by the last run (`s3://<bucket>/resources/cettire/key-pages.json`, no new IAM: bucket write already allowed) before the listing pages, plain then browser; key logged by fingerprint only. 681 tests pass.
+- Documented in `docs/cettire_search_key.md` (user: "i dont want to guess it next time"); `context/AGENTS.md` now requires that doc to change with the behaviour.
 
 ## 2026-11-19 - Affiliate and legal check deferred until after launch
 - User decision: no affiliate or terms research before launch ("do things first, ask forgiveness later"); launch, get traffic, then ask affiliate networks for feeds, competitors first, then crawled retailers. Only our own legal pages stay before launch (website ticket `about_and_legal_pages.md`, suggested contents listed). `tickets/affiliate_and_legal_check.md` rescoped.
