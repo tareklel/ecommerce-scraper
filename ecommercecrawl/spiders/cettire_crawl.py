@@ -59,6 +59,8 @@ class CettireSpider(MasterCrawl, scrapy.Spider):
         self._device_info = {'sessionId': str(uuid.uuid4()), 'deviceId': secrets.token_hex(32)}
         # Per-listing counts for the completeness check, logged at the end.
         self.listing_summaries = []
+        # Skipped work, written into the manifest (degraded run).
+        self.run_degradations = []
 
     # ------------------------------------------------------------ settings
 
@@ -85,8 +87,47 @@ class CettireSpider(MasterCrawl, scrapy.Spider):
 
     # ------------------------------------------------------------ search key
 
+    # The key lives in Parameter Store between runs. Lifecycle:
+    #   stored and accepted          -> used, no Zyte request
+    #   missing, unreadable, or rejected -> read from a Cettire page via Zyte;
+    #       page fetch fails         -> the run fails
+    #       page fetch works         -> key saved back, run carries on
+    #       ...but saving fails      -> run carries on, marked degraded
+    # The crawler may read and write this one parameter only (iam_ecs.tf).
+
+    def _key_parameter_name(self):
+        return self._setting('CETTIRE_SEARCH_KEY_PARAMETER') or constants.SEARCH_KEY_PARAMETER
+
+    def _ssm_client(self):
+        import boto3
+        region = (os.environ.get('AWS_REGION') or os.environ.get('AWS_DEFAULT_REGION')
+                  or constants.SEARCH_KEY_PARAMETER_REGION)
+        return boto3.client('ssm', region_name=region)
+
     def _stored_api_key(self):
-        return self._setting('CETTIRE_SEARCH_API_KEY') or os.environ.get('CETTIRE_SEARCH_API_KEY')
+        """The saved key, or None when there is none or it can't be read."""
+        name = self._key_parameter_name()
+        try:
+            found = self._ssm_client().get_parameter(Name=name, WithDecryption=True)
+            return found['Parameter']['Value'] or None
+        except Exception as exc:  # noqa: BLE001 - missing or unreadable both mean "read it from the site"
+            if type(exc).__name__ == 'ParameterNotFound':
+                self.logger.info(f'No Cettire search key saved at {name} yet.')
+            else:
+                self.logger.warning(f'Could not read the Cettire search key from {name}: {exc}')
+            return None
+
+    def _save_api_key(self, key):
+        """Overwrite the saved key. A failed save never stops the run."""
+        name = self._key_parameter_name()
+        try:
+            self._ssm_client().put_parameter(Name=name, Value=key, Type='SecureString', Overwrite=True)
+            self.logger.info(f'Saved the new Cettire search key to {name}.')
+        except Exception as exc:  # noqa: BLE001 - the run has a working key; flag it and go on
+            message = (f'Could not save the new Cettire search key to {name} ({type(exc).__name__}); '
+                       f'the next run will read it from the site again.')
+            self.logger.error(message)
+            self.run_degradations.append({'kind': 'setup', 'scope': name, 'message': message})
 
     def _fetch_key_page_html_via_zyte(self):
         """
@@ -124,6 +165,7 @@ class CettireSpider(MasterCrawl, scrapy.Spider):
         if not key:
             raise RuntimeError('Cettire page config has no search key; the page layout may have changed.')
         self._api_key = key
+        self._save_api_key(key)
         return key
 
     def _get_api_key(self):
@@ -131,7 +173,7 @@ class CettireSpider(MasterCrawl, scrapy.Spider):
             return self._api_key
         self._api_key = self._stored_api_key()
         if not self._api_key:
-            self.logger.info('No stored Cettire search key (CETTIRE_SEARCH_API_KEY); reading it from the site.')
+            self.logger.info('No saved Cettire search key; reading it from the site.')
             self._refresh_api_key()
         return self._api_key
 
@@ -152,8 +194,7 @@ class CettireSpider(MasterCrawl, scrapy.Spider):
         response = self._post_search(body)
         if response.status_code in (401, 403):
             self.logger.warning(
-                'Cettire search service rejected the stored key; reading the current one from the site. '
-                'Update CETTIRE_SEARCH_API_KEY.'
+                'Cettire search service rejected the saved key; reading the current one from the site.'
             )
             self._refresh_api_key()
             response = self._post_search(body)

@@ -48,9 +48,14 @@ ticket for decisions and the work to do.
 | `text` | none | EN row only: `details` (feature bullets, composition, made in), `size_fit` (dimensions). `description` stays `None`: Cettire has no prose paragraph |
 | `primary_label` | none | none |
 
-- Search key: `CETTIRE_SEARCH_API_KEY` is optional. Missing or rejected
-  (401/403): the spider reads the current key from one Cettire page through
-  Zyte, retries once, and logs that the stored key should be updated.
+- Search key: kept in Parameter Store, `/ecommerce-scraper/cettire/search-api-key`
+  (SecureString; the crawler may read and write that one parameter only). Missing,
+  unreadable or rejected (401/403): the spider reads the current key from a
+  Cettire page through Zyte (12 tries), saves it back and retries once. Zyte
+  refused throughout: the run fails. Key works but can't be saved: the run goes
+  on and is `degraded` (`kind: setup`). Decided 2026-11-20 (user), after the
+  11-20 run failed on 12 Zyte 520s reading the key; replaces the earlier
+  `CETTIRE_SEARCH_API_KEY` setting.
 - A product page that fails or has no data does not drop the product: its
   rows are written from the search data.
 - `--limit N`: at most N brand groups per listing and 20 products per call.
@@ -159,9 +164,8 @@ then the efficient crawl built on a gold export, like Ounass.**
 
 Smaller items, any time:
 
-- Stored search key: add `CETTIRE_SEARCH_API_KEY` to the crawler secret and
-  `ecs_secret_env_keys` (infra, needs approval). Without it each run spends
-  about 2 to 3.5 minutes reading the key through Zyte.
+- ~~Stored search key~~: done 2026-11-20, in Parameter Store and renewed by
+  the spider itself (see "Search key" above).
 - The completeness shortfall is only logged; make it a degradation in the
   manifest.
 - Confirm the stock finding in a browser from a Saudi connection (product

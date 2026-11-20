@@ -20,9 +20,11 @@ CETTIRE_URLS_PATH = "resources/cettire_urls.csv"
 # Brands to crawl on Cettire, one name per row as Cettire spells it. Cettire
 # lists far more brands than our other sites (tickets/cettire_crawl.md).
 CETTIRE_BRAND_ALLOWLIST_PATH = "resources/cettire_brand_allowlist.csv"
-# Key for Cettire's search service. Optional: when unset or rejected, the
-# spider reads the current key from a Cettire page (one Zyte request).
-CETTIRE_SEARCH_API_KEY = os.getenv("CETTIRE_SEARCH_API_KEY")
+# Parameter Store name holding the key for Cettire's search service (unset:
+# cettire_constants.SEARCH_KEY_PARAMETER). The spider reads it at the start of
+# a run; when it is missing or rejected, it reads the current key from a
+# Cettire page (Zyte) and saves it back there.
+CETTIRE_SEARCH_KEY_PARAMETER = os.getenv("CETTIRE_SEARCH_KEY_PARAMETER")
 # Cettire product pages (Zyte, ~7.5 s each) add only the full gallery and the
 # English copy; the search service already gives names in both languages,
 # price, stock and 3-4 images. On (user decision 2026-11-16) now that the

@@ -35,13 +35,45 @@ class FakeSearch:
         return self.answer(url, json, headers)
 
 
+class ParameterNotFound(Exception):
+    """Same class name as boto3's, which is all the spider looks at."""
+
+
+class FakeSSM:
+    """Stands in for the Parameter Store client: one dict, optional failures."""
+
+    def __init__(self, values=None, fail_get=None, fail_put=None):
+        self.values = dict(values or {})
+        self.fail_get = fail_get
+        self.fail_put = fail_put
+        self.puts = []
+
+    def get_parameter(self, Name, WithDecryption=False):
+        if self.fail_get:
+            raise self.fail_get
+        if Name not in self.values:
+            raise ParameterNotFound(Name)
+        return {"Parameter": {"Name": Name, "Value": self.values[Name]}}
+
+    def put_parameter(self, Name, Value, Type, Overwrite):
+        self.puts.append({"Name": Name, "Value": Value, "Type": Type, "Overwrite": Overwrite})
+        if self.fail_put:
+            raise self.fail_put
+        self.values[Name] = Value
+
+
 @pytest.fixture
-def spider(monkeypatch, tmp_path):
+def ssm():
+    return FakeSSM({constants.SEARCH_KEY_PARAMETER: "stored-key"})
+
+
+@pytest.fixture
+def spider(monkeypatch, tmp_path, ssm):
     monkeypatch.setattr(cettire_crawl.time, "sleep", lambda s: None)
-    monkeypatch.setenv("CETTIRE_SEARCH_API_KEY", "stored-key")
     allowlist = tmp_path / "allow.csv"
     allowlist.write_text("brand\nAcme\nBeta\n", encoding="utf-8")
     s = CettireSpider()
+    monkeypatch.setattr(s, "_ssm_client", lambda: ssm)
     known = tmp_path / "known"
     known.mkdir()
     s.settings = {
@@ -153,8 +185,8 @@ def test_a_key_rejected_after_refresh_stops_the_crawl(spider, monkeypatch):
         spider._search(query)
 
 
-def test_no_stored_key_reads_it_from_the_site(spider, monkeypatch):
-    monkeypatch.delenv("CETTIRE_SEARCH_API_KEY")
+def test_no_stored_key_reads_it_from_the_site(spider, monkeypatch, ssm):
+    ssm.values.clear()
     monkeypatch.setenv("ZYTE_API_KEY", "zyte-key")
     import base64
 
@@ -168,6 +200,83 @@ def test_no_stored_key_reads_it_from_the_site(spider, monkeypatch):
     monkeypatch.setattr(cettire_crawl.requests, "post", fake)
     spider._search({"department": "women", "catQuery": "bags", "subCatQuery": ""})
     assert fake.calls[-1]["headers"]["x-api-key"] == "site-key"
+    # Saved for the next run.
+    assert ssm.values[constants.SEARCH_KEY_PARAMETER] == "site-key"
+    assert ssm.puts[0]["Type"] == "SecureString" and ssm.puts[0]["Overwrite"] is True
+
+
+def _site_key_then_search(site_key="site-key", zyte_status=200, rejected=("stored-key",)):
+    import base64
+
+    def answer(url, body, headers):
+        if url == constants.ZYTE_EXTRACT_URL:
+            if zyte_status != 200:
+                return FakeResponse(status=zyte_status)
+            page = base64.b64encode(pdp_html(api_key=site_key).encode()).decode()
+            return FakeResponse(payload={"httpResponseBody": page})
+        if headers["x-api-key"] in rejected:
+            return FakeResponse(status=403)
+        return FakeResponse(payload=search_payload(hits=[], vendor_facet={}))
+    return answer
+
+
+QUERY = {"department": "women", "catQuery": "bags", "subCatQuery": ""}
+
+
+def test_a_saved_key_that_works_needs_no_zyte_request_and_is_not_rewritten(spider, monkeypatch, ssm):
+    fake = FakeSearch(_site_key_then_search(rejected=()))
+    monkeypatch.setattr(cettire_crawl.requests, "post", fake)
+    monkeypatch.setattr(spider, "_fetch_key_page_html_via_zyte", lambda: pytest.fail("no Zyte fetch expected"))
+    spider._search(QUERY)
+    spider._search(QUERY)
+    assert ssm.puts == []
+    assert [c["headers"]["x-api-key"] for c in fake.calls] == ["stored-key", "stored-key"]
+
+
+def test_a_rejected_key_is_replaced_in_parameter_store(spider, monkeypatch, ssm):
+    monkeypatch.setenv("ZYTE_API_KEY", "zyte-key")
+    monkeypatch.setattr(cettire_crawl.requests, "post", FakeSearch(_site_key_then_search("fresh-key")))
+    spider._search(QUERY)
+    assert ssm.values[constants.SEARCH_KEY_PARAMETER] == "fresh-key"
+    assert spider.run_degradations == []
+
+
+def test_no_new_key_from_zyte_fails_the_run_and_keeps_the_saved_key(spider, monkeypatch, ssm):
+    monkeypatch.setenv("ZYTE_API_KEY", "zyte-key")
+    monkeypatch.setattr(cettire_crawl.requests, "post", FakeSearch(_site_key_then_search(zyte_status=520)))
+    with pytest.raises(RuntimeError, match="Could not fetch a Cettire page through Zyte"):
+        spider._search(QUERY)
+    assert ssm.puts == []
+    assert ssm.values[constants.SEARCH_KEY_PARAMETER] == "stored-key"
+
+
+def test_a_new_key_that_cannot_be_saved_keeps_the_run_going_and_degrades_it(spider, monkeypatch, ssm):
+    ssm.fail_put = RuntimeError("AccessDenied")
+    monkeypatch.setenv("ZYTE_API_KEY", "zyte-key")
+    fake = FakeSearch(_site_key_then_search("fresh-key"))
+    monkeypatch.setattr(cettire_crawl.requests, "post", fake)
+    spider._search(QUERY)
+    assert fake.calls[-1]["headers"]["x-api-key"] == "fresh-key"
+    [degradation] = spider.run_degradations
+    assert degradation["kind"] == "setup"
+    assert degradation["scope"] == constants.SEARCH_KEY_PARAMETER
+    assert "Could not save" in degradation["message"]
+
+
+def test_an_unreadable_parameter_store_reads_the_key_from_the_site(spider, monkeypatch, ssm):
+    ssm.fail_get = RuntimeError("AccessDenied")
+    monkeypatch.setenv("ZYTE_API_KEY", "zyte-key")
+    fake = FakeSearch(_site_key_then_search())
+    monkeypatch.setattr(cettire_crawl.requests, "post", fake)
+    spider._search(QUERY)
+    assert fake.calls[-1]["headers"]["x-api-key"] == "site-key"
+    assert ssm.values[constants.SEARCH_KEY_PARAMETER] == "site-key"
+
+
+def test_the_parameter_name_can_be_overridden(spider, ssm):
+    spider.settings["CETTIRE_SEARCH_KEY_PARAMETER"] = "/other/name"
+    ssm.values["/other/name"] = "other-key"
+    assert spider._get_api_key() == "other-key"
 
 
 def _pdp_response(spider, html):

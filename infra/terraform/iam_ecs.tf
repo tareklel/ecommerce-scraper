@@ -209,3 +209,24 @@ resource "aws_iam_role_policy" "ecs_task_plp_efficient_export" {
     ]
   })
 }
+
+# Cettire's search key (tickets/cettire_crawl.md): the spider reads it at the
+# start of a run and overwrites it when it had to read a new key from the site.
+# This one parameter only, so the crawler can't touch any other parameter.
+# SecureString on the AWS-managed aws/ssm key, whose key policy already allows
+# encrypt and decrypt through Parameter Store; no KMS statement needed.
+resource "aws_iam_role_policy" "ecs_task_cettire_search_key" {
+  name = "${var.ecs_name}-cettire-search-key-policy"
+  role = aws_iam_role.ecs_task.id
+
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect   = "Allow",
+        Action   = ["ssm:GetParameter", "ssm:PutParameter"],
+        Resource = "arn:aws:ssm:${var.region}:${data.aws_caller_identity.current.account_id}:parameter/ecommerce-scraper/cettire/search-api-key"
+      }
+    ]
+  })
+}

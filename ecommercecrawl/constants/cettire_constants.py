@@ -53,3 +53,8 @@ API_KEY_CONFIG_FIELD = 'searchAIAPIKey'
 API_KEY_FETCH_ATTEMPTS = 12
 API_KEY_FETCH_PAUSE_SECONDS = 5.0
 ZYTE_EXTRACT_URL = 'https://api.zyte.com/v1/extract'
+# Where the search key is kept between runs (Parameter Store, SecureString).
+# The spider reads it at the start of a run and overwrites it whenever it had
+# to read a new key from the site. One key for every env: it is Cettire's.
+SEARCH_KEY_PARAMETER = '/ecommerce-scraper/cettire/search-api-key'
+SEARCH_KEY_PARAMETER_REGION = 'eu-central-1'

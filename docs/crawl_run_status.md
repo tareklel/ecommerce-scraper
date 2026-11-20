@@ -20,7 +20,7 @@ view, written into the manifest) and `lambda/bronze_manifest_verifier/handler.py
 | `run_status` | Meaning | Marker | Rows reach raw / dbt |
 |---|---|---|---|
 | `success` | Reached its end, nothing skipped | `_SUCCESS` | yes |
-| `degraded` | Reached its end, but some work was skipped. The manifest's `degradations` lists each skip as `{kind: content \| access, scope, message}` | `_SUCCESS` | yes: everything it wrote. Skipped products keep their previous values |
+| `degraded` | Reached its end, but some work was skipped. The manifest's `degradations` lists each skip as `{kind: content \| access \| setup, scope, message}` (`setup`: the run worked but could not save something for later runs, e.g. Cettire's search key) | `_SUCCESS` | yes: everything it wrote. Skipped products keep their previous values |
 | `failed` | Rows can't be trusted, or the run didn't finish. See `failure_reason` | one per reason (below) | **no**: the file stays in `crawl-unverified/` |
 | `killed` | Started (record in `crawl_started_raw`) but never wrote a manifest: hard kill, out-of-memory | none | no |
 

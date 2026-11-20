@@ -308,7 +308,7 @@ flowchart LR
 | SNS | Sends the run summary and failure alerts | Planned |
 | IAM + OIDC | Logins for GitHub; roles for the scheduler and flow | Exists; more roles planned |
 | Secrets Manager | Holds crawler secrets such as the Zyte key | Exists |
-| Systems Manager Parameter Store | Holds Zyte's read-only usage ("stats") key and organization ID for the summary (`/ecommerce-scraper/zyte-stats/api-key` SecureString, `.../organization-id`), entered by hand; the helper may read only that folder. Parameter Store, not Secrets Manager: free, and the helper can't reach the crawler's secrets | Exists (2026-11-19) |
+| Systems Manager Parameter Store | Holds Zyte's read-only usage ("stats") key and organization ID for the summary (`/ecommerce-scraper/zyte-stats/api-key` SecureString, `.../organization-id`), entered by hand; the helper may read only that folder. Parameter Store, not Secrets Manager: free, and the helper can't reach the crawler's secrets. Also Cettire's search key (`/ecommerce-scraper/cettire/search-api-key` SecureString), read and renewed by the crawler itself, which may touch that one parameter only | Exists (2026-11-19; Cettire key 2026-11-20) |
 | CloudWatch Logs | Logs from each task | Exists |
 
 Region: `eu-central-1`.
@@ -332,6 +332,7 @@ lives in AWS alone, so pausing doesn't need a commit.
 | Warning thresholds | `OUNASS_PLP_EFFICIENT_*` | `ecommercecrawl/settings.py` | commit, push |
 | Run email "Counts to check" limits | `COUNT_DROP_SHARE` (10%), `COUNT_CHECK_MIN_PREVIOUS` (50), `ZYTE_COST_RISE_FACTOR` (2), `ZYTE_COST_CHECK_MIN_USD` ($1) | `lambda/crawl_flow_helper/handler.py` | commit, push, targeted apply of the helper Lambda |
 | Zyte usage key | `/ecommerce-scraper/zyte-stats/api-key`, `/ecommerce-scraper/zyte-stats/organization-id` | AWS Parameter Store only | by hand (console), never in Git or Terraform |
+| Cettire search key | `/ecommerce-scraper/cettire/search-api-key` | AWS Parameter Store only | the Cettire spider, when the saved key is missing or rejected; never in Git or Terraform |
 
 ---
 
@@ -361,3 +362,4 @@ lives in AWS alone, so pausing doesn't need a commit.
 | 2026-11-19 | Flow runs only `latest`: exact Terraform task revisions in the state machine; start check refuses a task not `ACTIVE` or not on `latest` (helper gets `ecs:DescribeTaskDefinition`); refusals are emailed. A hand-registered image-task version (July image) had run since 2026-07-30 | — |
 | 2026-11-19 | Summary email: "Counts to check" (day-on-day drops over 10% per site, Zyte cost more than doubled) at the top; each full run's counts saved under `bronze/dev/crawl-flow/run-counts/`; Zyte section with the real cost, requests and 520s per site from Zyte's Stats API (key in Parameter Store; a failed read never fails the email). Helper timeout 180 -> 300 s | — |
 | 2026-11-13 | Step 6 built: schedule 02:00 Dubai daily, 2026-11-14 to 2026-11-20 (end date), scheduler role (`states:StartExecution` on the flow only), `make schedule-on/off/status`. Scheduled runs skip the `make crawl-flow` registry check | — |
+| 2026-11-20 | Cettire search key saved in Parameter Store and renewed by the spider when rejected (the 11-20 run failed on 12 Zyte 520s reading it); crawler task role may read/write that one parameter | — |
