@@ -6,6 +6,7 @@ from ecommercecrawl.constants import cettire_constants as constants
 from ecommercecrawl.spiders import cettire_crawl
 from ecommercecrawl.spiders.cettire_crawl import CettireSpider
 from tests.cettire_fixtures import pdp_html, search_hit, search_payload
+from ecommercecrawl.rules import cettire_rules as rules
 
 LISTING = "https://www.cettire.com/sa/collections/womens-bags/shoulder-bags"
 
@@ -564,3 +565,63 @@ def test_the_saved_key_is_logged_by_fingerprint_only(spider, caplog):
     with caplog.at_level(logging.INFO):
         assert spider._get_api_key() == "stored-key"
     assert CettireSpider._fingerprint("stored-key") in caplog.text and "stored-key" not in caplog.text
+
+
+# ---- cut-off after refused product pages
+
+def _failure_for(spider, exc, n=1):
+    from twisted.python.failure import Failure
+    rows = rules.rows_from_hit(search_hit(handle=f"acme-bag-90000000{n}"), spider.run_id, spider.date_string)
+    f = Failure(exc)
+    f.request = Request(url=rows[0]["url"], meta={"rows": rows})
+    return f
+
+
+def test_pages_stop_after_refusals_in_a_row(spider):
+    spider.settings["CETTIRE_PDP_STOP_AFTER_REFUSALS"] = 3
+    for i in range(2):
+        list(spider.pdp_failed(_failure_for(spider, TimeoutError("520"), i)))
+    assert spider.product_pages_stopped is False
+    rows = list(spider.pdp_failed(_failure_for(spider, TimeoutError("520"), 3)))
+    assert spider.product_pages_stopped is True
+    # The refused product is still written, from search data.
+    assert [r["language"] for r in rows] == ["EN", "AR"]
+
+
+def test_a_fetched_page_resets_the_count(spider):
+    spider.settings["CETTIRE_PDP_STOP_AFTER_REFUSALS"] = 2
+    list(spider.pdp_failed(_failure_for(spider, TimeoutError("520"))))
+    list(spider.parse_pdp(_pdp_response(spider, pdp_html())))
+    list(spider.pdp_failed(_failure_for(spider, TimeoutError("520"))))
+    assert spider.product_pages_stopped is False
+
+
+def test_no_new_page_requests_once_stopped(spider, monkeypatch):
+    spider.product_pages_stopped = True
+    fake = FakeSearch(_facets_then_groups({"Acme": 2}, {"Acme": [_hit(1), _hit(2)]}))
+    monkeypatch.setattr(cettire_crawl.requests, "post", fake)
+    out = list(spider.handle_plp_url(LISTING))
+    assert not any(isinstance(o, scrapy.Request) for o in out) and len(out) == 4
+
+
+def test_queued_pages_are_dropped_before_download_and_written_from_search(spider):
+    from ecommercecrawl.middlewares import ProductPagesStopped, StoppedProductPagesMiddleware
+    mw = StoppedProductPagesMiddleware()
+    request = spider._pdp_request("https://www.cettire.com/sa/products/acme-bag-900000001", rows=[])
+    other = Request("https://www.cettire.com/robots.txt")
+    assert mw.process_request(request, spider) is None
+    spider.product_pages_stopped = True
+    with pytest.raises(ProductPagesStopped):
+        mw.process_request(request, spider)
+    assert mw.process_request(other, spider) is None
+
+    rows = list(spider.pdp_failed(_failure_for(spider, ProductPagesStopped("stopped"))))
+    assert len(rows) == 2 and spider.product_pages_dropped == 1
+    # Dropped pages are not refusals: they don't count towards the cut-off.
+    assert spider._consecutive_refusals == 0
+
+
+def test_cutoff_default_is_twenty():
+    from ecommercecrawl import settings
+    assert settings.CETTIRE_PDP_STOP_AFTER_REFUSALS == 20
+    assert settings.DOWNLOADER_MIDDLEWARES["ecommercecrawl.middlewares.StoppedProductPagesMiddleware"] == 50

@@ -46,6 +46,11 @@ CETTIRE_KEY_PAGES_URI = os.getenv("CETTIRE_KEY_PAGES_URI")
 # one-off first pass over ~7,800 products spreads over a few nights instead
 # of one 16-hour crawl. 0 = no cap.
 CETTIRE_MAX_PRODUCT_PAGES = int(os.getenv("CETTIRE_MAX_PRODUCT_PAGES", "2000"))
+# Stop all remaining Cettire product pages for the run after this many refused
+# in a row (each refusal costs ~11 s of Zyte retries). On 2026-11-20 Zyte was
+# refused on all 2,000 pages and the run took 6 h instead of 1. The products
+# are still written, from search data. 0 = never stop.
+CETTIRE_PDP_STOP_AFTER_REFUSALS = int(os.getenv("CETTIRE_PDP_STOP_AFTER_REFUSALS", "20"))
 
 
 
@@ -113,6 +118,9 @@ DOWNLOADER_MIDDLEWARES = {
     # back through middlewares in descending order): access errors are set
     # aside and retried in rounds after a cool-down (ecommercecrawl/access.py).
     'ecommercecrawl.access.AccessRetryMiddleware': 540,
+    # Drops queued Cettire product-page requests once the spider has stopped
+    # them for the run (CETTIRE_PDP_STOP_AFTER_REFUSALS); runs before download.
+    'ecommercecrawl.middlewares.StoppedProductPagesMiddleware': 50,
 }
 
 TWISTED_REACTOR = "twisted.internet.asyncioreactor.AsyncioSelectorReactor"
