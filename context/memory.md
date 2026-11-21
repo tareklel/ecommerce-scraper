@@ -21,6 +21,10 @@ Full entries: `archive/ecommerce-scraper/memory-archive.md` in the workspace rep
 
 ## Log (last 10 entry days, newest first)
 
+## 2026-11-21 - Cettire: Zyte blocked on every page; product pages now cut off after 20 refusals
+- 11-20 run: 0 of 2,000 product pages (all Zyte 520), run 6 h (flow finished 04:19, not ~23:30). Probe 11-21: a product page refused with no exit country, SA, AE, GB, another country path and browser mode; Cettire `robots.txt` and Ounass fine, so Cettire blocks Zyte, likely after 3 nights of 2,000 pages (11-16/17/18 got ~99.5%). Search service still accepts the stored key. 5,956 of 8,160 products already have descriptions.
+- New `CETTIRE_PDP_STOP_AFTER_REFUSALS` (default 20): after that many refused pages in a row the spider stops product pages for the run; `StoppedProductPagesMiddleware` (`ecommercecrawl/middlewares.py`, priority 50) drops already-queued ones before download; products are written from search data. 5 new tests.
+
 ## 2026-11-20 - Daily trial extended by 3 runs, regroup 2026-11-24
 - User decision after the trial's errors: daily runs 2026-11-21 to 2026-11-23 (`crawl_schedule_end_date` 2026-11-23T20:00Z in `infra/terraform/variables.tf`, targeted apply 0/1/0, status confirmed). Weekly-or-daily decided with the user on Tuesday 2026-11-24 (`tickets/cicd_pipeline.md` step 6).
 

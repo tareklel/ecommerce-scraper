@@ -13,6 +13,7 @@ import requests
 import scrapy
 
 from ecommercecrawl import access
+from ecommercecrawl.middlewares import ProductPagesStopped, STOPPABLE_PAGE_META_KEY
 from ecommercecrawl.constants import cettire_constants as constants
 from ecommercecrawl.crawler_api import REQUEST_TYPE_HTTP_RESPONSE, build_crawler_api_request
 from ecommercecrawl.rules import cettire_rules as rules
@@ -57,6 +58,11 @@ class CettireSpider(MasterCrawl, scrapy.Spider):
         self.product_pages_requested = 0
         self.product_pages_skipped_known = 0
         self.product_pages_over_cap = 0
+        # Cut-off: consecutive refused product pages, and whether the rest are
+        # stopped for this run (StoppedProductPagesMiddleware drops them).
+        self._consecutive_refusals = 0
+        self.product_pages_stopped = False
+        self.product_pages_dropped = 0
         # Same session identifiers on every call of a run, as a browser would send.
         self._device_info = {'sessionId': str(uuid.uuid4()), 'deviceId': secrets.token_hex(32)}
         # Per-listing counts for the completeness check, logged at the end.
@@ -363,6 +369,9 @@ class CettireSpider(MasterCrawl, scrapy.Spider):
             # Listing data only: no Zyte request, rows straight from search.
             yield from rows
             return
+        if self.product_pages_stopped:
+            yield from rows
+            return
         cap = int(self._setting('CETTIRE_MAX_PRODUCT_PAGES', 0) or 0)
         if cap and self.product_pages_requested >= cap:
             # The rest wait for a later run; the product is still written.
@@ -451,12 +460,14 @@ class CettireSpider(MasterCrawl, scrapy.Spider):
             request_type=REQUEST_TYPE_HTTP_RESPONSE,
             # A refused product page is not worth a 15-minute retry round:
             # the product is written from the search data instead.
-            meta={'rows': rows, access.NO_DEFER_META_KEY: True},
+            meta={'rows': rows, access.NO_DEFER_META_KEY: True, STOPPABLE_PAGE_META_KEY: True},
         )
 
     def parse_pdp(self, response):
         rows = response.meta.get('rows') or []
         pdp = rules.extract_product(response.text)
+        if pdp is not None:
+            self._consecutive_refusals = 0
         if pdp is None:
             self.logger.warning(f'No product data on Cettire page {response.url}; writing search data only.')
         if not rows:
@@ -471,12 +482,35 @@ class CettireSpider(MasterCrawl, scrapy.Spider):
             # writing now would duplicate the product's rows.
             return
         rows = failure.request.meta.get('rows') or []
-        self.logger.warning(
-            f'Cettire product page failed ({failure.type.__name__}): {failure.request.url}; '
-            f'writing search data only.'
-        )
+        if failure.check(ProductPagesStopped):
+            # Dropped after the cut-off: counted, not logged one by one.
+            self.product_pages_dropped += 1
+        else:
+            self.logger.warning(
+                f'Cettire product page failed ({failure.type.__name__}): {failure.request.url}; '
+                f'writing search data only.'
+            )
+            self._note_refusal()
         for row in rows:
             yield row
+
+    def _note_refusal(self):
+        """Count a refused product page; stop the rest after too many in a row."""
+        self._consecutive_refusals += 1
+        limit = int(self._setting('CETTIRE_PDP_STOP_AFTER_REFUSALS', 0) or 0)
+        if limit and not self.product_pages_stopped and self._consecutive_refusals >= limit:
+            self.product_pages_stopped = True
+            self.logger.warning(
+                f'Cettire product pages stopped for this run: {self._consecutive_refusals} refused in a row. '
+                f'Remaining products are written from search data.'
+            )
+
+    def closed(self, reason):
+        if self.product_pages_stopped:
+            self.logger.warning(
+                f'Cettire product pages: {self.product_pages_dropped} not sent after the cut-off '
+                f'({self.product_pages_requested} queued).'
+            )
 
     def _rows_from_pdp_only(self, url, pdp):
         """A product URL given directly as a seed: one EN row from the page alone."""
