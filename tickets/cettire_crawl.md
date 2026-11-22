@@ -76,6 +76,14 @@ ticket for decisions and the work to do.
   `CETTIRE_SEARCH_API_KEY` setting.
 - A product page that fails or has no data does not drop the product: its
   rows are written from the search data.
+- **Cut-off (2026-11-21):** after `CETTIRE_PDP_STOP_AFTER_REFUSALS` (20)
+  refused product pages in a row, the rest are stopped for the run, including
+  ones already queued (`StoppedProductPagesMiddleware`). Reason: on 11-20 Zyte
+  was refused on all 2,000 pages and each refusal cost ~11 s, so the run took
+  6 h and delayed the whole flow. Cettire blocks Zyte on every page since
+  11-20 (any exit country, browser mode); 5,956 of 8,160 products already have
+  descriptions. Open: when and how to fetch the remaining ~2,200 (wait, slow
+  trickle, or a second proxy).
 - `--limit N`: at most N brand groups per listing and 20 products per call.
 - Completeness: received against listed counts is logged per listing
   (`Cettire listing summary`), with a warning when short.

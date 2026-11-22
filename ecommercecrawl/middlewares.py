@@ -2,6 +2,7 @@ from collections import defaultdict
 from urllib.parse import urlparse
 
 from scrapy.downloadermiddlewares.retry import RetryMiddleware
+from scrapy.exceptions import IgnoreRequest
 from scrapy.utils.response import response_status_message
 from twisted.internet.task import deferLater
 
@@ -202,3 +203,28 @@ class RetryAfterMiddleware(RetryMiddleware):
         )
 
         return _sleep(delay).addCallback(lambda _: retry_req)
+
+
+# Request meta flag a spider sets on optional pages it may stop for the rest
+# of a run (Cettire product pages).
+STOPPABLE_PAGE_META_KEY = "stoppable_product_page"
+
+
+class ProductPagesStopped(IgnoreRequest):
+    """A queued optional page dropped because the spider stopped such pages."""
+
+
+class StoppedProductPagesMiddleware:
+    """
+    Requests are queued long before they are sent, so a spider deciding to
+    stop optional pages can't take back what it already yielded. This drops
+    them just before download: when `spider.product_pages_stopped` is true,
+    a request flagged STOPPABLE_PAGE_META_KEY raises ProductPagesStopped, and
+    its errback runs (the Cettire spider then writes the product from search
+    data). Other requests pass untouched.
+    """
+
+    def process_request(self, request, spider):
+        if request.meta.get(STOPPABLE_PAGE_META_KEY) and getattr(spider, "product_pages_stopped", False):
+            raise ProductPagesStopped(f"product pages stopped for this run: {request.url}")
+        return None
