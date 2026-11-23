@@ -84,6 +84,20 @@ ticket for decisions and the work to do.
   11-20 (any exit country, browser mode); 5,956 of 8,160 products already have
   descriptions. Open: when and how to fetch the remaining ~2,200 (wait, slow
   trickle, or a second proxy).
+- **Product pages switched off (2026-11-23, user decision; temporary):**
+  every product page was refused again on 11-21, 11-22 and 11-23 (Zyte 520,
+  `download/temporary-error`), while listings and the search key worked.
+  Listings keep running; product pages are off through a switch, the
+  Terraform variable `cettire_fetch_product_pages` (`infra/terraform/variables.tf`,
+  now `"false"`), which sets `CETTIRE_FETCH_PRODUCT_PAGES` on the crawler task
+  (nightly flow and `make ecs-run`). With it off, every product is written
+  from search data, known products keep their stored gallery, new products
+  get 3 to 4 search images and no description, and Cettire makes no Zyte
+  requests. **To switch back on:** set the variable to `"true"`, then a
+  targeted plan and apply of `aws_ecs_task_definition.scraper` and
+  `aws_sfn_state_machine.crawl_flow` (the flow and its helper pin the task
+  revision, so both move with it; the flow's IAM policy is re-rendered with
+  the same text). Applied 2026-11-23 as task revision 3.
 - `--limit N`: at most N brand groups per listing and 20 products per call.
 - Completeness: received against listed counts is logged per listing
   (`Cettire listing summary`), with a warning when short.

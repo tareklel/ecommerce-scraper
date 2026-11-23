@@ -29,7 +29,9 @@ class CettireSpider(MasterCrawl, scrapy.Spider):
     allowlisted brands. Those calls are made directly (the search host is not
     behind bot protection).
 
-    Product pages: off by default (CETTIRE_FETCH_PRODUCT_PAGES); when on,
+    Product pages: switched by CETTIRE_FETCH_PRODUCT_PAGES (on in settings;
+    the ECS crawler task sets it from the Terraform variable
+    cettire_fetch_product_pages, off since 2026-11-23). When on,
     fetched through the crawler API (plain HTML) to add the
     full gallery and the English copy. A product page that can't be fetched
     does not lose the product: its rows are written from the search data,

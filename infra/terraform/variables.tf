@@ -82,6 +82,24 @@ variable "s3_upload_enabled" {
   default     = "true"
 }
 
+# On/off switch for Cettire product pages (CETTIRE_FETCH_PRODUCT_PAGES in the
+# crawler task). Off: listings still run and every product is written from
+# Cettire's search data; known products keep their stored gallery; no Zyte
+# requests for Cettire. Off since 2026-11-23 (user decision): Zyte has been
+# refused on every Cettire page since the 11-20 run. Switch back with "true"
+# and a targeted apply of aws_ecs_task_definition.scraper and
+# aws_sfn_state_machine.crawl_flow (the flow pins the task revision).
+variable "cettire_fetch_product_pages" {
+  description = "Fetch Cettire product pages through Zyte (\"true\"/\"false\")"
+  type        = string
+  default     = "false"
+
+  validation {
+    condition     = contains(["true", "false"], var.cettire_fetch_product_pages)
+    error_message = "cettire_fetch_product_pages must be \"true\" or \"false\"."
+  }
+}
+
 variable "scraper_env_secret_name" {
   description = "Secrets Manager JSON secret that stores crawler runtime secrets"
   type        = string

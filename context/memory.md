@@ -1,6 +1,6 @@
 # Memory
 
-## Summary (entries 2026-02-24 to 2026-11-09)
+## Summary (entries 2026-02-24 to 2026-11-11)
 
 Full entries: `archive/ecommerce-scraper/memory-archive.md` in the workspace repo
 (`tareklel/price-comparison-workspace`), and this file's git history.
@@ -16,10 +16,16 @@ Full entries: `archive/ecommerce-scraper/memory-archive.md` in the workspace rep
 - Discounts: `0` when there is genuinely no discount, `None` when not observed (silver coalesces nulls).
 - CI/CD: GitHub Actions runs pytest, then builds the crawler image and pushes `sha-<7>` and `latest` (auto-deploy). `promote-crawler-image.yml` is for rollback, and `legacy-20260803` is a rollback tag. The laptop can't build images (company HTTPS inspection). Tests that need gitignored saved pages skip in CI. The crawl flow plan is in `tickets/cicd_pipeline.md` ("▶ Next steps") and `docs/cicd_architecture.md`. Schedule decided: daily for 7 days, then about weekly.
 - dbt runs in AWS (scraper-pipeline ECS task, 2026-11-09) and on the laptop behind one shared S3 lock, renewed while dbt runs; the same wrapper refreshes the dev API cache whenever gold builds (the EventBridge rule stays off). The website API hides products without images.
+- Crawl flow (built 2026-11-10/11, `infra/terraform/orchestration.tf`): Step Functions `ecommerce-scraper-crawl-flow-dev` with helper Lambda `ecommerce-scraper-crawl-flow-helper` (start check, registry reader writing `--urls-source` CSVs, verification wait, gate, summary). Order: registry seed + tests → parallel crawls (`CRAWL_RUN_ID`) → dbt run → image pipeline → quality checker → dbt test → `Run_refresh_cache` only after dbt test passes, so a failing test keeps the last good cache. `make crawl-flow` (`CRAWL_LIMIT`), edge cases in `docs/cicd_architecture.md`. Level Shoes skips gift-with-product items; `--limit` caps listing pages per seed URL (Ounass ignores it).
 - Terraform state: both repos in this repo's versioned S3 state bucket (scraper-pipeline under its own key), S3 lock files (`use_lockfile`), Terraform 1.10+ required.
 - Secrets: one Secrets Manager secret `ecommerce-scraper/env` with Make helpers. Never put values in `.env` or Terraform.
 
 ## Log (last 10 entry days, newest first)
+
+## 2026-11-23 - Cettire product pages switched off (temporary, switchable)
+- 11-21/22/23 runs: Cettire degraded, not failed: ~15.8k rows from search each night, but every product page refused by Zyte (520 `download/temporary-error`, 4 attempts each, unbilled); 11-21 and 11-22 flows took 6h18. Search key fine (`51200e93`).
+- User decision: listings keep running, product pages off until Zyte gets through. New Terraform variable `cettire_fetch_product_pages` (`"false"`) sets `CETTIRE_FETCH_PRODUCT_PAGES` on the crawler task. Targeted apply 1 added / 3 changed / 1 destroyed (task revision 3; flow, helper and flow IAM policy follow the revision; policy text checked identical). Switch back: `"true"` + same targeted apply (`tickets/cettire_crawl.md`). Re-plan clean; dev test (`--limit 1`, uploads off) on revision 3: 40 rows, pass, no Zyte requests (its 20 products were all known, so the off path itself rests on the unit tests).
+- Found, not fixed (raised with the user): DEBUG logging prints the Parameter Store reply, so the Cettire search key is in CloudWatch in plain text. Daily schedule ended after the 11-23 run.
 
 ## 2026-11-21 - Cettire: Zyte blocked on every page; product pages now cut off after 20 refusals
 - 11-20 run: 0 of 2,000 product pages (all Zyte 520), run 6 h (flow finished 04:19, not ~23:30). Probe 11-21: a product page refused with no exit country, SA, AE, GB, another country path and browser mode; Cettire `robots.txt` and Ounass fine, so Cettire blocks Zyte, likely after 3 nights of 2,000 pages (11-16/17/18 got ~99.5%). Search service still accepts the stored key. 5,956 of 8,160 products already have descriptions.
@@ -240,34 +246,3 @@ Full entries: `archive/ecommerce-scraper/memory-archive.md` in the workspace rep
 ## 2026-11-13 - CI/CD step 4 done: registry check before a crawl start
 - `scripts/check_crawl_registry.py` (+ 8 tests), run by `make crawl-flow` for crawl starts: refuses when `price-comparison-dbt:latest` doesn't contain the newest scraper-pipeline `main` commit that changed `crawl_plp_registry.csv` (GitHub compare API), and prints active sites from the CSV at the image's commit. `SKIP_REGISTRY_CHECK=1` skips it. Checked live (image `sha-d043b14`, 3 sites x 4 URLs).
 - User decided no separate CSV check in CI (the flow's seed tests already run before any crawl); the Level Shoes/Bloomingdale's URL host rule was asked of the scraper-pipeline session as a dbt test. Phase 2 cap already shows as a degradation in the summary. Ticket step 4 ticked; architecture doc updated.
-
-## 2026-11-11 - CI/CD step 3 done: first fully green crawl flow
-- Deployed `d7ce530` and scraper-pipeline `882fe8f`; targeted apply of the helper Lambda and state machine (0 added, 2 changed, no IAM).
-- Short run `c413745c` (`CRAWL_LIMIT=1`) failed `dbt test` only on the unisex Bloomingdale's bag and correctly skipped the cache refresh; scraper-pipeline fixed it (`d043b14`, unisex → women, brand map fixes).
-- Full run `929c20b5` succeeded in 86 min: 3 crawls success (Level Shoes 73 min, 4 gifts skipped), dbt test 48 pass / 1 warn / 0 errors, cache refreshed after the tests. Ticket step 3 ticked; next is step 4.
-
-## 2026-11-11 - Cache refresh after dbt test; gift skip; --limit; readable failures
-- Second flow run (`300a4856`): all three crawls published; dbt test failed 3 of 46 (Arabic brands, fixed in scraper-pipeline `511e18e`; the price-0 Level Shoes gift, fixed by gold requiring `price > 0` in `31ba452`).
-- Level Shoes skips `productType: gift-with-product` listing items. `--limit` now caps listing pages per seed URL for Level Shoes and Bloomingdale's (Ounass still ignores it).
-- Flow: every dbt step runs `exec --no-cache-refresh`; a new `Run_refresh_cache` step (`dbt_job.py refresh-cache`, scraper-pipeline) runs only after `dbt test` passes, so a failing test keeps the last good cache. Summary shows "exit code N (reason) task <id>" instead of raw ECS JSON.
-- 524 tests pass. Docs (`cicd_architecture.md`), ticket step 3 updated. Next: dbt image with the new wrapper, targeted apply, `CRAWL_LIMIT=1` run, then a full run.
-
-## 2026-11-10 - First crawl flow run; Level Shoes and Bloomingdale's fixes
-- First `make crawl-flow CRAWL_LIMIT=20` (after pushing `2bfd26c`, image `sha-2bfd26c`): every step ran, flow succeeded with Ounass published (6,454 rows); dbt 24/24, images, quality checker, images+ 4/4, test 46/46; API cache refreshed twice.
-- Level Shoes failed: new products' `analytics` block has only `constructor.variationId`, so `get_id_from_item` raised KeyError at start. `level_rules.py` listing getters now return None for missing keys (parse_pdp fills them); id falls back to `vpn`, brand to `brandName` (equal to the analytics values where both exist).
-- Bloomingdale's failed the quality gate (gender/category/subcategory 100% blank): breadcrumbs moved from microdata to JSON-LD. `_extract_breadcrumbs` reads JSON-LD first, microdata as fallback. New labels are already in the scraper-pipeline category map.
-- Both checked against live pages; 8 new tests; full suite 517 pass. Ticket step 3 updated.
-
-## 2026-11-10 - CI/CD step 3 built and applied (first run pending)
-- Crawler reads `CRAWL_RUN_ID` (mastercrawl.py; malformed stops the crawl). Helper Lambda `ecommerce-scraper-crawl-flow-helper` (start check, registry reader writing Level Shoes/Bloomingdale's `--urls-source` CSVs, verification check, gate, image marker, summary). State machine `ecommerce-scraper-crawl-flow-dev` in `infra/terraform/orchestration.tf`; checker S3 trigger removed; `make crawl-flow`, `make ecs-run-quality-checker`.
-- Applied with `-target` in two stages (IAM user-approved); definition validated by AWS. Smoke tests passed after one fix: `s3:GetBucketLocation` moved out of the prefix-conditioned statement (user-approved). Full suite 509 + 21 helper tests pass.
-- Next: push `main` (crawler image needs `CRAWL_RUN_ID`), then `make crawl-flow CRAWL_LIMIT=20`.
-
-## 2026-11-10 - Step 3 edge cases documented; registry CSV checked
-- `docs/cicd_architecture.md` gains an "Edge cases" table (15 cases: frequency, handling, result).
-- The user's new `crawl_plp_registry.csv` (12 rows: Ounass, Level Shoes, Bloomingdale's; SA tote and shoulder bags, ar+en) passes every rule of the two registry dbt tests offline, and the Level Shoes and Bloomingdale's spiders' rules parse every URL as a PLP with the right country and language. Not yet committed in scraper-pipeline or seeded; told the scraper-pipeline and website sessions how to proceed.
-
-## 2026-11-10 - CI/CD step 3 design agreed (not built)
-- Checked with the scraper-pipeline and website sessions first: image filter live in dev; website's export change (releases/ + manifest, legacy keys kept) pending the user's OK, and it makes the cache refresh depend on `gold_site_nav`; prod dbt will run a pinned image (ECR rule for `prod-` needed then).
-- Flow: start check → registry seed + tests → crawl list from the registry (Ounass PLP-efficient; Level Shoes and Bloomingdale's via `--urls-source` CSVs the helper Lambda writes from Athena) → parallel crawls with `CRAWL_RUN_ID` → wait for verification → full dbt run → image pipeline → quality checker (flow-run, also on `_FAILED`; S3 trigger removed) → `dbt run --select silver_product_image_download_status+` → dbt test → summary. Images-only start too.
-- Recorded in `tickets/cicd_pipeline.md` step 3 (step 4 trimmed) and `docs/cicd_architecture.md`. Waiting on the user's registry URLs for the first test run.

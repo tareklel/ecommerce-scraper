@@ -53,8 +53,10 @@ resource "aws_ecs_task_definition" "scraper" {
       entryPoint = var.ecs_entrypoint
       command    = var.ecs_command
       environment = [
-        { name = "S3_BUCKET",         value = var.price_comparison_bucket },
-        { name = "S3_UPLOAD_ENABLED", value = var.s3_upload_enabled }
+        { name = "S3_BUCKET", value = var.price_comparison_bucket },
+        { name = "S3_UPLOAD_ENABLED", value = var.s3_upload_enabled },
+        # Only the Cettire spider reads it; see the variable for the switch.
+        { name = "CETTIRE_FETCH_PRODUCT_PAGES", value = var.cettire_fetch_product_pages }
       ]
       secrets = [
         for key in var.ecs_secret_env_keys : {
