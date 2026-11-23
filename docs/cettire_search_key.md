@@ -36,6 +36,9 @@ The key is not the Zyte key. Three different keys, three places:
 
 The key is never in Git, Terraform, `.env` or logs. Logs show a fingerprint
 instead: the first 8 characters of the key's SHA-256 (for example `51200e93`).
+The AWS SDK loggers (`botocore`, `boto3`, `s3transfer`) are held at INFO in
+`ecommercecrawl/settings.py` even when the crawl logs at DEBUG: at DEBUG,
+botocore logs response bodies, including the decrypted parameter.
 
 ## What happens on every Cettire run
 
@@ -115,6 +118,7 @@ aws ssm get-parameter --region eu-central-1 --name /ecommerce-scraper/cettire/se
 | 2026-11-16 to 18 | Reading it took 1 to 4 minutes of Zyte retries (listing pages); product pages still got through ~99% (2,000 a night, 9 to 20 refused) |
 | 2026-11-19 night | Cettire run failed: all 12 Zyte tries refused, nothing crawled |
 | 2026-11-20 | Key stored in Parameter Store and renewed by the spider (user design). Zyte refused every Cettire page that day: listing pages plain and browser, a product page, geolocation TR. First key loaded by hand from the 11-14 probe pages (fingerprint `51200e93`); Cettire still accepted it, so the key lasted at least 6 days. Renewal from saved product pages and fingerprint logging added |
+| 2026-11-23 | Found: crawls logged at DEBUG, so botocore printed the Parameter Store reply, key included, into CloudWatch on every run since 11-20. AWS SDK loggers now held at INFO (test in `tests/test_settings.py`). Copies already in the log group were not deleted: its 7-day retention removes the last of them by 2026-11-30 |
 
 ## Open
 

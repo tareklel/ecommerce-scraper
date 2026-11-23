@@ -25,7 +25,11 @@ Full entries: `archive/ecommerce-scraper/memory-archive.md` in the workspace rep
 ## 2026-11-23 - Cettire product pages switched off (temporary, switchable)
 - 11-21/22/23 runs: Cettire degraded, not failed: ~15.8k rows from search each night, but every product page refused by Zyte (520 `download/temporary-error`, 4 attempts each, unbilled); 11-21 and 11-22 flows took 6h18. Search key fine (`51200e93`).
 - User decision: listings keep running, product pages off until Zyte gets through. New Terraform variable `cettire_fetch_product_pages` (`"false"`) sets `CETTIRE_FETCH_PRODUCT_PAGES` on the crawler task. Targeted apply 1 added / 3 changed / 1 destroyed (task revision 3; flow, helper and flow IAM policy follow the revision; policy text checked identical). Switch back: `"true"` + same targeted apply (`tickets/cettire_crawl.md`). Re-plan clean; dev test (`--limit 1`, uploads off) on revision 3: 40 rows, pass, no Zyte requests (its 20 products were all known, so the off path itself rests on the unit tests).
-- Found, not fixed (raised with the user): DEBUG logging prints the Parameter Store reply, so the Cettire search key is in CloudWatch in plain text. Daily schedule ended after the 11-23 run.
+- Found: DEBUG logging printed the Parameter Store reply, so the Cettire search key was in CloudWatch in plain text on every run since 11-20.
+
+## 2026-11-23 - Schedule +2 days; AWS SDK loggers kept at INFO
+- User: 2 more daily runs, 11-24 and 11-25 (`crawl_schedule_end_date` 2026-11-25T20:00Z; targeted apply 0/1/0; schedule ENABLED, ends 2026-11-26 00:00 Dubai). `tickets/cicd_pipeline.md` step 6 updated.
+- `settings.py` holds `botocore`/`boto3`/`s3transfer` at INFO whatever `LOG_LEVEL` is, so the search key no longer reaches CloudWatch (test fails without the fix; 689 pass). Old copies in `/ecs/ecommerce-scraper` not deleted: 7-day retention clears them by 11-30.
 
 ## 2026-11-21 - Cettire: Zyte blocked on every page; product pages now cut off after 20 refusals
 - 11-20 run: 0 of 2,000 product pages (all Zyte 520), run 6 h (flow finished 04:19, not ~23:30). Probe 11-21: a product page refused with no exit country, SA, AE, GB, another country path and browser mode; Cettire `robots.txt` and Ounass fine, so Cettire blocks Zyte, likely after 3 nights of 2,000 pages (11-16/17/18 got ~99.5%). Search service still accepts the stored key. 5,956 of 8,160 products already have descriptions.

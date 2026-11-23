@@ -188,5 +188,5 @@ variable "crawl_schedule_timezone" {
 variable "crawl_schedule_end_date" {
   description = "UTC time after which the schedule stops starting runs (RFC 3339), so a daily schedule can't run on unwatched. Empty = no end."
   type        = string
-  default     = "2026-11-23T20:00:00Z" # midnight Dubai after the 10th daily run: the 7-day trial (2026-11-14 to 2026-11-20) extended by 3 runs (user, 2026-11-20)
+  default     = "2026-11-25T20:00:00Z" # midnight Dubai after the 12th daily run: the 7-day trial (2026-11-14 to 2026-11-20) extended by 3 runs (user, 2026-11-20), then 2 more, 11-24 and 11-25 (user, 2026-11-23)
 }

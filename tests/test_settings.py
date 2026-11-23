@@ -64,3 +64,26 @@ def test_scrapy_log_level_accepts_opt_in_override(monkeypatch):
     loaded = importlib.reload(settings)
 
     assert loaded.LOG_LEVEL == "WARNING"
+
+
+def test_aws_sdk_loggers_never_log_debug_even_at_debug_level(monkeypatch):
+    # At DEBUG, botocore logs response bodies, which put the decrypted
+    # Cettire search key from Parameter Store into CloudWatch (2026-11-23).
+    import logging
+
+    from scrapy.settings import Settings
+    from scrapy.utils.log import configure_logging
+
+    # In a crawl the root logger lets DEBUG through; pytest's default doesn't.
+    root = logging.getLogger()
+    monkeypatch.setattr(root, "level", logging.DEBUG)
+    monkeypatch.setenv("SCRAPY_LOG_LEVEL", "DEBUG")
+    reloaded = importlib.reload(settings)
+    assert reloaded.LOG_LEVEL == "DEBUG"
+    # Scrapy's own logging setup must not undo the levels.
+    configure_logging(Settings({"LOG_LEVEL": "DEBUG"}), install_root_handler=False)
+
+    for name in ("botocore", "botocore.parsers", "boto3", "s3transfer"):
+        logger = logging.getLogger(name)
+        assert not logger.isEnabledFor(logging.DEBUG), name
+        assert logger.isEnabledFor(logging.INFO), name

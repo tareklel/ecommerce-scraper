@@ -308,6 +308,10 @@ price-comparison-web have no `.github/workflows`.
     more daily runs, 2026-11-21 to 2026-11-23. `crawl_schedule_end_date` is now
     2026-11-23T20:00Z (applied, targeted, 0/1/0; `make schedule-status`: ENABLED,
     ends 2026-11-24 00:00 Dubai).
+    **Extended again 2026-11-23 (user):** 2 more daily runs, 2026-11-24 and
+    2026-11-25 (Cettire product pages now off, see `tickets/cettire_crawl.md`).
+    `crawl_schedule_end_date` is now 2026-11-25T20:00Z (ends 2026-11-26 00:00
+    Dubai).
     **Next:** regroup with the user on Tuesday 2026-11-24: review the 10 runs,
     then decide weekly or daily (check the sold-out cutoff first) and clear or
     move `crawl_schedule_end_date`. The prod data migration waits for this.

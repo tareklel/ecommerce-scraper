@@ -1,4 +1,5 @@
-import os 
+import logging
+import os
 
 
 ENV = os.getenv("APP_ENV", "dev").lower()
@@ -167,6 +168,13 @@ LOG_FORMAT = '%(asctime)s [%(name)s] %(levelname)s: %(message)s'
 # Keep DEBUG as the project default while allowing focused local commands to
 # reduce Scrapy and downloader-middleware noise without changing global output.
 LOG_LEVEL = os.getenv("SCRAPY_LOG_LEVEL", "DEBUG")
+# AWS SDK loggers stay at INFO whatever LOG_LEVEL is: at DEBUG, botocore logs
+# every response body, which printed the decrypted Cettire search key from
+# Parameter Store into CloudWatch on every run (found 2026-11-23). Scrapy's
+# logging setup keeps levels set on named loggers.
+QUIET_AWS_SDK_LOGGERS = ("botocore", "boto3", "s3transfer")
+for _name in QUIET_AWS_SDK_LOGGERS:
+    logging.getLogger(_name).setLevel(logging.INFO)
 
 
 # Enable and configure the AutoThrottle extension (disabled by default)
