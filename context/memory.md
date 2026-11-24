@@ -1,6 +1,6 @@
 # Memory
 
-## Summary (entries 2026-02-24 to 2026-11-11)
+## Summary (entries 2026-02-24 to 2026-11-13)
 
 Full entries: `archive/ecommerce-scraper/memory-archive.md` in the workspace repo
 (`tareklel/price-comparison-workspace`), and this file's git history.
@@ -19,8 +19,12 @@ Full entries: `archive/ecommerce-scraper/memory-archive.md` in the workspace rep
 - Crawl flow (built 2026-11-10/11, `infra/terraform/orchestration.tf`): Step Functions `ecommerce-scraper-crawl-flow-dev` with helper Lambda `ecommerce-scraper-crawl-flow-helper` (start check, registry reader writing `--urls-source` CSVs, verification wait, gate, summary). Order: registry seed + tests → parallel crawls (`CRAWL_RUN_ID`) → dbt run → image pipeline → quality checker → dbt test → `Run_refresh_cache` only after dbt test passes, so a failing test keeps the last good cache. `make crawl-flow` (`CRAWL_LIMIT`), edge cases in `docs/cicd_architecture.md`. Level Shoes skips gift-with-product items; `--limit` caps listing pages per seed URL (Ounass ignores it).
 - Terraform state: both repos in this repo's versioned S3 state bucket (scraper-pipeline under its own key), S3 lock files (`use_lockfile`), Terraform 1.10+ required.
 - Secrets: one Secrets Manager secret `ecommerce-scraper/env` with Make helpers. Never put values in `.env` or Terraform.
+- Run plumbing (2026-11-13): EventBridge Scheduler starts the flow at 02:00 Asia/Dubai (`aws_scheduler_schedule.crawl_flow`, `make schedule-status|on|off`); a summary email goes to SNS `ecommerce-scraper-crawl-flow-runs` after every run (address only in gitignored `infra/terraform/local.auto.tfvars`); `make crawl-flow STOP_AFTER=crawls` for crawls-only tests; `make crawl-flow` refuses when the dbt image lacks the newest registry CSV (`scripts/check_crawl_registry.py`, `SKIP_REGISTRY_CHECK=1`); crawls that raise and write nothing fail as `crash` with `first_error` in the manifest.
 
 ## Log (last 10 entry days, newest first)
+
+## 2026-11-24 - Product brief names the product
+- `context/product-brief.md`: "[Name TBD]" is now Kayaliya (كاياليا, kayaliya.com), decided 2026-11-20 (`../price-comparison-web/tickets/name_and_domain.md`). Docs only.
 
 ## 2026-11-23 - Cettire product pages switched off (temporary, switchable)
 - 11-21/22/23 runs: Cettire degraded, not failed: ~15.8k rows from search each night, but every product page refused by Zyte (520 `download/temporary-error`, 4 attempts each, unbilled); 11-21 and 11-22 flows took 6h18. Search key fine (`51200e93`).
@@ -225,28 +229,3 @@ Full entries: `archive/ecommerce-scraper/memory-archive.md` in the workspace rep
 - Phase 0 probe comes first and must answer whether Zyte is necessary (direct requests from laptop, from AWS, and at crawl volume), how the Saudi storefront/SAR/language are selected, and whether an Arabic storefront exists (user decision if not).
 - No site fact is verified: the cloud session could not reach `www.cettire.com` (its own network policy).
 - Found while checking run `d66af788`, not yet fixed: 65 Level Shoes products with blank category never reach gold; 186 stale Arabic-only Bloomingdale's rows (July/August) remain in gold.
-
-## 2026-11-13 - CI/CD step 6 applied: daily schedule; mapping-gaps line in the email
-- `aws_scheduler_schedule.crawl_flow` starts a full flow run at 02:00 Asia/Dubai daily, end_date 2026-11-20T20:00Z (7 runs, 2026-11-14 to 20), no retries; role `ecommerce-scraper-crawl-flow-scheduler` can only `states:StartExecution` the flow (user-approved). Terraform ignores `state`; `scripts/crawl_schedule.py` + `make schedule-status|on|off` (+ 3 tests). Scheduled runs skip the `make crawl-flow` registry check.
-- Summary email adds "Mapping gaps: N brand spelling(s) to review; M product drop(s) from gold" from scraper-pipeline's `silver_mapping_gaps` when the full dbt run happened; a failed query never fails the summary. Helper role gained Glue read on that table (user-approved). Checked by invoking the helper: 0 to review, 2 drops.
-- Targeted apply 3 added, 2 changed; re-plan clean. `tickets/crawl_scheduler.md` marked superseded. 562 tests pass. Next: review the 7 daily runs, then weekly.
-
-## 2026-11-13 - Crawls-only test runs; step 5 done
-- `make crawl-flow CRAWL_LIMIT=1 STOP_AFTER=crawls` (flow input `stop_after: "crawls"`, always a string from the helper's start so the Choice can read it): the `AnyPublished` Choice goes straight to `Summary`; subject "SUCCEEDED (crawls only): n/m crawls published". A short run without it takes about 20 min, mostly dbt and ECS start-ups. Targeted apply (helper + state machine, 0 added, 2 changed). 5 new tests (553 pass).
-- `CRAWL_LIMIT=1` run `34994259` on the 5b crawler image succeeded (3/3, cache refreshed, email sent): step 5 done.
-- Ticket step 11 now points at `../price-comparison-web/tickets/cicd.md` (website CI/CD planned by that session with the user).
-
-## 2026-11-13 - CI/CD step 5b: crawler crashes reported as `crash`
-- `PostCrawlPipeline` attaches `FirstErrorRecorder` (root log handler, ERROR with exc_info) from spider_opened to spider_closed; the first error goes into manifest `first_error` (`error`, `location`, `logged_as`). Checked against a real Scrapy 2.13 crawl failing in `start_requests`.
-- New failure reason `crash` (crawler `crawler_run_status` and verifier `FAILURE_REASONS`, identical texts): no rows, no blocking, error recorded; order aborted, startup_check, access, crash, quality. Verifier writes `_FAIL_CRASH` with `first_error`; flow helper shows `crash: <error> (<file:line>)` in the summary/email. Runs with rows are unchanged.
-- `docs/crawl_run_status.md` updated; 9 new tests (548 pass). scraper-pipeline reads `failure_reason` as free text, so no change there.
-
-## 2026-11-13 - CI/CD step 5a: run summary emailed after every run
-- `Notify` state after `Summary` publishes to SNS topic `ecommerce-scraper-crawl-flow-runs` (email subscription; a failed email doesn't change the run's result). Helper summary gains a subject ("Crawl flow dev SUCCEEDED: 3/3 crawls published" / "... FAILED at dbt test"), one line per degradation, a "Blocked by the site:" section, an API-cache line and a console link. 7 new tests (539 pass).
-- IAM (user-approved): `sns:Publish` on that topic only, on the state machine role. Targeted apply 2 added, 3 changed; re-plan clean.
-- The alert address is never in a tracked file: variable `crawl_alert_email` (sensitive, default empty) set in gitignored `infra/terraform/local.auto.tfvars` (`*.auto.tfvars` added to `.gitignore`).
-- Tested: images-only run `a4e4812c` succeeded, the email arrived. Next: 5b, a `crash` failure reason for crawls that raise and write nothing.
-
-## 2026-11-13 - CI/CD step 4 done: registry check before a crawl start
-- `scripts/check_crawl_registry.py` (+ 8 tests), run by `make crawl-flow` for crawl starts: refuses when `price-comparison-dbt:latest` doesn't contain the newest scraper-pipeline `main` commit that changed `crawl_plp_registry.csv` (GitHub compare API), and prints active sites from the CSV at the image's commit. `SKIP_REGISTRY_CHECK=1` skips it. Checked live (image `sha-d043b14`, 3 sites x 4 URLs).
-- User decided no separate CSV check in CI (the flow's seed tests already run before any crawl); the Level Shoes/Bloomingdale's URL host rule was asked of the scraper-pipeline session as a dbt test. Phase 2 cap already shows as a degradation in the summary. Ticket step 4 ticked; architecture doc updated.
