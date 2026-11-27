@@ -127,3 +127,7 @@ aws ssm get-parameter --region eu-central-1 --name /ecommerce-scraper/cettire/se
 - If Zyte stays refused on the night the key changes, renewal fails until Zyte
   gets through. A second proxy as another renewal route would cover this
   (Oxylabs settings exist in the repo; account status unknown).
+- A possible way through Zyte (user test, 2026-11-27): `device: "mobile"`
+  with `geolocation: "AU"` returned a Cettire product page that plain requests
+  got 520 on. Renewal does not use it yet, and whether the mobile page carries
+  the key is untested; see `tickets/cettire_crawl.md`.

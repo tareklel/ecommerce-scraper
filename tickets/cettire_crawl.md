@@ -98,6 +98,25 @@ ticket for decisions and the work to do.
   `aws_sfn_state_machine.crawl_flow` (the flow and its helper pin the task
   revision, so both move with it; the flow's IAM policy is re-rendered with
   the same text). Applied 2026-11-23 as task revision 3.
+- **Zyte gets through with `device: mobile` (user test, 2026-11-27):** this
+  request returned the product page that the crawler's requests got 520 on:
+
+  ```
+  POST https://api.zyte.com/v1/extract
+  {"url": "https://www.cettire.com/sa/products/saint-laurent-loulou-mini-shoulder-bag-953858841",
+   "httpResponseBody": true,
+   "geolocation": "AU",
+   "device": "mobile",
+   "followRedirect": true}
+  ```
+
+  Not tested yet: without `geolocation: "AU"` (may not be needed); with
+  `httpResponseHeaders`, which the crawler also sends; whether the mobile page
+  carries the same `__NEXT_DATA__` (product data, search key) and SAR prices
+  for `/sa/`; listing pages; and whether it holds at a night's volume. The
+  crawler sends neither `device` nor a Cettire geolocation today
+  (`ecommercecrawl/crawler_api/zyte_api.py`, `CRAWLER_API_ZYTE_GEOLOCATION_BY_HOST`).
+  Product pages stay off until those are checked and the request is changed.
 - `--limit N`: at most N brand groups per listing and 20 products per call.
 - Completeness: received against listed counts is logged per listing
   (`Cettire listing summary`), with a warning when short.

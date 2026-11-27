@@ -1,6 +1,6 @@
 # Memory
 
-## Summary (entries 2026-02-24 to 2026-11-13)
+## Summary (entries 2026-02-24 to 2026-11-14)
 
 Full entries: `archive/ecommerce-scraper/memory-archive.md` in the workspace repo
 (`tareklel/price-comparison-workspace`), and this file's git history.
@@ -17,11 +17,16 @@ Full entries: `archive/ecommerce-scraper/memory-archive.md` in the workspace rep
 - CI/CD: GitHub Actions runs pytest, then builds the crawler image and pushes `sha-<7>` and `latest` (auto-deploy). `promote-crawler-image.yml` is for rollback, and `legacy-20260803` is a rollback tag. The laptop can't build images (company HTTPS inspection). Tests that need gitignored saved pages skip in CI. The crawl flow plan is in `tickets/cicd_pipeline.md` ("▶ Next steps") and `docs/cicd_architecture.md`. Schedule decided: daily for 7 days, then about weekly.
 - dbt runs in AWS (scraper-pipeline ECS task, 2026-11-09) and on the laptop behind one shared S3 lock, renewed while dbt runs; the same wrapper refreshes the dev API cache whenever gold builds (the EventBridge rule stays off). The website API hides products without images.
 - Crawl flow (built 2026-11-10/11, `infra/terraform/orchestration.tf`): Step Functions `ecommerce-scraper-crawl-flow-dev` with helper Lambda `ecommerce-scraper-crawl-flow-helper` (start check, registry reader writing `--urls-source` CSVs, verification wait, gate, summary). Order: registry seed + tests → parallel crawls (`CRAWL_RUN_ID`) → dbt run → image pipeline → quality checker → dbt test → `Run_refresh_cache` only after dbt test passes, so a failing test keeps the last good cache. `make crawl-flow` (`CRAWL_LIMIT`), edge cases in `docs/cicd_architecture.md`. Level Shoes skips gift-with-product items; `--limit` caps listing pages per seed URL (Ounass ignores it).
+- Cettire (researched and built from 2026-11-14; `tickets/cettire_crawl.md`, `notes/2026-11-14-cettire-research.md`): pages sit behind DataDome (direct requests 403). Listings come from `search.cettire.com` called directly with the page-config `x-api-key` (now kept in Parameter Store, `docs/cettire_search_key.md`), one call of up to 1,000 per brand group; it returns `title` and `title_ar`, SAR prices, stock, colour, size and 3-4 images, so AR and EN rows come from search. Product pages (Zyte plain HTML) add only the full gallery and English copy; stock and sizes are never taken from them. Allowlist: 64 brands Level Shoes carries, a name-matched first pass (a reviewed brand mapping is still needed). Refused product pages are given up at once (`access_no_defer`). Cost estimate $1-3 a month. An affiliate programme exists (Partnerize); no feed confirmed.
 - Terraform state: both repos in this repo's versioned S3 state bucket (scraper-pipeline under its own key), S3 lock files (`use_lockfile`), Terraform 1.10+ required.
 - Secrets: one Secrets Manager secret `ecommerce-scraper/env` with Make helpers. Never put values in `.env` or Terraform.
 - Run plumbing (2026-11-13): EventBridge Scheduler starts the flow at 02:00 Asia/Dubai (`aws_scheduler_schedule.crawl_flow`, `make schedule-status|on|off`); a summary email goes to SNS `ecommerce-scraper-crawl-flow-runs` after every run (address only in gitignored `infra/terraform/local.auto.tfvars`); `make crawl-flow STOP_AFTER=crawls` for crawls-only tests; `make crawl-flow` refuses when the dbt image lacks the newest registry CSV (`scripts/check_crawl_registry.py`, `SKIP_REGISTRY_CHECK=1`); crawls that raise and write nothing fail as `crash` with `first_error` in the manifest.
 
 ## Log (last 10 entry days, newest first)
+
+## 2026-11-27 - Cettire: Zyte gets through with a mobile device (user test)
+- User's Zyte request with `device: "mobile"`, `geolocation: "AU"`, `followRedirect: true` returned a product page that the crawler's requests got 520 on. Recorded in `tickets/cettire_crawl.md` and the key doc's open items, with what is still untested (no AU, page contents, listings, volume). No code change; product pages stay off.
+- Memory: 2026-11-14 moved to the workspace archive; its lasting Cettire facts are in the summary.
 
 ## 2026-11-24 - Product brief names the product
 - `context/product-brief.md`: "[Name TBD]" is now Kayaliya (كاياليا, kayaliya.com), decided 2026-11-20 (`../price-comparison-web/tickets/name_and_domain.md`). Docs only.
@@ -136,96 +141,3 @@ Full entries: `archive/ecommerce-scraper/memory-archive.md` in the workspace rep
 
 ## 2026-11-15 - Cettire ticket tidied; open items recorded
 - `tickets/cettire_crawl.md` cut from about 650 to about 290 lines: decisions rewritten to the current set, the five probe write-ups and the original phase-0 checklist / build plan replaced by a short research summary pointing to `notes/2026-11-14-cettire-research.md`, new "Other open items" (pull requests, tote bags by brand, affiliate application, terms of use unread, Arabic descriptions, probe data in the dev bucket, AWS role for agent sessions), "Done when" and "Open questions" rewritten. The research note gains section 11a on the live test runs. No finding was dropped: all are in the note.
-
-## 2026-11-14 - Cettire: where things stand and what is next
-- **State:** `cettire` spider (step 1: search-service listings + product pages) is built, on branch `claude/project-viability-assessment-sxolr2`, not on main, so not in the crawler image. Proven in three live `--limit 1` runs in the dev crawler task (this branch's code unpacked over the image, bronze uploads off, outputs under `probes/dev/cettire/live1..3`). Nothing has been written to bronze.
-- **User decision:** do the downstream onboarding in scraper-pipeline first, then build step 2 (efficient crawl) on a gold export like Ounass. Not the interim "known products file" option.
-- **Next steps, in order:** (1) scraper-pipeline onboarding per `ticket/onboard-cettire.md` on branch `claude/cettire-onboarding-ticket` of `tareklel/scraper-pipeline-pc` (unmerged; registry rows last); (2) merge this branch so the image has the spider; (3) first real crawl into bronze; (4) step 2 on a gold export; (5) reviewed brand mapping to replace the name-matched allowlist.
-- **Open small items:** stored search key (infra), completeness shortfall as a manifest degradation, confirm the stock finding in a browser, whether given-up product pages should degrade the run.
-- **Working notes for a future session:** this cloud session cannot reach `cettire.com` or Zyte directly; all site access ran inside the dev ECS task via AWS SSO (device login, 1-hour sessions, `AdministratorAccess` is the only role). The agent safety check blocked a direct whole-category search call and, once, the first direct search call until the user gave explicit permission.
-
-## 2026-11-14 - Cettire third live run confirms the fixes
-- `live3` (`--limit 1`): 7 min (was 40), 80 rows / 40 products, no duplicates, no out-of-stock from the page, quality gate pass; 35 of 40 product pages fetched, 5 refused and written from search data. Product pages ran at about 7.5 s each, so a full first pass of about 7,800 would take roughly 16 hours. Next: step 2 (skip product pages for known products).
-
-## 2026-11-14 - Cettire second live run succeeded; three fixes
-- Live run 2 (`--limit 1`, output under `probes/dev/cettire/live2/`): quality gate pass, 40 products, 39 of 40 product pages fetched, key read from the site in about 3.5 min, run took 40 min.
-- Fixed after it: (1) duplicate rows when a product page was set aside for a retry round (the errback wrote rows each time; `AccessDeferred` now writes nothing); (2) new `access_no_defer` request flag in `ecommercecrawl/access.py`, set on Cettire product pages so a refused page is given up at once instead of holding the run through two 15-minute cool-downs (documented in `docs/ounass_plp_efficient_crawl.md` section 5); (3) stock and sizes are no longer taken from the product page, which is rendered for the site's default region and marked 10 of 40 in-stock products sold out. 592 tests pass (15 skipped in the cloud container).
-- Third live run started to confirm the fixes.
-
-## 2026-11-14 - Cettire allowlist needs a real brand mapping (user note)
-- Ticket gains "Brand allowlist: rule, and the mapping work it still needs". Rule: crawl Cettire only for brands Level Shoes carries. The current `resources/cettire_brand_allowlist.csv` is a first pass: name-matched with three aliases, from shoulder-bag brands only, a frozen snapshot of dev gold, not tied to `dim_map_brand`. Needed and not yet planned: Cettire's full brand list, a reviewed Cettire -> canonical brand mapping in scraper-pipeline, the allowlist derived from it, and a report of unmapped brands.
-
-## 2026-11-14 - Cettire first live run failed at the key fetch; fetch made more patient
-- Live test (`--limit 1`, dev crawler task running this branch's code unpacked over the image, bronze uploads off, output under `probes/dev/cettire/live1/`): the spider had no stored key, Zyte refused all 4 plain fetches of the key page (520), run ended `failed` / `crash` with the error named. Nothing crawled.
-- Key fetch now rotates over three Cettire pages (`API_KEY_PAGE_URLS`), 12 attempts with a 5 s pause; 2 new tests (42 Cettire tests pass). Second live run started; result not yet known.
-- scraper-pipeline: ticket `ticket/onboard-cettire.md` pushed on branch `claude/cettire-onboarding-ticket` of `tareklel/scraper-pipeline-pc` (not merged).
-
-## 2026-11-14 - Cettire spider, step 1 (full crawl), not yet run live
-- New `cettire` spider (`spiders/cettire_crawl.py`, `rules/cettire_rules.py`, `constants/cettire_constants.py`), registered in `run_crawler.py`; seeds `resources/cettire_urls.csv`, allowlist `resources/cettire_brand_allowlist.csv` (64 brands); settings `CETTIRE_URLS_PATH`, `CETTIRE_BRAND_ALLOWLIST_PATH`, `CETTIRE_SEARCH_API_KEY`; quality-gate exceptions for `cettire` (`was_price`, `primary_label`, `text`, `designer_color`).
-- Flow: listing URL -> search-service query; one facet call, then one call (up to 1,000) per group of allowlisted brands, direct via `requests`; each product page through Zyte plain HTML; two rows per product (EN, AR). Field mapping table is in the ticket's "Build status".
-- Choices: `price_discount` computed, 0 at full price; AR rows have no `text`; `text.description` is None (Cettire has no prose); a failed product page still writes the search rows; search key optional, re-read from a page through Zyte when missing or rejected.
-- 40 new tests with hand-written fixtures (no site data committed); full suite 587 passed, 15 skipped in the cloud container (scrapy-zyte-api would not build there on Python 3.13). Rules also checked by hand against saved real responses.
-- Not done: live run, optional key secret (infra), scraper-pipeline registry and mappings, shortfall as a manifest degradation, step 2 efficient crawl.
-
-## 2026-11-14 - Cettire research note
-- Added `notes/2026-11-14-cettire-research.md`: the full research record (architecture, access matrix, PDP and PLP findings, search-service request and 51 response fields, paging and brand-group tests, catalogue statistics, brand overlap tables with Level Shoes and Ounass, all 319 shoulder-bag brands, affiliate check, cost estimate, compliance notes, decisions, open questions). The ticket links to it.
-- Correction after adding two brand aliases: 223 Cettire shoulder-bag brands (3,605 products) are on neither Level Shoes nor Ounass (earlier figure 225 / 3,698). Cost is $1-3 a month with a daily run, not per day.
-
-## 2026-11-14 - Cettire cost estimate
-- User accepted the 64-brand Level Shoes allowlist as is. Estimate for about 7,800 products: daily listing refresh has no Zyte cost; product pages via Zyte plain HTTP are $1-10 one-off for the first run and about $0.15-1.30 a month after (about 1,000 new products a month); overall about $2-11 one-off and $1-3 a month. Zyte tier for Cettire and tote-bag counts are assumptions. Details in `tickets/cettire_crawl.md`.
-
-## 2026-11-14 - Cettire catalogue analysis; allowlist to Level Shoes brands
-- Cettire's size is brand breadth (319 shoulder-bag brands, thin stock, colours as separate products), not expired stock; most of the long tail is accessible brands, 225 brands on neither Level Shoes nor Ounass.
-- User decision: allowlist Cettire to brands Level Shoes carries. 64 of Level's 92 bag brands are on Cettire and hold 4,175 of 9,506 shoulder bags; totes not counted (estimate about 3,600). Brand table is in `tickets/cettire_crawl.md`.
-
-## 2026-11-14 - Cettire: API key handling and product-page plan
-- User decision: store the search-service API key and reuse it; refresh from a page (one Zyte fetch) only when it is rejected, then retry once.
-- Proposed (not yet agreed): Ounass-style split, search service as the listing phase every run, product pages via Zyte plain HTML only for new products.
-
-## 2026-11-14 - Cettire route chosen: search service, brand groups of up to 1,000
-- User decision (no affiliate feed found): crawl via the search service with `pageSize: 1000`.
-- `vendorQuery` filters by brand name and accepts several brands; Shoulder Bags has 319 brands, none over 333 products, so 11 brand-group calls cover about 9,500 products (about 22 calls per run with Tote Bags). Three groups tested: correct brands and type, no duplicates, but about 1.5% fewer products than `totalNumber` (cause unknown).
-- Planned shape is in `tickets/cettire_crawl.md` (fifth probe). Build not started.
-
-## 2026-11-14 - Cettire affiliate feed check
-- Web search only: Cettire has an affiliate programme (Partnerize about 5% / 30-day cookie, BlueAff; FlexOffers closed). No public listing mentions a product feed or Saudi publishers; a feed can only be confirmed after approval. Recorded in `tickets/cettire_crawl.md`; applying is the user's step.
-
-## 2026-11-14 - Cettire fourth probe: direct requests from AWS
-- User corrected an assumption: only Ounass goes through Zyte; Level Shoes and Bloomingdale's are fetched directly.
-- Direct from the dev ECS task (user-approved): Cettire product and listing pages return 403 (DataDome); `search.cettire.com` answers 200 with the page-config `x-api-key`, and with `langCode: "ar"` returns both `title` and `title_ar`.
-- Paging by `currentPage` is unreliable (repeats, always echoes page 0); the site uses a "Load more" button. `pageSize: 1000` works in one call. A `pageSize: 10000` call was blocked by the agent session's safety check and not run.
-- The safety check treated direct search-service calls as unauthorized access; the ticket carries a compliance note and says to check for an affiliate feed first.
-- User rejected browser rendering for listings on cost grounds.
-
-## 2026-11-14 - Cettire third probe: PLP and PDP
-- 7 more Zyte requests. Plain-HTML listing pages contain no products. The grid comes from a POST to `search.cettire.com/search-ai/pro-search/api/aiRecommendForProduct` (96 per page, `x-api-key` from the public page config), captured through a browser-rendered listing.
-- Each listing item is complete: `title` and `title_ar`, vendor, category EN/AR, `sa_sar_price_f` / `sa_sar_compare_at_price_f`, stock, colour, size, 3-4 images. So Arabic names are available from listings.
-- Saudi women's Shoulder Bags about 9,500 and Tote Bags 8,216 (about 17,700 products; ~185 listing pages).
-- Plain-HTML product pages are complete (3 checked) and agree with the listing; they add full gallery and description.
-- Open for the user: read listings by browser render with network capture, or by calling the search service directly.
-
-## 2026-11-14 - Cettire decisions: English first, plain fetch, Zyte only temporarily
-- User decisions, recorded at the top of `tickets/cettire_crawl.md`: build English only for now (Arabic deferred); use the plain HTML fetch like Ounass (`http_response`), no browser rendering.
-- **Zyte for Cettire is temporary.** It was used only because the cloud session could not reach `cettire.com` directly; a direct (non-Zyte) request has never been tested. Test direct access from a laptop and from AWS as soon as possible, and if it works run the Cettire crawler without Zyte. Do not treat "Zyte is necessary" as established.
-
-## 2026-11-14 - Cettire second probe: Arabic comes from the site's API
-- 4 more Zyte requests (retries on 520, network capture). Browser-rendered product pages call `api.cettire.com/graphql` and get a `lang: ar_SA` object with Arabic title and description; server-rendered HTML always requests `en_US`, cookies make no difference.
-- Saudi prices include duties and taxes (`priceIncludeTax: true`). Product sitemap is ~480,000 URLs with no category or gender. Listing grid source still unknown (capture limit hit).
-- Ticket now lists crawl options A (browser per product), B (HTML + translate downstream), C (GraphQL API; `robots.txt` disallows `/graphql` on the main host, user decision needed).
-
-## 2026-11-14 - Cettire first probe (through Zyte, from the dev crawler task)
-- 16 Zyte requests in four runs of the `ecommerce-scraper` ECS task with a command override (user-approved); pages kept under `probes/dev/cettire/` in the bucket. Results are in `tickets/cettire_crawl.md`.
-- Site: Next.js on Reaction Commerce GraphQL, CloudFront, DataDome. Saudi is the `/sa/` path; language is the `spc-lng` cookie.
-- Zyte HTTP mode is unreliable (pages/sitemaps 4 of 12, rest `520 Website Ban`); browser mode 2 of 2. Direct requests not tested.
-- Product pages carry everything in `__NEXT_DATA__` (English), including the SAR price and was-price under `regionCode: "sa"`. Listing grids are loaded by the browser, and Arabic product names appear only after browser rendering.
-- Open: listing source (GraphQL API vs browser), Arabic without a browser, Zyte success rate and cost.
-
-## 2026-11-14 - Cettire ticket: AR/EN/SA confirmed by the user
-- `tickets/cettire_crawl.md`: the user confirmed Cettire has Arabic, English and a Saudi storefront, so the "no Arabic" decision section is removed; the probe still has to find how language is selected and whether AR and EN share a product ID.
-- Probe still not run: the user declined a cloud environment allowing `cettire.com`, so it must run from the laptop or another session.
-
-## 2026-11-14 - Ticket: Cettire crawler (Saudi handbags, AR + EN)
-- Added `tickets/cettire_crawl.md` (open, not started). Reason: Bloomingdale's returns 59 products for the two bag listings against ~3,100 (Ounass) and 2,140 (Level Shoes) in flow run `d66af788`.
-- Phase 0 probe comes first and must answer whether Zyte is necessary (direct requests from laptop, from AWS, and at crawl volume), how the Saudi storefront/SAR/language are selected, and whether an Arabic storefront exists (user decision if not).
-- No site fact is verified: the cloud session could not reach `www.cettire.com` (its own network policy).
-- Found while checking run `d66af788`, not yet fixed: 65 Level Shoes products with blank category never reach gold; 186 stale Arabic-only Bloomingdale's rows (July/August) remain in gold.
